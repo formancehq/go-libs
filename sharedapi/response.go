@@ -14,3 +14,8 @@ type Cursor struct {
 	Next      string      `json:"next,omitempty"`
 	Data      interface{} `json:"data"`
 }
+
+type ErrorResponse struct {
+	ErrorCode    string `json:"error_code,omitempty"`
+	ErrorMessage string `json:"error_message,omitempty"`
+}
