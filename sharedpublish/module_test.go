@@ -1,4 +1,4 @@
-package bus
+package sharedpublish
 
 import (
 	"go.uber.org/fx/fxtest"

@@ -1,4 +1,4 @@
-package bus
+package sharedpublish
 
 import (
 	"github.com/ThreeDotsLabs/watermill"

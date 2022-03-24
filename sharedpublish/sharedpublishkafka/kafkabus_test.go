@@ -4,14 +4,18 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/ThreeDotsLabs/watermill-kafka/v2/pkg/kafka"
 	"github.com/ThreeDotsLabs/watermill/message"
-	bus "github.com/numary/go-libs/sharedpublish"
+	"github.com/numary/go-libs/sharedpublish"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+	"log"
+	"os"
 	"testing"
 )
 
 func TestModuleKafka(t *testing.T) {
+
+	sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
 
 	broker := sarama.NewMockBroker(t, 12)
 	defer broker.Close()
@@ -21,12 +25,16 @@ func TestModuleKafka(t *testing.T) {
 	broker.Returns(metadataResponse)
 
 	app := fxtest.New(t,
-		bus.Module(),
-		Module("ledger", broker.Addr()),
+		sharedpublish.Module(),
+		Module("foo", broker.Addr()),
 		fx.Replace(sarama.MinVersion),
 		fx.Invoke(func(p message.Publisher) {
 			assert.IsType(t, &kafka.Publisher{}, p)
 		}),
+		ProvideSaramaOption(
+			WithProducerReturnSuccess(),
+			WithConsumerReturnErrors(),
+		),
 	)
 	app.
 		RequireStart().
