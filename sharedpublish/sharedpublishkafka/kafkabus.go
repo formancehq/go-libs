@@ -82,13 +82,12 @@ func NewSaramaConfig(clientId ClientId, version sarama.KafkaVersion, options ...
 	return config
 }
 
-func NewKafkaPublisher(logger watermill.LoggerAdapter, config *sarama.Config, brokers ...string) (*kafka.Publisher, error) {
-	publisherConfig := kafka.PublisherConfig{
+func NewKafkaPublisher(logger watermill.LoggerAdapter, config *sarama.Config, marshaller kafka.Marshaler, brokers ...string) (*kafka.Publisher, error) {
+	return kafka.NewPublisher(kafka.PublisherConfig{
 		Brokers:               brokers,
-		Marshaler:             kafka.DefaultMarshaler{},
+		Marshaler:             marshaller,
 		OverwriteSaramaConfig: config,
-	}
-	return kafka.NewPublisher(publisherConfig, logger)
+	}, logger)
 }
 
 func ProvideSaramaOption(options ...SaramaOption) fx.Option {
@@ -106,12 +105,13 @@ func Module(clientId ClientId, brokers ...string) fx.Option {
 	return fx.Options(
 		fx.Supply(clientId),
 		fx.Supply(sarama.V1_0_0_0),
+		fx.Supply(kafka.DefaultMarshaler{}),
 		fx.Provide(fx.Annotate(
 			NewSaramaConfig,
 			fx.ParamTags(``, ``, `group:"saramaOptions"`),
 		)),
-		fx.Provide(func(logger watermill.LoggerAdapter, config *sarama.Config) (*kafka.Publisher, error) {
-			return NewKafkaPublisher(logger, config, brokers...)
+		fx.Provide(func(logger watermill.LoggerAdapter, marshaller kafka.Marshaler, config *sarama.Config) (*kafka.Publisher, error) {
+			return NewKafkaPublisher(logger, config, marshaller, brokers...)
 		}),
 		fx.Decorate(
 			func(kafkaPublisher *kafka.Publisher) message.Publisher {
