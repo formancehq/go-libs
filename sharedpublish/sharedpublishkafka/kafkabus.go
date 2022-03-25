@@ -105,7 +105,7 @@ func Module(clientId ClientId, brokers ...string) fx.Option {
 	return fx.Options(
 		fx.Supply(clientId),
 		fx.Supply(sarama.V1_0_0_0),
-		fx.Supply(kafka.DefaultMarshaler{}),
+		fx.Supply(fx.Annotate(kafka.DefaultMarshaler{}, fx.As(new(kafka.Marshaler)))),
 		fx.Provide(fx.Annotate(
 			NewSaramaConfig,
 			fx.ParamTags(``, ``, `group:"saramaOptions"`),
