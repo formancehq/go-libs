@@ -48,3 +48,7 @@ func New(logger *logrus.Logger) *logrusLogger {
 		entry: logger,
 	}
 }
+
+func init() {
+	sharedlogging.SetFactory(sharedlogging.StaticLoggerFactory(New(logrus.StandardLogger())))
+}
