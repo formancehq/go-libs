@@ -52,11 +52,10 @@ func SetFactory(l LoggerFactory) {
 }
 
 func GetLogger(ctx context.Context) Logger {
+	if loggerFactory == nil {
+		return NewNoOpLogger()
+	}
 	return loggerFactory.Get(ctx)
-}
-
-func init() {
-	SetFactory(StaticLoggerFactory(NewNoOpLogger()))
 }
 
 func Debugf(fmt string, args ...interface{}) {
