@@ -1,6 +1,7 @@
 package sharedlogginglogrus
 
 import (
+	"context"
 	"github.com/numary/go-libs/sharedlogging"
 	"github.com/sirupsen/logrus"
 )
@@ -15,6 +16,10 @@ type logrusLogger struct {
 		Error(args ...interface{})
 		WithFields(fields logrus.Fields) *logrus.Entry
 	}
+}
+
+func (l *logrusLogger) WithContext(ctx context.Context) sharedlogging.Logger {
+	return l.WithContext(ctx)
 }
 
 func (l *logrusLogger) Debug(args ...interface{}) {

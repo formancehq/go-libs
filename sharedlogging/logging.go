@@ -10,6 +10,7 @@ type Logger interface {
 	Info(args ...interface{})
 	Error(args ...interface{})
 	WithFields(map[string]interface{}) Logger
+	WithContext(ctx context.Context) Logger
 }
 
 type LoggerFactory interface {
@@ -28,6 +29,10 @@ func StaticLoggerFactory(l Logger) LoggerFactoryFn {
 }
 
 type noOpLogger struct{}
+
+func (n noOpLogger) WithContext(ctx context.Context) Logger {
+	return n
+}
 
 func (n noOpLogger) Debug(args ...interface{})              {}
 func (n noOpLogger) Info(args ...interface{})               {}
