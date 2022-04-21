@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 )
@@ -36,8 +35,6 @@ type OTLPConfig struct {
 }
 
 type ModuleConfig struct {
-	ServiceName  string
-	Version      string
 	Exporter     string
 	Batch        bool
 	JaegerConfig *JaegerConfig
@@ -53,8 +50,6 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 	options := make([]fx.Option, 0)
 	options = append(options,
 		ResourceFactoryModule(),
-		ProvideOTLPAttribute(semconv.ServiceNameKey.String(cfg.ServiceName)),
-		ProvideOTLPAttribute(semconv.ServiceVersionKey.String(cfg.Version)),
 		fx.Provide(func(tp *tracesdk.TracerProvider) trace.TracerProvider { return tp }),
 		fx.Provide(fx.Annotate(func(options ...tracesdk.TracerProviderOption) *tracesdk.TracerProvider {
 			return tracesdk.NewTracerProvider(options...)

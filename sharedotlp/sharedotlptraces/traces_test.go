@@ -20,17 +20,13 @@ func TestTracesModule(t *testing.T) {
 		{
 			name: fmt.Sprintf("otlp-exporter"),
 			config: ModuleConfig{
-				ServiceName: "testing",
-				Version:     "latest",
-				Exporter:    OTLPExporter,
+				Exporter: OTLPExporter,
 			},
 		},
 		{
 			name: fmt.Sprintf("otlp-exporter-with-grpc-config"),
 			config: ModuleConfig{
-				ServiceName: "testing",
-				Version:     "latest",
-				Exporter:    OTLPExporter,
+				Exporter: OTLPExporter,
 				OTLPConfig: &OTLPConfig{
 					Mode:     sharedotlp.ModeGRPC,
 					Endpoint: "remote:8080",
@@ -41,9 +37,7 @@ func TestTracesModule(t *testing.T) {
 		{
 			name: fmt.Sprintf("otlp-exporter-with-http-config"),
 			config: ModuleConfig{
-				ServiceName: "testing",
-				Version:     "latest",
-				Exporter:    OTLPExporter,
+				Exporter: OTLPExporter,
 				OTLPConfig: &OTLPConfig{
 					Mode:     sharedotlp.ModeHTTP,
 					Endpoint: "remote:8080",
@@ -54,16 +48,12 @@ func TestTracesModule(t *testing.T) {
 		{
 			name: fmt.Sprintf("jaeger-exporter"),
 			config: ModuleConfig{
-				ServiceName: "testing",
-				Version:     "latest",
-				Exporter:    JaegerExporter,
+				Exporter: JaegerExporter,
 			},
 		},
 		{
 			name: fmt.Sprintf("jaeger-exporter-with-config"),
 			config: ModuleConfig{
-				ServiceName:  "testing",
-				Version:      "latest",
 				Exporter:     JaegerExporter,
 				JaegerConfig: &JaegerConfig{},
 			},
@@ -71,9 +61,7 @@ func TestTracesModule(t *testing.T) {
 		{
 			name: fmt.Sprintf("stdout-exporter"),
 			config: ModuleConfig{
-				ServiceName: "testing",
-				Version:     "latest",
-				Exporter:    StdoutExporter,
+				Exporter: StdoutExporter,
 			},
 		},
 	}
@@ -89,21 +77,9 @@ func TestTracesModule(t *testing.T) {
 			}))
 			assert.NoError(t, fx.ValidateApp(options...))
 
-			ch := make(chan struct{})
-			options = append(options, fx.Invoke(func(f *resourceFactory) { // Inject validate the object availability
-				assert.Len(t, f.attributes, 2)
-				close(ch)
-			}))
-
 			app := fx.New(options...)
 			assert.NoError(t, app.Start(context.Background()))
 			defer app.Stop(context.Background())
-
-			select {
-			case <-ch:
-			default:
-				assert.Fail(t, "something went wrong")
-			}
 		})
 	}
 
