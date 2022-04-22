@@ -1,4 +1,4 @@
-package auth
+package sharedauth
 
 import (
 	_ "github.com/numary/go-libs/sharedlogging/sharedlogginglogrus"

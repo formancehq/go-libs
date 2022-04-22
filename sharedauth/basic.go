@@ -1,4 +1,4 @@
-package auth
+package sharedauth
 
 import (
 	"github.com/pkg/errors"
