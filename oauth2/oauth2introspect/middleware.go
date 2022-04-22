@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func NewMiddleware(i *introspecter) func(handler http.Handler) http.Handler {
+func NewMiddleware(i *Introspecter) func(handler http.Handler) http.Handler {
 	return func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 

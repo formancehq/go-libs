@@ -12,6 +12,7 @@ var (
 	ErrAccessDenied                = errors.New("access_denied")
 )
 
+// Deprecated: Use oauth2introspect package
 func CheckTokenWithAuth(client *http.Client, authBaseUrl string, req *http.Request) error {
 	token := req.Header.Get("Authorization")
 	if !strings.HasPrefix(strings.ToLower(token), "bearer ") {
@@ -34,6 +35,7 @@ func CheckTokenWithAuth(client *http.Client, authBaseUrl string, req *http.Reque
 	return nil
 }
 
+// Deprecated: Use audience claim
 func CheckLedgerAccess(req *http.Request, name string) error {
 	jwtString := req.Header.Get("Authorization")
 	if !strings.HasPrefix(strings.ToLower(jwtString), "bearer ") {
@@ -55,6 +57,7 @@ func CheckLedgerAccess(req *http.Request, name string) error {
 	return ErrAccessDenied
 }
 
+// Deprecated: Use audience claim
 func CheckOrganizationAccess(req *http.Request, id string) error {
 	jwtString := req.Header.Get("Authorization")
 	if !strings.HasPrefix(strings.ToLower(jwtString), "bearer ") {

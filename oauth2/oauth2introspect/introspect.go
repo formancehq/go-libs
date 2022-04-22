@@ -12,18 +12,42 @@ import (
 	"time"
 )
 
-type introspecter struct {
+type IntrospecterOption interface {
+	apply(introspecter *Introspecter)
+}
+type IntrospecterOptionFn func(introspecter *Introspecter)
+
+func (fn IntrospecterOptionFn) apply(introspecter *Introspecter) {
+	fn(introspecter)
+}
+
+func WithClient(client *http.Client) IntrospecterOptionFn {
+	return func(introspecter *Introspecter) {
+		introspecter.client = client
+	}
+}
+
+func WithCache(cache *ristretto.Cache, cacheTTL time.Duration) IntrospecterOptionFn {
+	return func(introspecter *Introspecter) {
+		introspecter.cache = cache
+		introspecter.cacheTTL = cacheTTL
+	}
+}
+
+type Introspecter struct {
 	introspectUrl string
 	client        *http.Client
 	cache         *ristretto.Cache
 	cacheTTL      time.Duration
 }
 
-func (i *introspecter) Introspect(ctx context.Context, bearer string) (bool, error) {
+func (i *Introspecter) Introspect(ctx context.Context, bearer string) (bool, error) {
 
-	v, ok := i.cache.Get(bearer)
-	if ok {
-		return v.(bool), nil
+	if i.cache != nil {
+		v, ok := i.cache.Get(bearer)
+		if ok {
+			return v.(bool), nil
+		}
 	}
 
 	form := url.Values{}
@@ -34,6 +58,7 @@ func (i *introspecter) Introspect(ctx context.Context, bearer string) (bool, err
 		return false, errors.Wrap(err, "creating introspection request")
 	}
 	checkAuthReq.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	checkAuthReq = checkAuthReq.WithContext(ctx)
 
 	rsp, err := i.client.Do(checkAuthReq)
 	if err != nil {
@@ -51,7 +76,9 @@ func (i *introspecter) Introspect(ctx context.Context, bearer string) (bool, err
 			return false, errors.Wrap(err, "decoding introspection response")
 		}
 
-		_ = i.cache.SetWithTTL(bearer, x.Active, 1, i.cacheTTL)
+		if i.cache != nil {
+			_ = i.cache.SetWithTTL(bearer, x.Active, 1, i.cacheTTL)
+		}
 
 		return x.Active, nil
 	default:
@@ -59,11 +86,13 @@ func (i *introspecter) Introspect(ctx context.Context, bearer string) (bool, err
 	}
 }
 
-func NewIntrospecter(client *http.Client, cache *ristretto.Cache, url string, cacheTtl time.Duration) *introspecter {
-	return &introspecter{
+func NewIntrospecter(url string, options ...IntrospecterOption) *Introspecter {
+	i := &Introspecter{
 		introspectUrl: url,
-		client:        client,
-		cache:         cache,
-		cacheTTL:      cacheTtl,
+		client:        http.DefaultClient,
 	}
+	for _, opt := range options {
+		opt.apply(i)
+	}
+	return i
 }
