@@ -57,6 +57,7 @@ require (
 	github.com/klauspost/compress v1.14.4 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.4 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
