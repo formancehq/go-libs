@@ -34,7 +34,7 @@ func Middleware(methods ...Method) func(handler http.Handler) http.Handler {
 	}
 }
 
-func NeedScopes(scopes ...string) func(h http.Handler) http.Handler {
+func NeedAllScopes(scopes ...string) func(h http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			agent := AgentFromContext(r.Context())
@@ -54,6 +54,28 @@ func NeedScopes(scopes ...string) func(h http.Handler) http.Handler {
 				return
 			}
 			h.ServeHTTP(w, r)
+		})
+	}
+}
+
+func NeedOneOfScopes(scopes ...string) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			agent := AgentFromContext(r.Context())
+			if agent == nil {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+
+			for _, scope := range scopes {
+				for _, agentScope := range agent.GetScopes() {
+					if agentScope == scope {
+						h.ServeHTTP(w, r)
+						return
+					}
+				}
+			}
+			w.WriteHeader(http.StatusForbidden)
 		})
 	}
 }

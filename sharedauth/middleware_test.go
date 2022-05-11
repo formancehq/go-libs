@@ -10,7 +10,7 @@ import (
 func TestNeedScopesMiddleware(t *testing.T) {
 
 	checkAuthMiddleware := Middleware(NewHttpBearerMethod(NoOpValidator))
-	needConsentMiddleware := NeedScopes("scope1")
+	needConsentMiddleware := NeedAllScopes("scope1")
 
 	h := checkAuthMiddleware(needConsentMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		agent := AgentFromContext(r.Context())
@@ -30,7 +30,7 @@ func TestNeedScopesMiddleware(t *testing.T) {
 func TestNeedScopesMiddlewareFailure(t *testing.T) {
 
 	checkAuthMiddleware := Middleware(NewHttpBearerMethod(NoOpValidator))
-	needConsentMiddleware := NeedScopes("scope2")
+	needConsentMiddleware := NeedAllScopes("scope2")
 
 	h := checkAuthMiddleware(needConsentMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
