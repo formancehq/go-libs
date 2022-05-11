@@ -25,7 +25,7 @@ func TestHttpBearerWithWildcardOnAudiences(t *testing.T) {
 	defer srv.Close()
 
 	i := oauth2introspect.NewIntrospecter(srv.URL)
-	m := Middleware(NewHttpBearerMethod(i, true))
+	m := Middleware(NewHttpBearerMethod(NewIntrospectionValidator(i, true)))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -47,7 +47,7 @@ func TestHttpBearerWithValidAudience(t *testing.T) {
 	defer srv.Close()
 
 	i := oauth2introspect.NewIntrospecter(srv.URL)
-	m := Middleware(NewHttpBearerMethod(i, false, "http://example.net"))
+	m := Middleware(NewHttpBearerMethod(NewIntrospectionValidator(i, false, "http://example.net")))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -68,7 +68,7 @@ func TestHttpBearerWithInvalidToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := Middleware(NewHttpBearerMethod(oauth2introspect.NewIntrospecter(srv.URL), true))
+	m := Middleware(NewHttpBearerMethod(NewIntrospectionValidator(oauth2introspect.NewIntrospecter(srv.URL), true)))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -89,7 +89,11 @@ func TestHttpBearerForbiddenWithWrongAudience(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := Middleware(NewHttpBearerMethod(oauth2introspect.NewIntrospecter(srv.URL), false, "http://example.net"))
+	m := Middleware(NewHttpBearerMethod(NewIntrospectionValidator(
+		oauth2introspect.NewIntrospecter(srv.URL),
+		false,
+		"http://example.net",
+	)))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
