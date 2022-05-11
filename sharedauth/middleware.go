@@ -11,7 +11,7 @@ func Middleware(methods ...Method) func(handler http.Handler) http.Handler {
 			ok := false
 			for _, m := range methods {
 				if m.IsMatching(r) {
-					err := m.Check(r)
+					_, err := m.Check(r)
 					if err != nil {
 						sharedlogging.GetLogger(r.Context()).WithFields(map[string]interface{}{
 							"err": err,

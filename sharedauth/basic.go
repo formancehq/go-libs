@@ -6,8 +6,19 @@ import (
 	"strings"
 )
 
+type Credential struct {
+	Scopes   []string
+	Password string
+}
+
+func (c Credential) GetScopes() []string {
+	return c.Scopes
+}
+
+type Credentials map[string]Credential
+
 type httpBasicMethod struct {
-	credentials map[string]string
+	credentials Credentials
 }
 
 func (h httpBasicMethod) IsMatching(c *http.Request) bool {
@@ -17,21 +28,25 @@ func (h httpBasicMethod) IsMatching(c *http.Request) bool {
 	)
 }
 
-func (h httpBasicMethod) Check(c *http.Request) error {
+func (h httpBasicMethod) Check(c *http.Request) (Agent, error) {
 	username, password, ok := c.BasicAuth()
 	if !ok {
-		return errors.New("malformed basic")
+		return nil, errors.New("malformed basic")
 	}
 	if username == "" {
-		return errors.New("malformed basic")
+		return nil, errors.New("malformed basic")
 	}
-	if h.credentials[username] != password {
-		return errors.New("invalid credentials")
+	credential, ok := h.credentials[username]
+	if !ok {
+		return nil, errors.New("invalid credentials")
 	}
-	return nil
+	if credential.Password != password {
+		return nil, errors.New("invalid credentials")
+	}
+	return credential, nil
 }
 
-func NewHTTPBasicMethod(credentials map[string]string) *httpBasicMethod {
+func NewHTTPBasicMethod(credentials Credentials) *httpBasicMethod {
 	return &httpBasicMethod{
 		credentials: credentials,
 	}

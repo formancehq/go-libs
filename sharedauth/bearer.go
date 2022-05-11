@@ -52,6 +52,22 @@ func NewIntrospectionValidator(introspecter *oauth2introspect.Introspecter, audi
 	}
 }
 
+type oauth2Agent struct {
+	claims jwt.MapClaims
+}
+
+func (o oauth2Agent) GetScopes() []string {
+	scopeClaim, ok := o.claims["scope"]
+	if !ok {
+		return []string{}
+	}
+	scopeClaimAsString, ok := scopeClaim.(string)
+	if !ok {
+		return []string{}
+	}
+	return strings.Split(scopeClaimAsString, " ")
+}
+
 type oauth2BearerMethod struct {
 	validator validator
 }
@@ -63,9 +79,20 @@ func (h oauth2BearerMethod) IsMatching(c *http.Request) bool {
 	)
 }
 
-func (h *oauth2BearerMethod) Check(c *http.Request) error {
+func (h *oauth2BearerMethod) Check(c *http.Request) (Agent, error) {
 	token := c.Header.Get("Authorization")[len("bearer "):]
-	return h.validator.Validate(c.Context(), token)
+	err := h.validator.Validate(c.Context(), token)
+	if err != nil {
+		return nil, err
+	}
+	claims := jwt.MapClaims{}
+	_, _, err = new(jwt.Parser).ParseUnverified(token, &claims)
+	if err != nil {
+		return nil, err
+	}
+	return &oauth2Agent{
+		claims: claims,
+	}, nil
 }
 
 var _ Method = &oauth2BearerMethod{}

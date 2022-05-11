@@ -9,8 +9,10 @@ import (
 
 func TestHttpBasic(t *testing.T) {
 
-	m := Middleware(NewHTTPBasicMethod(map[string]string{
-		"foo": "bar",
+	m := Middleware(NewHTTPBasicMethod(Credentials{
+		"foo": {
+			Password: "bar",
+		},
 	}))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -27,8 +29,10 @@ func TestHttpBasic(t *testing.T) {
 
 func TestHttpBasicForbidden(t *testing.T) {
 
-	m := Middleware(NewHTTPBasicMethod(map[string]string{
-		"foo": "bar",
+	m := Middleware(NewHTTPBasicMethod(Credentials{
+		"foo": {
+			Password: "bar",
+		},
 	}))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
