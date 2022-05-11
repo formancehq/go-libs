@@ -12,6 +12,15 @@ import (
 type validator interface {
 	Validate(ctx context.Context, token string) error
 }
+type validatorFn func(ctx context.Context, token string) error
+
+func (fn validatorFn) Validate(ctx context.Context, token string) error {
+	return fn(ctx, token)
+}
+
+var NoOpValidator = validatorFn(func(ctx context.Context, token string) error {
+	return nil
+})
 
 type introspectionValidator struct {
 	introspecter      *oauth2introspect.Introspecter
