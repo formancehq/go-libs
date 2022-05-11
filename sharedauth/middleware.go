@@ -11,7 +11,7 @@ func Middleware(methods ...Method) func(handler http.Handler) http.Handler {
 			ok := false
 			for _, m := range methods {
 				if m.IsMatching(r) {
-					_, err := m.Check(r)
+					agent, err := m.Check(r)
 					if err != nil {
 						sharedlogging.GetLogger(r.Context()).WithFields(map[string]interface{}{
 							"err": err,
@@ -19,6 +19,7 @@ func Middleware(methods ...Method) func(handler http.Handler) http.Handler {
 						w.WriteHeader(http.StatusForbidden)
 						return
 					}
+					r = r.WithContext(WithAgent(r.Context(), agent))
 					ok = true
 					break
 				}

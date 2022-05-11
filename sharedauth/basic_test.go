@@ -12,10 +12,13 @@ func TestHttpBasic(t *testing.T) {
 	m := Middleware(NewHTTPBasicMethod(Credentials{
 		"foo": {
 			Password: "bar",
+			Scopes:   []string{"scope1"},
 		},
 	}))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		agent := AgentFromContext(r.Context())
+		assert.NotNil(t, agent)
+		assert.Equal(t, []string{"scope1"}, agent.GetScopes())
 	}))
 
 	rec := httptest.NewRecorder()

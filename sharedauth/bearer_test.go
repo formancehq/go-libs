@@ -6,12 +6,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
-func forgeToken(t *testing.T, audience string) string {
+func forgeToken(t *testing.T, audience string, scopes ...string) string {
 	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"aud": audience,
+		"aud":   audience,
+		"scope": strings.Join(scopes, " "),
 	}).SignedString([]byte("0000000000000000"))
 	assert.NoError(t, err)
 	return tok
@@ -27,12 +29,14 @@ func TestHttpBearerWithWildcardOnAudiences(t *testing.T) {
 	i := oauth2introspect.NewIntrospecter(srv.URL)
 	m := Middleware(NewHttpBearerMethod(NewIntrospectionValidator(i, true)))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		agent := AgentFromContext(r.Context())
+		assert.NotNil(t, agent)
+		assert.Equal(t, []string{"scope1"}, agent.GetScopes())
 	}))
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/foo", nil)
-	req.Header.Set("Authorization", "Bearer "+forgeToken(t, "foo"))
+	req.Header.Set("Authorization", "Bearer "+forgeToken(t, "foo", "scope1"))
 
 	h.ServeHTTP(rec, req)
 
@@ -49,7 +53,7 @@ func TestHttpBearerWithValidAudience(t *testing.T) {
 	i := oauth2introspect.NewIntrospecter(srv.URL)
 	m := Middleware(NewHttpBearerMethod(NewIntrospectionValidator(i, false, "http://example.net")))
 	h := m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		assert.NotNil(t, AgentFromContext(r.Context()))
 	}))
 
 	rec := httptest.NewRecorder()
