@@ -81,10 +81,10 @@ func (v *introspectionValidator) Validate(ctx context.Context, token string) err
 		if !v.audienceValidator.Validate(ctx, aud) {
 			return errors.New("audience mismatch")
 		}
-	case []string:
+	case []interface{}:
 		match := false
 		for _, aud := range aud {
-			if v.audienceValidator.Validate(ctx, aud) {
+			if v.audienceValidator.Validate(ctx, aud.(string)) {
 				match = true
 				break
 			}
