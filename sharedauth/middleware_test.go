@@ -44,3 +44,23 @@ func TestNeedScopesMiddlewareFailure(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, rec.Result().StatusCode)
 }
+
+func TestNeedOneOfScopes(t *testing.T) {
+
+	checkAuthMiddleware := Middleware(NewHttpBearerMethod(NoOpValidator))
+	needConsentMiddleware := NeedOneOfScopes("A", "B", "C")
+
+	h := checkAuthMiddleware(needConsentMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		agent := AgentFromContext(r.Context())
+		assert.NotNil(t, agent)
+		assert.Equal(t, []string{"B", "X", "Y"}, agent.GetScopes())
+	})))
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/foo", nil)
+	req.Header.Set("Authorization", "Bearer "+forgeToken(t, "foo", "B", "X", "Y"))
+
+	h.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Result().StatusCode)
+}
