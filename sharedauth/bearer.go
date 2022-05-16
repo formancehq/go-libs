@@ -23,20 +23,20 @@ var NoOpValidator = validatorFn(func(ctx context.Context, token string) error {
 })
 
 type AudienceValidator interface {
-	Validate(string) bool
+	Validate(context.Context, string) bool
 }
-type AudienceValidatorFn func(string) bool
+type AudienceValidatorFn func(context.Context, string) bool
 
-func (fn AudienceValidatorFn) Validate(v string) bool {
-	return fn(v)
+func (fn AudienceValidatorFn) Validate(ctx context.Context, v string) bool {
+	return fn(ctx, v)
 }
 
-var NoAudienceValidation = AudienceValidatorFn(func(v string) bool {
+var NoAudienceValidation = AudienceValidatorFn(func(ctx context.Context, v string) bool {
 	return true
 })
 
 func AudienceIn(audiences ...string) AudienceValidatorFn {
-	return func(s string) bool {
+	return func(ctx context.Context, s string) bool {
 		for _, a := range audiences {
 			if s == a {
 				return true
@@ -77,13 +77,13 @@ func (v *introspectionValidator) Validate(ctx context.Context, token string) err
 	}
 	switch aud := tokenAudience.(type) {
 	case string:
-		if !v.audienceValidator.Validate(aud) {
+		if !v.audienceValidator.Validate(ctx, aud) {
 			return errors.New("audience mismatch")
 		}
 	case []string:
 		match := false
 		for _, aud := range aud {
-			if v.audienceValidator.Validate(aud) {
+			if v.audienceValidator.Validate(ctx, aud) {
 				match = true
 				break
 			}
