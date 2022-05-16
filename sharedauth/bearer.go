@@ -22,10 +22,34 @@ var NoOpValidator = validatorFn(func(ctx context.Context, token string) error {
 	return nil
 })
 
+type AudienceValidator interface {
+	Validate(string) bool
+}
+type AudienceValidatorFn func(string) bool
+
+func (fn AudienceValidatorFn) Validate(v string) bool {
+	return fn(v)
+}
+
+var NoAudienceValidation = AudienceValidatorFn(func(v string) bool {
+	return true
+})
+
+func AudienceIn(audiences ...string) AudienceValidatorFn {
+	return func(s string) bool {
+		for _, a := range audiences {
+			if s == a {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 type introspectionValidator struct {
 	introspecter      *oauth2introspect.Introspecter
-	audiences         []string
 	audiencesWildcard bool
+	audienceValidator AudienceValidator
 }
 
 func (v *introspectionValidator) Validate(ctx context.Context, token string) error {
@@ -37,27 +61,47 @@ func (v *introspectionValidator) Validate(ctx context.Context, token string) err
 		return errors.New("invalid token")
 	}
 
-	if !v.audiencesWildcard {
-		claims := jwt.MapClaims{}
-		_, _, err := (&jwt.Parser{}).ParseUnverified(token, &claims)
-		if err != nil {
-			return err
+	if v.audiencesWildcard {
+		return nil
+	}
+
+	claims := jwt.MapClaims{}
+	_, _, err = (&jwt.Parser{}).ParseUnverified(token, &claims)
+	if err != nil {
+		return err
+	}
+
+	tokenAudience := claims["aud"]
+	if tokenAudience == nil {
+		return errors.New("no audience provided in token")
+	}
+	switch aud := tokenAudience.(type) {
+	case string:
+		if !v.audienceValidator.Validate(aud) {
+			return errors.New("audience mismatch")
 		}
-		for _, a := range v.audiences {
-			if claims.VerifyAudience(a, true) {
-				return nil
+	case []string:
+		match := false
+		for _, aud := range aud {
+			if v.audienceValidator.Validate(aud) {
+				match = true
+				break
 			}
 		}
-		return errors.New("mismatch audience")
+		if !match {
+			return errors.New("audience mismatch")
+		}
+	default:
+		return errors.New("Invalid audience property type")
 	}
 	return nil
 }
 
-func NewIntrospectionValidator(introspecter *oauth2introspect.Introspecter, audiencesWildcard bool, audiences ...string) *introspectionValidator {
+func NewIntrospectionValidator(introspecter *oauth2introspect.Introspecter, audiencesWildcard bool, audienceValidator AudienceValidator) *introspectionValidator {
 	return &introspectionValidator{
 		introspecter:      introspecter,
-		audiences:         audiences,
 		audiencesWildcard: audiencesWildcard,
+		audienceValidator: audienceValidator,
 	}
 }
 
