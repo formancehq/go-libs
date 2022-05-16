@@ -2,6 +2,7 @@ package sharedauth
 
 import (
 	"context"
+	"fmt"
 	"github.com/golang-jwt/jwt"
 	"github.com/numary/go-libs/oauth2/oauth2introspect"
 	"github.com/pkg/errors"
@@ -92,7 +93,7 @@ func (v *introspectionValidator) Validate(ctx context.Context, token string) err
 			return errors.New("audience mismatch")
 		}
 	default:
-		return errors.New("Invalid audience property type")
+		return fmt.Errorf("invalid audience property type, got %T", tokenAudience)
 	}
 	return nil
 }
