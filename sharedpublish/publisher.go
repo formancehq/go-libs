@@ -9,6 +9,10 @@ import (
 	"go.uber.org/fx"
 )
 
+type Publisher interface {
+	Publish(ctx context.Context, topic string, ev interface{}) error
+}
+
 // TODO: Inject OpenTracing context
 func newMessage(ctx context.Context, m interface{}) *message.Message {
 	data, err := json.Marshal(m)
@@ -53,6 +57,8 @@ func NewTopicMapperPublisher(publisher message.Publisher, topics map[string]stri
 		topics:    topics,
 	}
 }
+
+var _ Publisher = &TopicMapperPublisher{}
 
 func TopicMapperPublisherModule(topics map[string]string) fx.Option {
 	return fx.Provide(func(p message.Publisher) *TopicMapperPublisher {
