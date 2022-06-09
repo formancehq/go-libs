@@ -12,6 +12,15 @@ import (
 type Publisher interface {
 	Publish(ctx context.Context, topic string, ev interface{}) error
 }
+type PublisherFn func(ctx context.Context, topic string, ev interface{}) error
+
+func (fn PublisherFn) Publish(ctx context.Context, topic string, ev interface{}) error {
+	return fn(ctx, topic, ev)
+}
+
+var NoOpPublisher PublisherFn = func(ctx context.Context, topic string, ev interface{}) error {
+	return nil
+}
 
 // TODO: Inject OpenTracing context
 func newMessage(ctx context.Context, m interface{}) *message.Message {
