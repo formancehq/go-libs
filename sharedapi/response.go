@@ -2,28 +2,29 @@ package sharedapi
 
 import "encoding/json"
 
-type BaseResponse struct {
-	Data   interface{} `json:"data,omitempty"`
-	Cursor *Cursor     `json:"cursor,omitempty"`
+type BaseResponse[T any] struct {
+	Data   *T         `json:"data,omitempty"`
+	Cursor *Cursor[T] `json:"cursor,omitempty"`
 }
 
-type Cursor struct {
-	PageSize int         `json:"page_size,omitempty"`
-	HasMore  bool        `json:"has_more"`
-	Previous string      `json:"previous,omitempty"`
-	Next     string      `json:"next,omitempty"`
-	Data     interface{} `json:"data"`
+type Cursor[T any] struct {
+	PageSize int    `json:"page_size,omitempty"`
+	HasMore  bool   `json:"has_more"`
+	Previous string `json:"previous,omitempty"`
+	Next     string `json:"next,omitempty"`
+	Data     []T    `json:"data"`
 }
 
-func (c Cursor) MarshalJSON() ([]byte, error) {
-	type Aux Cursor
+type cursor[T any] Cursor[T]
+
+func (c Cursor[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Aux
+		cursor[T]
 		// Keep those fields to ensure backward compatibility, even if it will be
 		Total     int64 `json:"total,omitempty"`
 		Remaining int   `json:"remaining_results,omitempty"`
 	}{
-		Aux: Aux(c),
+		cursor: cursor[T](c),
 	})
 }
 
