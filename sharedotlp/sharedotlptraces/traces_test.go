@@ -3,10 +3,11 @@ package sharedotlptraces
 import (
 	"context"
 	"fmt"
-	sharedotlp "github.com/numary/go-libs/sharedotlp"
+	"testing"
+
+	"github.com/numary/go-libs/sharedotlp"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
-	"testing"
 )
 
 func TestTracesModule(t *testing.T) {
