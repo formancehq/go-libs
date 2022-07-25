@@ -16,11 +16,14 @@ type logrusLogger struct {
 		Errorf(format string, args ...interface{})
 		Error(args ...interface{})
 		WithFields(fields logrus.Fields) *logrus.Entry
+		WithContext(ctx context.Context) *logrus.Entry
 	}
 }
 
 func (l *logrusLogger) WithContext(ctx context.Context) sharedlogging.Logger {
-	return l.WithContext(ctx)
+	return &logrusLogger{
+		l.entry.WithContext(ctx),
+	}
 }
 
 func (l *logrusLogger) Debug(args ...interface{}) {
