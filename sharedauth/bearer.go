@@ -3,11 +3,12 @@ package sharedauth
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/golang-jwt/jwt"
 	"github.com/numary/go-libs/oauth2/oauth2introspect"
 	"github.com/pkg/errors"
-	"net/http"
-	"strings"
 )
 
 type validator interface {

@@ -3,6 +3,7 @@ package sharedpublish
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/numary/go-libs/sharedlogging"
 	"github.com/pborman/uuid"

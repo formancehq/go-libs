@@ -2,15 +2,14 @@ package sharedotlptraces
 
 import (
 	"context"
-	"fmt"
-	sharedotlp "github.com/numary/go-libs/sharedotlp"
+	"testing"
+
+	"github.com/numary/go-libs/sharedotlp"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
-	"testing"
 )
 
 func TestTracesModule(t *testing.T) {
-
 	type testCase struct {
 		name   string
 		config ModuleConfig
@@ -18,13 +17,13 @@ func TestTracesModule(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: fmt.Sprintf("otlp-exporter"),
+			name: "otlp-exporter",
 			config: ModuleConfig{
 				Exporter: OTLPExporter,
 			},
 		},
 		{
-			name: fmt.Sprintf("otlp-exporter-with-grpc-config"),
+			name: "otlp-exporter-with-grpc-config",
 			config: ModuleConfig{
 				Exporter: OTLPExporter,
 				OTLPConfig: &OTLPConfig{
@@ -35,7 +34,7 @@ func TestTracesModule(t *testing.T) {
 			},
 		},
 		{
-			name: fmt.Sprintf("otlp-exporter-with-http-config"),
+			name: "otlp-exporter-with-http-config",
 			config: ModuleConfig{
 				Exporter: OTLPExporter,
 				OTLPConfig: &OTLPConfig{
@@ -46,20 +45,20 @@ func TestTracesModule(t *testing.T) {
 			},
 		},
 		{
-			name: fmt.Sprintf("jaeger-exporter"),
+			name: "jaeger-exporter",
 			config: ModuleConfig{
 				Exporter: JaegerExporter,
 			},
 		},
 		{
-			name: fmt.Sprintf("jaeger-exporter-with-config"),
+			name: "jaeger-exporter-with-config",
 			config: ModuleConfig{
 				Exporter:     JaegerExporter,
 				JaegerConfig: &JaegerConfig{},
 			},
 		},
 		{
-			name: fmt.Sprintf("stdout-exporter"),
+			name: "stdout-exporter",
 			config: ModuleConfig{
 				Exporter: StdoutExporter,
 			},
@@ -79,7 +78,12 @@ func TestTracesModule(t *testing.T) {
 
 			app := fx.New(options...)
 			assert.NoError(t, app.Start(context.Background()))
-			defer app.Stop(context.Background())
+			defer func(app *fx.App, ctx context.Context) {
+				err := app.Stop(ctx)
+				if err != nil {
+					panic(err)
+				}
+			}(app, context.Background())
 		})
 	}
 

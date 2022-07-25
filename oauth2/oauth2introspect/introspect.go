@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/dgraph-io/ristretto"
-	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/dgraph-io/ristretto"
+	"github.com/pkg/errors"
 )
 
 type IntrospecterOption interface {

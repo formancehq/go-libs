@@ -1,9 +1,10 @@
 package sharedauthjwt
 
 import (
+	"net/http"
+
 	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
-	"net/http"
 )
 
 type ClaimLedger struct {

@@ -1,10 +1,11 @@
 package sharedotlptraces
 
 import (
+	"os"
+
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/fx"
-	"os"
 )
 
 func LoadStdoutTracerProvider() (*stdouttrace.Exporter, error) {

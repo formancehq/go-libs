@@ -1,11 +1,12 @@
 package sharedpublishhttp
 
 import (
+	"net/http"
+
 	"github.com/ThreeDotsLabs/watermill"
 	wHttp "github.com/ThreeDotsLabs/watermill-http/pkg/http"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"go.uber.org/fx"
-	"net/http"
 )
 
 func NewPublisher(logger watermill.LoggerAdapter, config wHttp.PublisherConfig) (*wHttp.Publisher, error) {

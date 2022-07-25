@@ -1,8 +1,9 @@
 package sharedpublish
 
 import (
-	"go.uber.org/fx/fxtest"
 	"testing"
+
+	"go.uber.org/fx/fxtest"
 )
 
 func TestModuleDefault(t *testing.T) {

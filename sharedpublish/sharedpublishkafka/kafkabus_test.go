@@ -1,6 +1,10 @@
 package sharedpublishkafka
 
 import (
+	"log"
+	"os"
+	"testing"
+
 	"github.com/Shopify/sarama"
 	"github.com/ThreeDotsLabs/watermill-kafka/v2/pkg/kafka"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -8,9 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
-	"log"
-	"os"
-	"testing"
 )
 
 func TestModuleKafka(t *testing.T) {

@@ -3,6 +3,7 @@ package sharedpublishkafka
 import (
 	"crypto/sha256"
 	"crypto/sha512"
+
 	"github.com/xdg-go/scram"
 )
 

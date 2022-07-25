@@ -2,13 +2,14 @@ package sharedotlpmetrics
 
 import (
 	"context"
+	"time"
+
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/metric"
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.uber.org/fx"
-	"time"
 )
 
 func LoadController(exp *otlpmetric.Exporter) *controller.Controller {

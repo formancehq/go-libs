@@ -1,9 +1,10 @@
 package sharedauth
 
 import (
-	"github.com/pkg/errors"
 	"net/http"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 type Credential struct {

@@ -1,8 +1,9 @@
 package sharedauth
 
 import (
-	"github.com/numary/go-libs/sharedlogging"
 	"net/http"
+
+	"github.com/numary/go-libs/sharedlogging"
 )
 
 func Middleware(methods ...Method) func(handler http.Handler) http.Handler {
