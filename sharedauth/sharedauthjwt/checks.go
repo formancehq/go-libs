@@ -1,10 +1,11 @@
 package sharedauthjwt
 
 import (
-	"github.com/golang-jwt/jwt"
-	"github.com/pkg/errors"
 	"net/http"
 	"strings"
+
+	"github.com/golang-jwt/jwt"
+	"github.com/pkg/errors"
 )
 
 var (

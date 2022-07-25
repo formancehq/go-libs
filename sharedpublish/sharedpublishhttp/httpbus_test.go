@@ -1,15 +1,16 @@
 package sharedpublishhttp
 
 import (
+	"net/http"
+	"reflect"
+	"testing"
+
 	wHttp "github.com/ThreeDotsLabs/watermill-http/pkg/http"
 	"github.com/ThreeDotsLabs/watermill/message"
 	sharedpublish "github.com/numary/go-libs/sharedpublish"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
-	"net/http"
-	"reflect"
-	"testing"
 )
 
 func MarshallerFunc(url string, msg *message.Message) (*http.Request, error) {

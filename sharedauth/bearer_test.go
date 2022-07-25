@@ -1,13 +1,14 @@
 package sharedauth
 
 import (
-	"github.com/golang-jwt/jwt"
-	"github.com/numary/go-libs/oauth2/oauth2introspect"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/golang-jwt/jwt"
+	"github.com/numary/go-libs/oauth2/oauth2introspect"
+	"github.com/stretchr/testify/assert"
 )
 
 func forgeToken(t *testing.T, audience string, scopes ...string) string {
@@ -20,9 +21,8 @@ func forgeToken(t *testing.T, audience string, scopes ...string) string {
 }
 
 func TestHttpBearerWithWildcardOnAudiences(t *testing.T) {
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"active": true}`))
+		_, _ = w.Write([]byte(`{"active": true}`))
 	}))
 	defer srv.Close()
 
@@ -44,9 +44,8 @@ func TestHttpBearerWithWildcardOnAudiences(t *testing.T) {
 }
 
 func TestHttpBearerWithValidAudience(t *testing.T) {
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"active": true}`))
+		_, _ = w.Write([]byte(`{"active": true}`))
 	}))
 	defer srv.Close()
 
@@ -66,7 +65,6 @@ func TestHttpBearerWithValidAudience(t *testing.T) {
 }
 
 func TestHttpBearerWithInvalidToken(t *testing.T) {
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
@@ -87,9 +85,8 @@ func TestHttpBearerWithInvalidToken(t *testing.T) {
 }
 
 func TestHttpBearerForbiddenWithWrongAudience(t *testing.T) {
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"active": true}`))
+		_, _ = w.Write([]byte(`{"active": true}`))
 	}))
 	defer srv.Close()
 

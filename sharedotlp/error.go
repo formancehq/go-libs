@@ -3,6 +3,7 @@ package sharedotlp
 import (
 	"context"
 	"fmt"
+
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )

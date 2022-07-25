@@ -2,6 +2,7 @@ package sharedotlptraces
 
 import (
 	"context"
+
 	"github.com/numary/go-libs/sharedotlp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"

@@ -2,16 +2,15 @@ package sharedotlpmetrics
 
 import (
 	"context"
-	"fmt"
+	"testing"
+
 	opentelemetry "github.com/numary/go-libs/sharedotlp"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
-	"testing"
 )
 
 func TestMetricsModule(t *testing.T) {
-
 	type testCase struct {
 		name   string
 		config MetricsModuleConfig
@@ -19,13 +18,13 @@ func TestMetricsModule(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: fmt.Sprintf("otlp-exporter"),
+			name: "otlp-exporter",
 			config: MetricsModuleConfig{
 				Exporter: OTLPMetricsExporter,
 			},
 		},
 		{
-			name: fmt.Sprintf("otlp-exporter-with-grpc-config"),
+			name: "otlp-exporter-with-grpc-config",
 			config: MetricsModuleConfig{
 				Exporter: OTLPMetricsExporter,
 				OTLPConfig: &OTLPMetricsConfig{
@@ -36,7 +35,7 @@ func TestMetricsModule(t *testing.T) {
 			},
 		},
 		{
-			name: fmt.Sprintf("otlp-exporter-with-http-config"),
+			name: "otlp-exporter-with-http-config",
 			config: MetricsModuleConfig{
 				Exporter: OTLPMetricsExporter,
 				OTLPConfig: &OTLPMetricsConfig{
@@ -47,7 +46,7 @@ func TestMetricsModule(t *testing.T) {
 			},
 		},
 		{
-			name: fmt.Sprintf("noop-exporter"),
+			name: "noop-exporter",
 			config: MetricsModuleConfig{
 				Exporter: NoOpMetricsExporter,
 			},
@@ -72,7 +71,12 @@ func TestMetricsModule(t *testing.T) {
 
 			app := fx.New(options...)
 			assert.NoError(t, app.Start(context.Background()))
-			defer app.Stop(context.Background())
+			defer func(app *fx.App, ctx context.Context) {
+				err := app.Stop(ctx)
+				if err != nil {
+					panic(err)
+				}
+			}(app, context.Background())
 
 			select {
 			case <-ch:

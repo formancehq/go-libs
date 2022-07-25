@@ -1,0 +1,18 @@
+version: '3'
+
+vars:
+  PKG: ./...
+
+tasks:
+  default:
+    cmds:
+      - task: lint
+      - task: tests
+
+  lint:
+    cmds:
+      - golangci-lint run -v --fix {{.PKG}}
+
+  tests:
+    cmds:
+      - go test -v -coverpkg {{.PKG}} -coverprofile coverage.out -covermode atomic {{.PKG}}

@@ -1,8 +1,9 @@
 package sharedauth
 
 import (
-	_ "github.com/numary/go-libs/sharedlogging/sharedlogginglogrus"
 	"net/http"
+
+	_ "github.com/numary/go-libs/sharedlogging/sharedlogginglogrus"
 )
 
 type Agent interface {
