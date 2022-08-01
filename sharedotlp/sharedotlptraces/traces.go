@@ -50,7 +50,7 @@ func ProvideTracerProviderOption(v interface{}, annotations ...fx.Annotation) fx
 func TracesModule(cfg ModuleConfig) fx.Option {
 	options := make([]fx.Option, 0)
 	options = append(options,
-		ResourceFactoryModule(),
+		fx.Supply(resource.Default()),
 		fx.Provide(func(tp *tracesdk.TracerProvider) trace.TracerProvider { return tp }),
 		fx.Provide(fx.Annotate(func(options ...tracesdk.TracerProviderOption) *tracesdk.TracerProvider {
 			return tracesdk.NewTracerProvider(options...)
@@ -67,9 +67,6 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 					return tracerProvider.Shutdown(ctx)
 				},
 			})
-		}),
-		fx.Provide(func(factory *resourceFactory) (*resource.Resource, error) {
-			return factory.Make()
 		}),
 		ProvideTracerProviderOption(tracesdk.WithResource),
 	)
