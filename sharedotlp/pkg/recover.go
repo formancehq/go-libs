@@ -1,6 +1,8 @@
-package sharedotlp
+package pkg
 
-import "context"
+import (
+	"context"
+)
 
 func RecordErrorOnRecover(ctx context.Context, forwardPanic bool) func() {
 	return func() {

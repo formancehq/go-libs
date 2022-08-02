@@ -1,33 +1,34 @@
-package sharedotlptraces
+package sharedotlpmetrics
 
 import (
 	"context"
 	"testing"
 
-	"github.com/numary/go-libs/sharedotlp"
+	opentelemetry "github.com/numary/go-libs/sharedotlp/pkg"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
 )
 
-func TestTracesModule(t *testing.T) {
+func TestMetricsModule(t *testing.T) {
 	type testCase struct {
 		name   string
-		config ModuleConfig
+		config MetricsModuleConfig
 	}
 
 	tests := []testCase{
 		{
 			name: "otlp-exporter",
-			config: ModuleConfig{
-				Exporter: OTLPExporter,
+			config: MetricsModuleConfig{
+				Exporter: OTLPMetricsExporter,
 			},
 		},
 		{
 			name: "otlp-exporter-with-grpc-config",
-			config: ModuleConfig{
-				Exporter: OTLPExporter,
-				OTLPConfig: &OTLPConfig{
-					Mode:     sharedotlp.ModeGRPC,
+			config: MetricsModuleConfig{
+				Exporter: OTLPMetricsExporter,
+				OTLPConfig: &OTLPMetricsConfig{
+					Mode:     opentelemetry.ModeGRPC,
 					Endpoint: "remote:8080",
 					Insecure: true,
 				},
@@ -35,39 +36,26 @@ func TestTracesModule(t *testing.T) {
 		},
 		{
 			name: "otlp-exporter-with-http-config",
-			config: ModuleConfig{
-				Exporter: OTLPExporter,
-				OTLPConfig: &OTLPConfig{
-					Mode:     sharedotlp.ModeHTTP,
+			config: MetricsModuleConfig{
+				Exporter: OTLPMetricsExporter,
+				OTLPConfig: &OTLPMetricsConfig{
+					Mode:     opentelemetry.ModeHTTP,
 					Endpoint: "remote:8080",
 					Insecure: true,
 				},
 			},
 		},
 		{
-			name: "jaeger-exporter",
-			config: ModuleConfig{
-				Exporter: JaegerExporter,
-			},
-		},
-		{
-			name: "jaeger-exporter-with-config",
-			config: ModuleConfig{
-				Exporter:     JaegerExporter,
-				JaegerConfig: &JaegerConfig{},
-			},
-		},
-		{
-			name: "stdout-exporter",
-			config: ModuleConfig{
-				Exporter: StdoutExporter,
+			name: "noop-exporter",
+			config: MetricsModuleConfig{
+				Exporter: NoOpMetricsExporter,
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			options := []fx.Option{TracesModule(test.config)}
+			options := []fx.Option{MetricsModule(test.config)}
 			if !testing.Verbose() {
 				options = append(options, fx.NopLogger)
 			}
@@ -75,6 +63,11 @@ func TestTracesModule(t *testing.T) {
 				return t
 			}))
 			assert.NoError(t, fx.ValidateApp(options...))
+
+			ch := make(chan struct{})
+			options = append(options, fx.Invoke(func(mp metric.MeterProvider) { // Inject validate the object availability
+				close(ch)
+			}))
 
 			app := fx.New(options...)
 			assert.NoError(t, app.Start(context.Background()))
@@ -84,6 +77,12 @@ func TestTracesModule(t *testing.T) {
 					panic(err)
 				}
 			}(app, context.Background())
+
+			select {
+			case <-ch:
+			default:
+				assert.Fail(t, "something went wrong")
+			}
 		})
 	}
 

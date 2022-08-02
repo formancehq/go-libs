@@ -1,4 +1,4 @@
-package sharedotlp
+package pkg
 
 import (
 	"context"
