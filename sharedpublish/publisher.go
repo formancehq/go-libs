@@ -5,24 +5,12 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/numary/go-libs/sharedlogging"
 	"github.com/pborman/uuid"
 	"go.uber.org/fx"
 )
 
 type Publisher interface {
-	Publish(ctx context.Context, topic string, ev interface{}) error
-}
-
-// TODO: Inject OpenTracing context
-func newMessage(ctx context.Context, m interface{}) *message.Message {
-	data, err := json.Marshal(m)
-	if err != nil {
-		panic(err)
-	}
-	msg := message.NewMessage(uuid.New(), data)
-	msg.SetContext(ctx)
-	return msg
+	Publish(ctx context.Context, topic string, ev any) error
 }
 
 type TopicMapperPublisher struct {
@@ -30,27 +18,7 @@ type TopicMapperPublisher struct {
 	topics    map[string]string
 }
 
-func (l *TopicMapperPublisher) publish(ctx context.Context, topic string, ev interface{}) error {
-	err := l.publisher.Publish(topic, newMessage(ctx, ev))
-	if err != nil {
-		sharedlogging.GetLogger(ctx).Errorf("Publishing message: %s", err)
-		return err
-	}
-	return nil
-}
-
-func (l *TopicMapperPublisher) Publish(ctx context.Context, topic string, ev interface{}) error {
-	mappedTopic, ok := l.topics[topic]
-	if ok {
-		return l.publish(ctx, mappedTopic, ev)
-	}
-	mappedTopic, ok = l.topics["*"]
-	if ok {
-		return l.publish(ctx, mappedTopic, ev)
-	}
-
-	return l.publish(ctx, topic, ev)
-}
+var _ Publisher = &TopicMapperPublisher{}
 
 func NewTopicMapperPublisher(publisher message.Publisher, topics map[string]string) *TopicMapperPublisher {
 	return &TopicMapperPublisher{
@@ -59,7 +27,34 @@ func NewTopicMapperPublisher(publisher message.Publisher, topics map[string]stri
 	}
 }
 
-var _ Publisher = &TopicMapperPublisher{}
+func (l *TopicMapperPublisher) Publish(ctx context.Context, topic string, ev any) error {
+	if mappedTopic, ok := l.topics[topic]; ok {
+		if err := l.publisher.Publish(mappedTopic, newMessage(ctx, ev)); err != nil {
+			return err
+		}
+		return nil
+	} else if mappedTopic, ok = l.topics["*"]; ok {
+		if err := l.publisher.Publish(mappedTopic, newMessage(ctx, ev)); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := l.publisher.Publish(topic, newMessage(ctx, ev)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// TODO: Inject OpenTracing context
+func newMessage(ctx context.Context, m any) *message.Message {
+	data, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	msg := message.NewMessage(uuid.New(), data)
+	msg.SetContext(ctx)
+	return msg
+}
 
 func TopicMapperPublisherModule(topics map[string]string) fx.Option {
 	return fx.Provide(func(p message.Publisher) *TopicMapperPublisher {
