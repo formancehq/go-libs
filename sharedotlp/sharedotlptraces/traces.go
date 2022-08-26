@@ -42,7 +42,7 @@ type ModuleConfig struct {
 	OTLPConfig   *OTLPConfig
 }
 
-func ProvideTracerProviderOption(v interface{}, annotations ...fx.Annotation) fx.Option {
+func ProvideTracerProviderOption(v any, annotations ...fx.Annotation) fx.Option {
 	annotations = append(annotations, fx.ResultTags(TracerProviderOptionKey))
 	return fx.Provide(fx.Annotate(v, annotations...))
 }

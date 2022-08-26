@@ -17,7 +17,7 @@ import (
 func TestHealthController(t *testing.T) {
 	type testCase struct {
 		name                 string
-		healthChecksProvider []interface{}
+		healthChecksProvider []any
 		expectedStatus       int
 		expectedResult       map[string]string
 	}
@@ -25,7 +25,7 @@ func TestHealthController(t *testing.T) {
 	var tests = []testCase{
 		{
 			name: "all-ok",
-			healthChecksProvider: []interface{}{
+			healthChecksProvider: []any{
 				func() sharedhealth.NamedCheck {
 					return sharedhealth.NewNamedCheck("test1", sharedhealth.CheckFn(func(ctx context.Context) error {
 						return nil
@@ -45,7 +45,7 @@ func TestHealthController(t *testing.T) {
 		},
 		{
 			name: "one-failing",
-			healthChecksProvider: []interface{}{
+			healthChecksProvider: []any{
 				func() sharedhealth.NamedCheck {
 					return sharedhealth.NewNamedCheck("test1", sharedhealth.CheckFn(func(ctx context.Context) error {
 						return nil

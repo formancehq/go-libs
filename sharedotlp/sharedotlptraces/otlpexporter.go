@@ -32,7 +32,7 @@ func OTLPTracerModule() fx.Option {
 
 const OTLPTracerGRPCOptionsKey = `group:"_otlpTracerGrpcOptions"`
 
-func ProvideOTLPTracerGRPCClientOption(provider interface{}) fx.Option {
+func ProvideOTLPTracerGRPCClientOption(provider any) fx.Option {
 	return fx.Provide(
 		fx.Annotate(provider, fx.ResultTags(OTLPTracerGRPCOptionsKey), fx.As(new(otlptracegrpc.Option))),
 	)
@@ -48,7 +48,7 @@ func OTLPTracerGRPCClientModule() fx.Option {
 
 const OTLPTracerHTTPOptionsKey = `group:"_otlpTracerHTTPOptions"`
 
-func ProvideOTLPTracerHTTPClientOption(provider interface{}) fx.Option {
+func ProvideOTLPTracerHTTPClientOption(provider any) fx.Option {
 	return fx.Provide(
 		fx.Annotate(provider, fx.ResultTags(OTLPTracerHTTPOptionsKey), fx.As(new(otlptracehttp.Option))),
 	)

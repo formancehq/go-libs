@@ -14,7 +14,7 @@ const (
 	JaegerCollectorEndpointGroupKey = `group:"_tracerCollectorEndpointOptions"`
 )
 
-func ProvideJaegerTracerCollectorEndpoint(provider interface{}) fx.Option {
+func ProvideJaegerTracerCollectorEndpoint(provider any) fx.Option {
 	return fx.Provide(fx.Annotate(provider, fx.ResultTags(JaegerCollectorEndpointGroupKey)))
 }
 

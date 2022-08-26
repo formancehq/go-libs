@@ -5,44 +5,13 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
+	"github.com/numary/go-libs/sharedlogging"
 	"go.uber.org/fx"
 )
 
 type Publisher interface {
 	Publish(ctx context.Context, topic string, ev any) error
-}
-
-type TopicMapperPublisher struct {
-	publisher message.Publisher
-	topics    map[string]string
-}
-
-var _ Publisher = &TopicMapperPublisher{}
-
-func NewTopicMapperPublisher(publisher message.Publisher, topics map[string]string) *TopicMapperPublisher {
-	return &TopicMapperPublisher{
-		publisher: publisher,
-		topics:    topics,
-	}
-}
-
-func (l *TopicMapperPublisher) Publish(ctx context.Context, topic string, ev any) error {
-	if mappedTopic, ok := l.topics[topic]; ok {
-		if err := l.publisher.Publish(mappedTopic, newMessage(ctx, ev)); err != nil {
-			return err
-		}
-		return nil
-	} else if mappedTopic, ok = l.topics["*"]; ok {
-		if err := l.publisher.Publish(mappedTopic, newMessage(ctx, ev)); err != nil {
-			return err
-		}
-		return nil
-	}
-	if err := l.publisher.Publish(topic, newMessage(ctx, ev)); err != nil {
-		return err
-	}
-	return nil
 }
 
 // TODO: Inject OpenTracing context
@@ -51,10 +20,46 @@ func newMessage(ctx context.Context, m any) *message.Message {
 	if err != nil {
 		panic(err)
 	}
-	msg := message.NewMessage(uuid.New(), data)
+	msg := message.NewMessage(uuid.NewString(), data)
 	msg.SetContext(ctx)
 	return msg
 }
+
+type TopicMapperPublisher struct {
+	publisher message.Publisher
+	topics    map[string]string
+}
+
+func (l *TopicMapperPublisher) publish(ctx context.Context, topic string, ev any) error {
+	err := l.publisher.Publish(topic, newMessage(ctx, ev))
+	if err != nil {
+		sharedlogging.GetLogger(ctx).Errorf("Publishing message: %s", err)
+		return err
+	}
+	return nil
+}
+
+func (l *TopicMapperPublisher) Publish(ctx context.Context, topic string, ev any) error {
+	mappedTopic, ok := l.topics[topic]
+	if ok {
+		return l.publish(ctx, mappedTopic, ev)
+	}
+	mappedTopic, ok = l.topics["*"]
+	if ok {
+		return l.publish(ctx, mappedTopic, ev)
+	}
+
+	return l.publish(ctx, topic, ev)
+}
+
+func NewTopicMapperPublisher(publisher message.Publisher, topics map[string]string) *TopicMapperPublisher {
+	return &TopicMapperPublisher{
+		publisher: publisher,
+		topics:    topics,
+	}
+}
+
+var _ Publisher = &TopicMapperPublisher{}
 
 func TopicMapperPublisherModule(topics map[string]string) fx.Option {
 	return fx.Provide(func(p message.Publisher) *TopicMapperPublisher {
