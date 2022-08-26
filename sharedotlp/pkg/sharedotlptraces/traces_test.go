@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/numary/go-libs/sharedotlp"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 )
