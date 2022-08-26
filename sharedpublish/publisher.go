@@ -5,22 +5,22 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 	"github.com/numary/go-libs/sharedlogging"
-	"github.com/pborman/uuid"
 	"go.uber.org/fx"
 )
 
 type Publisher interface {
-	Publish(ctx context.Context, topic string, ev interface{}) error
+	Publish(ctx context.Context, topic string, ev any) error
 }
 
 // TODO: Inject OpenTracing context
-func newMessage(ctx context.Context, m interface{}) *message.Message {
+func newMessage(ctx context.Context, m any) *message.Message {
 	data, err := json.Marshal(m)
 	if err != nil {
 		panic(err)
 	}
-	msg := message.NewMessage(uuid.New(), data)
+	msg := message.NewMessage(uuid.NewString(), data)
 	msg.SetContext(ctx)
 	return msg
 }
@@ -30,7 +30,7 @@ type TopicMapperPublisher struct {
 	topics    map[string]string
 }
 
-func (l *TopicMapperPublisher) publish(ctx context.Context, topic string, ev interface{}) error {
+func (l *TopicMapperPublisher) publish(ctx context.Context, topic string, ev any) error {
 	err := l.publisher.Publish(topic, newMessage(ctx, ev))
 	if err != nil {
 		sharedlogging.GetLogger(ctx).Errorf("Publishing message: %s", err)
@@ -39,7 +39,7 @@ func (l *TopicMapperPublisher) publish(ctx context.Context, topic string, ev int
 	return nil
 }
 
-func (l *TopicMapperPublisher) Publish(ctx context.Context, topic string, ev interface{}) error {
+func (l *TopicMapperPublisher) Publish(ctx context.Context, topic string, ev any) error {
 	mappedTopic, ok := l.topics[topic]
 	if ok {
 		return l.publish(ctx, mappedTopic, ev)

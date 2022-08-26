@@ -17,7 +17,7 @@ func RecordError(ctx context.Context, e error) {
 	span.RecordError(e, trace.WithStackTrace(true))
 }
 
-func RecordAsError(ctx context.Context, e interface{}) {
+func RecordAsError(ctx context.Context, e any) {
 	if e == nil {
 		return
 	}

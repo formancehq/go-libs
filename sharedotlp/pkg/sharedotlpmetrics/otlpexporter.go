@@ -35,7 +35,7 @@ func OTLPMeterModule() fx.Option {
 
 const OTLPMeterGRPCOptionsKey = `group:"_otlpMeterGrpcOptions"`
 
-func ProvideOTLPMeterGRPCClientOption(provider interface{}) fx.Option {
+func ProvideOTLPMeterGRPCClientOption(provider any) fx.Option {
 	return fx.Provide(
 		fx.Annotate(provider, fx.ResultTags(OTLPMeterGRPCOptionsKey), fx.As(new(otlpmetricgrpc.Option))),
 	)
@@ -51,7 +51,7 @@ func OTLPMeterGRPCClientModule() fx.Option {
 
 const OTLPMeterHTTPOptionsKey = `group:"_otlpMeterHTTPOptions"`
 
-func ProvideOTLPMeterHTTPClientOption(provider interface{}) fx.Option {
+func ProvideOTLPMeterHTTPClientOption(provider any) fx.Option {
 	return fx.Provide(
 		fx.Annotate(provider, fx.ResultTags(OTLPMeterHTTPOptionsKey), fx.As(new(otlpmetrichttp.Option))),
 	)

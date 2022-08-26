@@ -9,12 +9,12 @@ import (
 
 type logrusLogger struct {
 	entry interface {
-		Debugf(format string, args ...interface{})
-		Debug(args ...interface{})
-		Infof(format string, args ...interface{})
-		Info(args ...interface{})
-		Errorf(format string, args ...interface{})
-		Error(args ...interface{})
+		Debugf(format string, args ...any)
+		Debug(args ...any)
+		Infof(format string, args ...any)
+		Info(args ...any)
+		Errorf(format string, args ...any)
+		Error(args ...any)
 		WithFields(fields logrus.Fields) *logrus.Entry
 		WithContext(ctx context.Context) *logrus.Entry
 	}
@@ -26,25 +26,25 @@ func (l *logrusLogger) WithContext(ctx context.Context) sharedlogging.Logger {
 	}
 }
 
-func (l *logrusLogger) Debug(args ...interface{}) {
+func (l *logrusLogger) Debug(args ...any) {
 	l.entry.Debug(args...)
 }
-func (l *logrusLogger) Debugf(fmt string, args ...interface{}) {
+func (l *logrusLogger) Debugf(fmt string, args ...any) {
 	l.entry.Debugf(fmt, args...)
 }
-func (l *logrusLogger) Infof(fmt string, args ...interface{}) {
+func (l *logrusLogger) Infof(fmt string, args ...any) {
 	l.entry.Infof(fmt, args...)
 }
-func (l *logrusLogger) Info(args ...interface{}) {
+func (l *logrusLogger) Info(args ...any) {
 	l.entry.Info(args...)
 }
-func (l *logrusLogger) Errorf(fmt string, args ...interface{}) {
+func (l *logrusLogger) Errorf(fmt string, args ...any) {
 	l.entry.Errorf(fmt, args...)
 }
-func (l *logrusLogger) Error(args ...interface{}) {
+func (l *logrusLogger) Error(args ...any) {
 	l.entry.Error(args...)
 }
-func (l *logrusLogger) WithFields(fields map[string]interface{}) sharedlogging.Logger {
+func (l *logrusLogger) WithFields(fields map[string]any) sharedlogging.Logger {
 	return &logrusLogger{
 		entry: l.entry.WithFields(fields),
 	}
