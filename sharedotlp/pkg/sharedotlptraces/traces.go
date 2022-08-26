@@ -3,7 +3,6 @@ package sharedotlptraces
 import (
 	"context"
 
-	"github.com/numary/go-libs/sharedotlp/pkg"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -102,13 +101,13 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 		options = append(options, StdoutTracerModule())
 	case OTLPExporter:
 		options = append(options, OTLPTracerModule())
-		mode := pkg.ModeGRPC
+		mode := sharedotlp.ModeGRPC
 		if cfg.OTLPConfig != nil {
 			if cfg.OTLPConfig.Mode != "" {
 				mode = cfg.OTLPConfig.Mode
 			}
 			switch mode {
-			case pkg.ModeGRPC:
+			case sharedotlp.ModeGRPC:
 				if cfg.OTLPConfig.Endpoint != "" {
 					options = append(options, ProvideOTLPTracerGRPCClientOption(func() otlptracegrpc.Option {
 						return otlptracegrpc.WithEndpoint(cfg.OTLPConfig.Endpoint)
@@ -119,7 +118,7 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 						return otlptracegrpc.WithInsecure()
 					}))
 				}
-			case pkg.ModeHTTP:
+			case sharedotlp.ModeHTTP:
 				if cfg.OTLPConfig.Endpoint != "" {
 					options = append(options, ProvideOTLPTracerHTTPClientOption(func() otlptracehttp.Option {
 						return otlptracehttp.WithEndpoint(cfg.OTLPConfig.Endpoint)
@@ -133,9 +132,9 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 			}
 		}
 		switch mode {
-		case pkg.ModeGRPC:
+		case sharedotlp.ModeGRPC:
 			options = append(options, OTLPTracerGRPCClientModule())
-		case pkg.ModeHTTP:
+		case sharedotlp.ModeHTTP:
 			options = append(options, OTLPTracerHTTPClientModule())
 		}
 	}

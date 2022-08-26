@@ -1,4 +1,4 @@
-package pkg
+package sharedotlp
 
 const (
 	ModeGRPC = "grpc"

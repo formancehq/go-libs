@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/numary/go-libs/sharedotlp/pkg"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 )
@@ -27,7 +26,7 @@ func TestTracesModule(t *testing.T) {
 			config: ModuleConfig{
 				Exporter: OTLPExporter,
 				OTLPConfig: &OTLPConfig{
-					Mode:     pkg.ModeGRPC,
+					Mode:     sharedotlp.ModeGRPC,
 					Endpoint: "remote:8080",
 					Insecure: true,
 				},
@@ -38,7 +37,7 @@ func TestTracesModule(t *testing.T) {
 			config: ModuleConfig{
 				Exporter: OTLPExporter,
 				OTLPConfig: &OTLPConfig{
-					Mode:     pkg.ModeHTTP,
+					Mode:     sharedotlp.ModeHTTP,
 					Endpoint: "remote:8080",
 					Insecure: true,
 				},
