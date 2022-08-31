@@ -145,18 +145,16 @@ func TestSegment(t *testing.T) {
 		})
 	})
 	t.Run("With error on the backend", func(t *testing.T) {
-		firstCallChan := make(chan struct{})
+		firstCall := true
 
 		queue := NewQueue[*http.Request]()
 		app := newApp(module, func(request *http.Request) (*http.Response, error) {
-			select {
-			case <-firstCallChan: // Enter this case only if the chan is closed
-				queue.Put(request)
-				return emptyHttpResponse, nil
-			default:
-				close(firstCallChan)
-				return nil, errors.New("general error")
+			if firstCall {
+				firstCall = false
+				return nil, errors.New("error on the first try")
 			}
+			queue.Put(request)
+			return emptyHttpResponse, nil
 		})
 		withApp(t, app, func(t *testing.T) {
 			EventuallyQueueNotEmpty(t, queue)
