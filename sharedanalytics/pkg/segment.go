@@ -31,12 +31,12 @@ func (fn AppIdProviderFn) AppID(ctx context.Context) (string, error) {
 }
 
 type PropertiesEnricher interface {
-	Enrich(p analytics.Properties) error
+	Enrich(ctx context.Context, p analytics.Properties) error
 }
-type PropertiesEnricherFn func(p analytics.Properties) error
+type PropertiesEnricherFn func(ctx context.Context, p analytics.Properties) error
 
-func (fn PropertiesEnricherFn) Enrich(p analytics.Properties) error {
-	return fn(p)
+func (fn PropertiesEnricherFn) Enrich(ctx context.Context, p analytics.Properties) error {
+	return fn(ctx, p)
 }
 
 type heartbeat struct {
@@ -102,7 +102,7 @@ func (m *heartbeat) enqueue(ctx context.Context) error {
 		Set(TotalMemoryProperty, memory.TotalMemory()/1024/1024)
 
 	for _, enricher := range m.enrichers {
-		if err := enricher.Enrich(properties); err != nil {
+		if err := enricher.Enrich(ctx, properties); err != nil {
 			sharedlogging.GetLogger(ctx).Errorf("Enricher return error: %s", err)
 		}
 	}
