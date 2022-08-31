@@ -9,6 +9,10 @@ import (
 	"go.uber.org/fx"
 )
 
+const (
+	FXTagPropertiesEnrichers = `group:"enrichers"`
+)
+
 func NewHeartbeatModule(version, writeKey string, interval time.Duration) fx.Option {
 	defaultAppId := uuid.NewString()
 	return fx.Options(
@@ -18,7 +22,7 @@ func NewHeartbeatModule(version, writeKey string, interval time.Duration) fx.Opt
 		}),
 		fx.Provide(fx.Annotate(func(client analytics.Client, provider AppIdProvider, enrichers []PropertiesEnricher) *heartbeat {
 			return newHeartbeat(provider, client, version, interval, enrichers...)
-		}, fx.ParamTags("", "", `group:"enrichers"`))),
+		}, fx.ParamTags("", "", FXTagPropertiesEnrichers))),
 		fx.Provide(func() AppIdProvider {
 			return AppIdProviderFn(func(ctx context.Context) (string, error) {
 				return defaultAppId, nil

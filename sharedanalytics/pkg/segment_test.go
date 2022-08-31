@@ -85,7 +85,7 @@ var (
 		fx.Supply(fx.Annotate(PropertiesEnricherFn(func(ctx context.Context, p analytics.Properties) error {
 			p.Set("foo", "bar")
 			return nil
-		}), fx.ResultTags(`group:"enrichers"`), fx.As(new(PropertiesEnricher)))),
+		}), fx.ResultTags(FXTagPropertiesEnrichers), fx.As(new(PropertiesEnricher)))),
 	)
 )
 

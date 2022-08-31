@@ -35,7 +35,7 @@ func TestAnalyticsModule(t *testing.T) {
 		fx.Supply(fx.Annotate(PropertiesEnricherFn(func(ctx context.Context, p analytics.Properties) error {
 			p.Set("additionalProperty", "test")
 			return nil
-		}), fx.As(new(PropertiesEnricher)), fx.ResultTags(`group:"enrichers"`))),
+		}), fx.As(new(PropertiesEnricher)), fx.ResultTags(FXTagPropertiesEnrichers))),
 		fx.Replace(analytics.Config{
 			BatchSize: 1,
 			Transport: roundTripperFn(func(req *http.Request) (*http.Response, error) {
