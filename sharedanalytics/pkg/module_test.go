@@ -32,7 +32,7 @@ func TestAnalyticsModule(t *testing.T) {
 	app := fx.New(
 		module,
 		fx.NopLogger,
-		fx.Supply(fx.Annotate(PropertiesEnricherFn(func(p analytics.Properties) error {
+		fx.Supply(fx.Annotate(PropertiesEnricherFn(func(ctx context.Context, p analytics.Properties) error {
 			p.Set("additionalProperty", "test")
 			return nil
 		}), fx.As(new(PropertiesEnricher)), fx.ResultTags(`group:"enrichers"`))),
