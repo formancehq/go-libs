@@ -1,4 +1,4 @@
-module github.com/numary/go-libs/sharedotlp
+module github.com/formancehq/go-libs/sharedotlp
 
 go 1.18
 

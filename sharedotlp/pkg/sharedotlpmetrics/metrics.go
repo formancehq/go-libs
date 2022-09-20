@@ -1,7 +1,7 @@
 package sharedotlpmetrics
 
 import (
-	opentelemetry "github.com/numary/go-libs/sharedotlp/pkg"
+	opentelemetry "github.com/formancehq/go-libs/sharedotlp/pkg"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.uber.org/fx"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	opentelemetry "github.com/numary/go-libs/sharedotlp/pkg"
+	opentelemetry "github.com/formancehq/go-libs/sharedotlp/pkg"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
