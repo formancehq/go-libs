@@ -7,7 +7,7 @@ import (
 
 	wHttp "github.com/ThreeDotsLabs/watermill-http/pkg/http"
 	"github.com/ThreeDotsLabs/watermill/message"
-	sharedpublish "github.com/numary/go-libs/sharedpublish"
+	sharedpublish "github.com/formancehq/go-libs/sharedpublish"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"

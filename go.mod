@@ -1,4 +1,4 @@
-module github.com/numary/go-libs
+module github.com/formancehq/go-libs
 
 go 1.18
 
