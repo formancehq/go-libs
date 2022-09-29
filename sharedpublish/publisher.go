@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/sharedlogging"
 	"github.com/google/uuid"
+	"go.formance.com/lib/sharedlogging"
 	"go.uber.org/fx"
 )
 

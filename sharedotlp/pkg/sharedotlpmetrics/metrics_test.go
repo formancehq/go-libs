@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	opentelemetry "github.com/formancehq/go-libs/sharedotlp/pkg"
 	"github.com/stretchr/testify/assert"
+	opentelemetry "go.formance.com/lib/sharedotlp/pkg"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
 )

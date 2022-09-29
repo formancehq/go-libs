@@ -7,8 +7,8 @@ import (
 
 	wHttp "github.com/ThreeDotsLabs/watermill-http/pkg/http"
 	"github.com/ThreeDotsLabs/watermill/message"
-	sharedpublish "github.com/formancehq/go-libs/sharedpublish"
 	"github.com/stretchr/testify/assert"
+	sharedpublish "go.formance.com/lib/sharedpublish"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )

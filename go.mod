@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs
+module go.formance.com/lib
 
 go 1.18
 

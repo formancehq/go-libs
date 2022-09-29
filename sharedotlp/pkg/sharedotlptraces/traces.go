@@ -3,7 +3,7 @@ package sharedotlptraces
 import (
 	"context"
 
-	sharedotlp "github.com/formancehq/go-libs/sharedotlp/pkg"
+	sharedotlp "go.formance.com/lib/sharedotlp/pkg"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"

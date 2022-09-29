@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs/sharedhealth
+module go.formance.com/lib/sharedhealth
 
 go 1.18
 

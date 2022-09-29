@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/formancehq/go-libs/oauth2/oauth2introspect"
 	"github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
+	"go.formance.com/lib/oauth2/oauth2introspect"
 )
 
 func forgeToken(t *testing.T, audience string, scopes ...string) string {
