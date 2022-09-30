@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs/sharedotlp
+module go.formance.com/go-libs/sharedotlp
 
 go 1.18
 

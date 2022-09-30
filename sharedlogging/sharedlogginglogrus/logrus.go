@@ -3,8 +3,8 @@ package sharedlogginglogrus
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/sharedlogging"
 	"github.com/sirupsen/logrus"
+	"go.formance.com/go-libs/sharedlogging"
 )
 
 type logrusLogger struct {
