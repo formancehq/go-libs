@@ -8,8 +8,8 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/ThreeDotsLabs/watermill-kafka/v2/pkg/kafka"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/sharedpublish"
 	"github.com/stretchr/testify/assert"
+	"go.formance.com/go-libs/sharedpublish"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
