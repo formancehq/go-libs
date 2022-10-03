@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/formancehq/go-libs/oauth2/oauth2introspect"
 	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
-	"go.formance.com/go-libs/oauth2/oauth2introspect"
 )
 
 type validator interface {
