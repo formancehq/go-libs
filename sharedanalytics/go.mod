@@ -1,4 +1,4 @@
-module go.formance.com/go-libs/sharedanalytics
+module github.com/formancehq/go-libs/sharedanalytics
 
 go 1.19
 
