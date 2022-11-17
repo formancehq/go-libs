@@ -57,5 +57,5 @@ func CLITracesModule(v *viper.Viper) fx.Option {
 			}(),
 		})
 	}
-	return nil
+	return fx.Options()
 }

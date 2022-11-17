@@ -7,7 +7,8 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.12.0
 	github.com/stretchr/testify v1.8.0
-	go.opentelemetry.io/otel v1.8.0
+	go.opentelemetry.io/contrib/propagators/b3 v1.11.1
+	go.opentelemetry.io/otel v1.11.1
 	go.opentelemetry.io/otel/exporters/jaeger v1.8.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.31.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.31.0
@@ -16,10 +17,10 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.8.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.8.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.8.0
-	go.opentelemetry.io/otel/metric v0.31.0
+	go.opentelemetry.io/otel/metric v0.33.0
 	go.opentelemetry.io/otel/sdk v1.8.0
 	go.opentelemetry.io/otel/sdk/metric v0.31.0
-	go.opentelemetry.io/otel/trace v1.8.0
+	go.opentelemetry.io/otel/trace v1.11.1
 	go.uber.org/fx v1.17.1
 )
 

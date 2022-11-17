@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sharedotlp "github.com/formancehq/go-libs/sharedotlp/pkg"
+	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -57,7 +58,8 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 		}, fx.ParamTags(TracerProviderOptionKey))),
 		fx.Invoke(func(lc fx.Lifecycle, tracerProvider *tracesdk.TracerProvider) {
 			// set global propagator to tracecontext (the default is no-op).
-			otel.SetTextMapPropagator(propagation.TraceContext{})
+			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+				b3.New(), propagation.TraceContext{})) // B3 format is common and used by zipkin. Always enabled right now.
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
 					otel.SetTracerProvider(tracerProvider)
