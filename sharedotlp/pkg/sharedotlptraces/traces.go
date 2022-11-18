@@ -2,10 +2,13 @@ package sharedotlptraces
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	sharedotlp "github.com/formancehq/go-libs/sharedotlp/pkg"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -37,11 +40,12 @@ type OTLPConfig struct {
 }
 
 type ModuleConfig struct {
-	Exporter     string
-	Batch        bool
-	JaegerConfig *JaegerConfig
-	OTLPConfig   *OTLPConfig
-	Resource     *resource.Resource
+	Exporter           string
+	Batch              bool
+	JaegerConfig       *JaegerConfig
+	OTLPConfig         *OTLPConfig
+	ResourceAttributes []string
+	ServiceName        string
 }
 
 func ProvideTracerProviderOption(v any, annotations ...fx.Annotation) fx.Option {
@@ -49,17 +53,25 @@ func ProvideTracerProviderOption(v any, annotations ...fx.Annotation) fx.Option 
 	return fx.Provide(fx.Annotate(v, annotations...))
 }
 
+func loadResource(cfg ModuleConfig) (*resource.Resource, error) {
+	defaultResource := resource.Default()
+	attributes := make([]attribute.KeyValue, 0)
+	attributes = append(attributes, attribute.String("service.name", cfg.ServiceName))
+	for _, ra := range cfg.ResourceAttributes {
+		parts := strings.SplitN(ra, "=", 2)
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("malformed otlp attribute: %s", ra)
+		}
+		attributes = append(attributes, attribute.String(parts[0], parts[1]))
+	}
+	return resource.Merge(defaultResource, resource.NewSchemaless(attributes...))
+}
+
 func TracesModule(cfg ModuleConfig) fx.Option {
 	options := make([]fx.Option, 0)
 	options = append(options,
-		fx.Provide(func() (*resource.Resource, error) {
-			defaultResource := resource.Default()
-			if cfg.Resource == nil {
-				return defaultResource, nil
-			}
-			return resource.Merge(defaultResource, cfg.Resource)
-		}),
-		fx.Supply(resource.Default()),
+		fx.Supply(cfg),
+		fx.Provide(loadResource),
 		fx.Provide(func(tp *tracesdk.TracerProvider) trace.TracerProvider { return tp }),
 		fx.Provide(fx.Annotate(func(options ...tracesdk.TracerProviderOption) *tracesdk.TracerProvider {
 			return tracesdk.NewTracerProvider(options...)
