@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/formancehq/go-libs/sharedlogging"
 	sharedotlp "github.com/formancehq/go-libs/sharedotlp/pkg"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
@@ -80,6 +81,9 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 			// set global propagator to tracecontext (the default is no-op).
 			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 				b3.New(), propagation.TraceContext{})) // B3 format is common and used by zipkin. Always enabled right now.
+			otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+				sharedlogging.Debug(err)
+			}))
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
 					otel.SetTracerProvider(tracerProvider)
