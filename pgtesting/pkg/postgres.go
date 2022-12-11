@@ -106,6 +106,8 @@ func CreatePostgresServer() {
 			<-time.After(delay)
 			continue
 		}
-		break
+		return
 	}
+
+	log.Fatal("timeout waiting for server ready")
 }
