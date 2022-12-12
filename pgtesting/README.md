@@ -12,9 +12,13 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	pgtesting.CreatePostgresServer()
+	if err := pgtesting.CreatePostgresServer(); err != nil {
+	    log.Fatal(err)
+	}
 	code := m.Run()
-	pgtesting.DestroyPostgresServer()
+	if err := pgtesting.DestroyPostgresServer(); err != nil {
+	    log.Fatal(err)
+	}
 	os.Exit(code)
 }
 
