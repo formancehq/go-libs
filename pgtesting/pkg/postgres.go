@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	pgx "github.com/jackc/pgx/v4"
-	dockertest "github.com/ory/dockertest/v3"
+	pgx "github.com/jackc/pgx/v5"
+	"github.com/ory/dockertest/v3"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,16 +69,16 @@ func DestroyPostgresServer() {
 	srv.Close()
 }
 
-func CreatePostgresServer() {
+func CreatePostgresServer() error {
 
 	pool, err := dockertest.NewPool("")
 	if err != nil {
-		log.Fatal("unable to start docker containers pool: ", err)
+		return errors.Wrap(err, "unable to start docker containers pool")
 	}
 
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
-		Tag:        "13.4-alpine",
+		Tag:        "15-alpine",
 		Env: []string{
 			"POSTGRES_USER=root",
 			"POSTGRES_PASSWORD=root",
@@ -87,7 +88,7 @@ func CreatePostgresServer() {
 		Cmd:        []string{"-c", "superuser-reserved-connections=0"},
 	})
 	if err != nil {
-		log.Fatal("unable to start postgres server container: ", err)
+		return errors.Wrap(err, "unable to start postgres server container")
 	}
 
 	srv = &pgServer{
@@ -106,8 +107,8 @@ func CreatePostgresServer() {
 			<-time.After(delay)
 			continue
 		}
-		return
+		return nil
 	}
 
-	log.Fatal("timeout waiting for server ready")
+	return errors.New("timeout waiting for server ready")
 }
