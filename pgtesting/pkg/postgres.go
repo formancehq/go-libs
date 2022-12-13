@@ -27,10 +27,12 @@ type pgServer struct {
 	lock    sync.Mutex
 	conn    *pgx.Conn
 	port    string
+	config  config
 }
 
 func (s *pgServer) dsn(databaseName string) string {
-	return fmt.Sprintf("postgresql://root:root@localhost:%s/%s?sslmode=disable", s.port, databaseName)
+	return fmt.Sprintf("postgresql://%s:%s@localhost:%s/%s?sslmode=disable", s.config.initialUsername,
+		s.config.initialUserPassword, s.port, databaseName)
 }
 
 func (s *pgServer) NewDatabase(t *testing.T) *pgDatabase {
@@ -178,6 +180,7 @@ func CreatePostgresServer(opts ...option) error {
 		destroy: func() error {
 			return pool.Purge(resource)
 		},
+		config: cfg,
 	}
 
 	try := time.Duration(0)
