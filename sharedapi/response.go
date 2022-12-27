@@ -23,3 +23,14 @@ type ErrorResponse struct {
 	ErrorCode    string `json:"errorCode,omitempty"`
 	ErrorMessage string `json:"errorMessage,omitempty"`
 }
+
+// CursorDeprecated is deprecated: use sharedapi.Cursor instead
+//
+// TODO: to be removed after a v2 release of the ledger
+type CursorDeprecated[T any] struct {
+	PageSize int    `json:"page_size,omitempty"`
+	HasMore  bool   `json:"has_more"`
+	Previous string `json:"previous,omitempty"`
+	Next     string `json:"next,omitempty"`
+	Data     []T    `json:"data"`
+}
