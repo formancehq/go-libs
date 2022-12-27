@@ -8,11 +8,13 @@ type BaseResponse[T any] struct {
 }
 
 type Cursor[T any] struct {
-	PageSize int    `json:"page_size,omitempty"`
-	HasMore  bool   `json:"has_more"`
-	Previous string `json:"previous,omitempty"`
-	Next     string `json:"next,omitempty"`
-	Data     []T    `json:"data"`
+	PageSize           int    `json:"pageSize,omitempty"`
+	HasMore            bool   `json:"hasMore"`
+	DeprecatedPageSize int    `json:"page_size,omitempty"`
+	DeprecatedHasMore  bool   `json:"has_more"`
+	Previous           string `json:"previous,omitempty"`
+	Next               string `json:"next,omitempty"`
+	Data               []T    `json:"data"`
 }
 
 type cursor[T any] Cursor[T]
