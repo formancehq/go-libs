@@ -11,7 +11,7 @@ type Cursor[T any] struct {
 	PageSize           int    `json:"pageSize,omitempty"`
 	HasMore            bool   `json:"hasMore"`
 	DeprecatedPageSize int    `json:"page_size,omitempty"`
-	DeprecatedHasMore  bool   `json:"has_more"`
+	DeprecatedHasMore  *bool  `json:"has_more,omitempty"`
 	Previous           string `json:"previous,omitempty"`
 	Next               string `json:"next,omitempty"`
 	Data               []T    `json:"data"`
