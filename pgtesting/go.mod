@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs/v2/pgtesting
+module github.com/formancehq/go-libs/pgtesting/v2
 
 go 1.19
 

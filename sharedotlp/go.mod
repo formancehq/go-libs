@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs/v2/sharedotlp
+module github.com/formancehq/go-libs/sharedotlp/v2
 
 go 1.19
 

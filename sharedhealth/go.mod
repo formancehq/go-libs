@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs/v2/sharedhealth
+module github.com/formancehq/go-libs/sharedhealth/v2
 
 go 1.19
 
