@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/numary/go-libs/sharedlogging"
+	"github.com/formancehq/go-libs/v2/sharedlogging"
 	"github.com/pbnjay/memory"
 	"github.com/segmentio/analytics-go"
 )

@@ -4,8 +4,8 @@ go 1.19
 
 require (
 	github.com/coreos/go-semver v0.3.0
+	github.com/formancehq/go-libs/v2 v2.1.1
 	github.com/google/uuid v1.3.0
-	github.com/numary/go-libs v1.0.1
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/segmentio/analytics-go v3.1.0+incompatible
 	github.com/spf13/cobra v1.6.1
@@ -25,6 +25,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/segmentio/backo-go v1.0.1 // indirect
 	github.com/spf13/afero v1.9.3 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
