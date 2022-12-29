@@ -4,10 +4,10 @@ on:
     types: [assigned, opened, synchronize, reopened]
 jobs:
   pr-style:
-    uses: numary/gh-workflows/.github/workflows/pr-style.yml@main
+    uses: formancehq/gh-workflows/.github/workflows/pr-style.yml@main
 
   lint:
-    uses: numary/gh-workflows/.github/workflows/golang-lint.yml@main
+    uses: formancehq/gh-workflows/.github/workflows/golang-lint.yml@main
 
   test:
-    uses: numary/gh-workflows/.github/workflows/golang-test.yml@main
+    uses: formancehq/gh-workflows/.github/workflows/golang-test.yml@main
