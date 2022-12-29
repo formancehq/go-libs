@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/formancehq/go-libs/oauth2/oauth2introspect"
+	"github.com/formancehq/go-libs/v2/oauth2/oauth2introspect"
 	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
 )

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/formancehq/go-libs/sharedlogging"
-	sharedotlp "github.com/formancehq/go-libs/sharedotlp/pkg"
+	sharedotlp "github.com/formancehq/go-libs/sharedotlp/v2/pkg"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

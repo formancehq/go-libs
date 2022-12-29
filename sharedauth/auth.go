@@ -3,7 +3,7 @@ package sharedauth
 import (
 	"net/http"
 
-	_ "github.com/formancehq/go-libs/sharedlogging/sharedlogginglogrus"
+	_ "github.com/formancehq/go-libs/v2/sharedlogging/sharedlogginglogrus"
 )
 
 type Agent interface {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	sharedotlp "github.com/formancehq/go-libs/sharedotlp/pkg"
+	sharedotlp "github.com/formancehq/go-libs/sharedotlp/v2/pkg"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 )

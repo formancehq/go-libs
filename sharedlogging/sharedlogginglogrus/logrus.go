@@ -3,7 +3,7 @@ package sharedlogginglogrus
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/sharedlogging"
+	"github.com/formancehq/go-libs/v2/sharedlogging"
 	"github.com/sirupsen/logrus"
 )
 
