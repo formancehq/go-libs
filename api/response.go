@@ -27,6 +27,7 @@ type Total struct {
 type ErrorResponse struct {
 	ErrorCode    string `json:"errorCode,omitempty"`
 	ErrorMessage string `json:"errorMessage,omitempty"`
+	Details      string `json:"details,omitempty"`
 
 	// deprecated
 	ErrorCodeDeprecated string `json:"error_code,omitempty"`
