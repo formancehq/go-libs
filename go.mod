@@ -11,7 +11,7 @@ require (
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/google/uuid v1.3.0
-	github.com/imdario/mergo v0.3.12
+	github.com/imdario/mergo v0.3.13
 	github.com/jackc/pgx/v5 v5.2.0
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
