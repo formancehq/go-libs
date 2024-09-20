@@ -48,8 +48,8 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/host v0.53.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.53.0
-	go.opentelemetry.io/contrib/propagators/b3 v1.28.0
-	go.opentelemetry.io/otel v1.28.0
+	go.opentelemetry.io/contrib/propagators/b3 v1.30.0
+	go.opentelemetry.io/otel v1.30.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.28.0
@@ -57,10 +57,10 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.28.0
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.28.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.28.0
-	go.opentelemetry.io/otel/metric v1.28.0
+	go.opentelemetry.io/otel/metric v1.30.0
 	go.opentelemetry.io/otel/sdk v1.28.0
 	go.opentelemetry.io/otel/sdk/metric v1.28.0
-	go.opentelemetry.io/otel/trace v1.28.0
+	go.opentelemetry.io/otel/trace v1.30.0
 	go.temporal.io/api v1.18.1
 	go.temporal.io/sdk v1.21.1
 	go.temporal.io/sdk/contrib/opentelemetry v0.2.0
