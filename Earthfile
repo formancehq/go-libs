@@ -23,6 +23,14 @@ lint:
     DO --pass-args core+GO_LINT
     SAVE ARTIFACT /src AS LOCAL ./
 
+tests:
+    FROM core+builder-image
+    WORKDIR /src
+    COPY --dir (+tidy/src/*) /src
+    WITH DOCKER
+        DO --pass-args core+GO_TESTS
+    END
+
 pre-commit:
     WAIT
       BUILD --pass-args +tidy
