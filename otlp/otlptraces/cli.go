@@ -1,8 +1,9 @@
 package otlptraces
 
 import (
+	"github.com/formancehq/go-libs/otlp"
+	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
-	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )
 
@@ -16,11 +17,11 @@ const (
 	OtelTracesExporterOTLPModeFlag       = "otel-traces-exporter-otlp-mode"
 	OtelTracesExporterOTLPEndpointFlag   = "otel-traces-exporter-otlp-endpoint"
 	OtelTracesExporterOTLPInsecureFlag   = "otel-traces-exporter-otlp-insecure"
-	OtelResourceAttributes               = "otel-resource-attributes"
-	OtelServiceName                      = "otel-service-name"
 )
 
-func InitOTLPTracesFlags(flags *flag.FlagSet) {
+func AddFlags(flags *flag.FlagSet) {
+	otlp.AddFlags(flags)
+
 	flags.Bool(OtelTracesFlag, false, "Enable OpenTelemetry traces support")
 	flags.Bool(OtelTracesBatchFlag, false, "Use OpenTelemetry batching")
 	flags.String(OtelTracesExporterFlag, "stdout", "OpenTelemetry traces exporter")
@@ -30,37 +31,35 @@ func InitOTLPTracesFlags(flags *flag.FlagSet) {
 	flags.String(OtelTracesExporterOTLPModeFlag, "grpc", "OpenTelemetry traces OTLP exporter mode (grpc|http)")
 	flags.String(OtelTracesExporterOTLPEndpointFlag, "", "OpenTelemetry traces grpc endpoint")
 	flags.Bool(OtelTracesExporterOTLPInsecureFlag, false, "OpenTelemetry traces grpc insecure")
-	flags.String(OtelServiceName, "", "OpenTelemetry service name")
-	flags.StringSlice(OtelResourceAttributes, []string{}, "Additional OTLP resource attributes")
 }
 
-func CLITracesModule(v *viper.Viper) fx.Option {
-	if v.GetBool(OtelTracesFlag) {
+func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
+	otlpEnabled, _ := cmd.Flags().GetBool(OtelTracesFlag)
+	if otlpEnabled {
+		batch, _ := cmd.Flags().GetBool(OtelTracesBatchFlag)
+		exporter, _ := cmd.Flags().GetString(OtelTracesExporterFlag)
+		serviceName, _ := cmd.Flags().GetString(otlp.OtelServiceNameFlag)
+		resourceAttributes, _ := cmd.Flags().GetStringSlice(otlp.OtelResourceAttributesFlag)
+
 		return TracesModule(ModuleConfig{
-			Batch:    v.GetBool(OtelTracesBatchFlag),
-			Exporter: v.GetString(OtelTracesExporterFlag),
-			JaegerConfig: func() *JaegerConfig {
-				if v.GetString(OtelTracesExporterFlag) != JaegerExporter {
-					return nil
-				}
-				return &JaegerConfig{
-					Endpoint: v.GetString(OtelTracesExporterJaegerEndpointFlag),
-					User:     v.GetString(OtelTracesExporterJaegerUserFlag),
-					Password: v.GetString(OtelTracesExporterJaegerPasswordFlag),
-				}
-			}(),
+			Batch:    batch,
+			Exporter: exporter,
 			OTLPConfig: func() *OTLPConfig {
-				if v.GetString(OtelTracesExporterFlag) != OTLPExporter {
+				if exporter != OTLPExporter {
 					return nil
 				}
+				mode, _ := cmd.Flags().GetString(OtelTracesExporterOTLPModeFlag)
+				endpoint, _ := cmd.Flags().GetString(OtelTracesExporterOTLPEndpointFlag)
+				insecure, _ := cmd.Flags().GetBool(OtelTracesExporterOTLPInsecureFlag)
+
 				return &OTLPConfig{
-					Mode:     v.GetString(OtelTracesExporterOTLPModeFlag),
-					Endpoint: v.GetString(OtelTracesExporterOTLPEndpointFlag),
-					Insecure: v.GetBool(OtelTracesExporterOTLPInsecureFlag),
+					Mode:     mode,
+					Endpoint: endpoint,
+					Insecure: insecure,
 				}
 			}(),
-			ServiceName:        v.GetString(OtelServiceName),
-			ResourceAttributes: v.GetStringSlice(OtelResourceAttributes),
+			ServiceName:        serviceName,
+			ResourceAttributes: resourceAttributes,
 		})
 	}
 	return fx.Options()

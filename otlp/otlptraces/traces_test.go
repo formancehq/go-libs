@@ -2,6 +2,7 @@ package otlptraces
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/formancehq/go-libs/otlp"
@@ -45,19 +46,6 @@ func TestTracesModule(t *testing.T) {
 			},
 		},
 		{
-			name: "jaeger-exporter",
-			config: ModuleConfig{
-				Exporter: JaegerExporter,
-			},
-		},
-		{
-			name: "jaeger-exporter-with-config",
-			config: ModuleConfig{
-				Exporter:     JaegerExporter,
-				JaegerConfig: &JaegerConfig{},
-			},
-		},
-		{
 			name: "stdout-exporter",
 			config: ModuleConfig{
 				Exporter: StdoutExporter,
@@ -67,6 +55,10 @@ func TestTracesModule(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Since we are doing multiple tests with the same otlp
+			// package, we have to reset the once variables.
+			otlp.OnceLoadResources = sync.Once{}
+
 			options := []fx.Option{TracesModule(test.config)}
 			if !testing.Verbose() {
 				options = append(options, fx.NopLogger)
