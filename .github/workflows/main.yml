@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - releases/*
+      - main
   pull_request:
     types: [ assigned, opened, synchronize, reopened, labeled ]
 
