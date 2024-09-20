@@ -8,8 +8,8 @@ require (
 	dario.cat/mergo v1.0.1
 	github.com/ClickHouse/clickhouse-go/v2 v2.27.1
 	github.com/IBM/sarama v1.43.3
-	github.com/ThreeDotsLabs/watermill v1.3.5
-	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.0
+	github.com/ThreeDotsLabs/watermill v1.3.7
+	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1
 	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.1
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.0.2
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.0
@@ -75,6 +75,7 @@ require (
 	github.com/ClickHouse/ch-go v0.61.5 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
+	github.com/ajg/form v1.5.1 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.28 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.12 // indirect
@@ -88,7 +89,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.30.4 // indirect
 	github.com/aws/smithy-go v1.20.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/continuity v0.4.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
@@ -104,8 +105,8 @@ require (
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/go-chi/chi v4.0.2+incompatible // indirect
-	github.com/go-chi/render v1.0.1 // indirect
+	github.com/go-chi/chi v4.1.2+incompatible // indirect
+	github.com/go-chi/render v1.0.3 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
@@ -201,7 +202,7 @@ require (
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/oauth2 v0.20.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/sys v0.24.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.24.0 // indirect
