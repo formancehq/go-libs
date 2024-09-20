@@ -6,8 +6,8 @@ github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 h1:L/gRVlceqvL25
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/ClickHouse/ch-go v0.61.5 h1:zwR8QbYI0tsMiEcze/uIMK+Tz1D3XZXLdNrlaOpeEI4=
 github.com/ClickHouse/ch-go v0.61.5/go.mod h1:s1LJW/F/LcFs5HJnuogFMta50kKDO0lf9zzfrbl0RQg=
-github.com/ClickHouse/clickhouse-go/v2 v2.27.1 h1:cSUewKnQ2XWvCNpCV0WRAQGvShElJ1Qyb6nDq8GId/I=
-github.com/ClickHouse/clickhouse-go/v2 v2.27.1/go.mod h1:XvcaX7ai9T9si83rZ0cB3y2upq9AYMwdj16Trqm+sPg=
+github.com/ClickHouse/clickhouse-go/v2 v2.28.3 h1:SkFzPULX6nzgfNZd1YD1XTECivjTMrCtD09ZPKcVLFQ=
+github.com/ClickHouse/clickhouse-go/v2 v2.28.3/go.mod h1:vzn73hp+3JwxtFU4RjPCQ7r6fP2pMKVwdi8E1/Tkua8=
 github.com/IBM/sarama v1.43.3 h1:Yj6L2IaNvb2mRBop39N7mmJAHBVY3dTPncr3qGVkxPA=
 github.com/IBM/sarama v1.43.3/go.mod h1:FVIRaLrhK3Cla/9FfRF5X9Zua2KpS3SYIXxhac1H+FQ=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
