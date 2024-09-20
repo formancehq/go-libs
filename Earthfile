@@ -22,7 +22,7 @@ lint:
     WORKDIR /src
     COPY --dir (+tidy/src/*) /src
     DO --pass-args core+GO_LINT
-    SAVE ARTIFACT * AS LOCAL ./
+    SAVE ARTIFACT ./* AS LOCAL ./
 
 tests:
     FROM core+builder-image
@@ -45,4 +45,4 @@ generate:
     WORKDIR /src
     COPY --dir (+tidy/src/*) /src
     DO --pass-args core+GO_GENERATE
-    SAVE ARTIFACT * AS LOCAL ./
+    SAVE ARTIFACT ./* AS LOCAL ./
