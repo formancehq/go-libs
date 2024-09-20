@@ -8,7 +8,7 @@ require (
 	dario.cat/mergo v1.0.1
 	github.com/ClickHouse/clickhouse-go/v2 v2.27.1
 	github.com/IBM/sarama v1.43.3
-	github.com/ThreeDotsLabs/watermill v1.3.5
+	github.com/ThreeDotsLabs/watermill v1.3.7
 	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.0
 	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.1
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.0.2
@@ -88,7 +88,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.30.4 // indirect
 	github.com/aws/smithy-go v1.20.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/continuity v0.4.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
@@ -201,7 +201,7 @@ require (
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/oauth2 v0.20.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/sys v0.24.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.24.0 // indirect
