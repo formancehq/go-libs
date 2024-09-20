@@ -51,10 +51,10 @@ func New(ctx context.Context, logger logging.Logger, c client.Client, taskQueue 
 	return worker
 }
 
-func NewWorkerModule(taskQueue string, options worker.Options) fx.Option {
+func NewWorkerModule(ctx context.Context, taskQueue string, options worker.Options) fx.Option {
 	return fx.Options(
 		fx.Provide(
-			fx.Annotate(func(ctx context.Context, logger logging.Logger, c client.Client, workflows, activities []DefinitionSet) worker.Worker {
+			fx.Annotate(func(logger logging.Logger, c client.Client, workflows, activities []DefinitionSet) worker.Worker {
 				return New(ctx, logger, c, taskQueue, workflows, activities, options)
 			}, fx.ParamTags(``, ``, `group:"workflows"`, `group:"activities"`)),
 		),

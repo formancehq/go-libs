@@ -96,7 +96,8 @@ func (a *App) Run(cmd *cobra.Command) error {
 }
 
 func (a *App) newFxApp(logger logging.Logger) *fx.App {
-	options := append(a.options,
+	options := append(
+		a.options,
 		fx.NopLogger,
 		fx.Supply(fx.Annotate(logger, fx.As(new(logging.Logger)))),
 		fx.Invoke(func(lc fx.Lifecycle) {
