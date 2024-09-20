@@ -61,9 +61,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.28.0
 	go.opentelemetry.io/otel/sdk/metric v1.28.0
 	go.opentelemetry.io/otel/trace v1.28.0
-	go.temporal.io/api v1.18.1
+	go.temporal.io/api v1.34.0
 	go.temporal.io/sdk v1.21.1
-	go.temporal.io/sdk/contrib/opentelemetry v0.2.0
+	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	go.uber.org/fx v1.22.2
 	go.uber.org/mock v0.4.0
 	go.uber.org/zap v1.27.0
@@ -125,7 +125,7 @@ require (
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/schema v1.4.1 // indirect
 	github.com/gorilla/securecookie v1.1.1 // indirect
-	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
