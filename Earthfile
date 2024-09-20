@@ -14,14 +14,15 @@ tidy:
     WORKDIR /src
     COPY --dir (+sources/src/*) /src
     DO --pass-args core+GO_TIDY
-    SAVE ARTIFACT /src AS LOCAL ./
+    SAVE ARTIFACT /src
+    SAVE ARTIFACT go.* AS LOCAL ./
 
 lint:
     FROM core+builder-image
     WORKDIR /src
     COPY --dir (+tidy/src/*) /src
     DO --pass-args core+GO_LINT
-    SAVE ARTIFACT /src AS LOCAL ./
+    SAVE ARTIFACT * AS LOCAL ./
 
 tests:
     FROM core+builder-image
@@ -44,4 +45,4 @@ generate:
     WORKDIR /src
     COPY --dir (+tidy/src/*) /src
     DO --pass-args core+GO_GENERATE
-    SAVE ARTIFACT /src AS LOCAL ./
+    SAVE ARTIFACT * AS LOCAL ./
