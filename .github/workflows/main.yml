@@ -40,22 +40,21 @@ jobs:
             exit 1
           fi
 
-#  Tests:
-#    runs-on: "formance-runner"
-#    needs:
-#      - Dirty
-#    steps:
-#      - uses: 'actions/checkout@v4'
-#        with:
-#          fetch-depth: 0
-#      - name: Setup Env
-#        uses: ./.github/actions/env
-#      - run: >
-#          earthly
-#          --no-output
-#          --allow-privileged
-#          --secret SPEAKEASY_API_KEY=$SPEAKEASY_API_KEY
-#          ${{ contains(github.event.pull_request.labels.*.name, 'no-cache') && '--no-cache' || '' }}
-#          +tests
-#        env:
-#          SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
+  Tests:
+    runs-on: "formance-runner"
+    needs:
+      - Dirty
+    steps:
+      - uses: 'actions/checkout@v4'
+        with:
+          fetch-depth: 0
+      - name: Setup Env
+        uses: ./.github/actions/env
+      - run: >
+          earthly
+          --no-output
+          --allow-privileged
+          ${{ contains(github.event.pull_request.labels.*.name, 'no-cache') && '--no-cache' || '' }}
+          +tests
+        env:
+          SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
