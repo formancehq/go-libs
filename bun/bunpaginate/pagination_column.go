@@ -17,6 +17,7 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	query ColumnPaginatedQuery[FILTERS]) (*Cursor[ENTITY], error) {
 	ret := make([]ENTITY, 0)
 
+	sb = sb.Model(&ret)
 	sb = sb.Limit(int(query.PageSize) + 1) // Fetch one additional item to find the next token
 	order := query.Order
 	if query.Reverse {
@@ -42,7 +43,7 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 		}
 	}
 
-	if err := sb.Scan(ctx, &ret); err != nil {
+	if err := sb.Scan(ctx); err != nil {
 		return nil, err
 	}
 
