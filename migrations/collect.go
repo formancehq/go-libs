@@ -18,7 +18,7 @@ type MigrationFileSystem interface {
 	ReadFile(filename string) ([]byte, error)
 }
 
-func CollectMigrationFiles(fs MigrationFileSystem, rootDir string) ([]Migration, error) {
+func CollectMigrationFiles(fs MigrationFileSystem, rootDir string, transformer func(string) string) ([]Migration, error) {
 	entries, err := fs.ReadDir(rootDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "collecting migration files")
@@ -55,7 +55,7 @@ func CollectMigrationFiles(fs MigrationFileSystem, rootDir string) ([]Migration,
 		ret[i] = Migration{
 			Name: entry,
 			UpWithContext: func(ctx context.Context, tx bun.Tx) error {
-				_, err := tx.ExecContext(ctx, string(fileContent))
+				_, err := tx.ExecContext(ctx, transformer(string(fileContent)))
 				return err
 			},
 		}
