@@ -3,6 +3,7 @@ package bundebug
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/formancehq/go-libs/logging"
@@ -19,7 +20,7 @@ func NewQueryHook() *QueryHook {
 }
 
 func (h *QueryHook) BeforeQuery(
-	ctx context.Context, event *bun.QueryEvent,
+	ctx context.Context, _ *bun.QueryEvent,
 ) context.Context {
 	return ctx
 }
@@ -37,5 +38,11 @@ func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
 		fields["err"] = event.Err.Error()
 	}
 
-	logging.FromContext(ctx).WithFields(fields).Debug(event.Query)
+	queryLines := strings.SplitN(event.Query, "\n", 2)
+	query := queryLines[0]
+	if len(queryLines) > 1 {
+		query = query + "..."
+	}
+
+	logging.FromContext(ctx).WithFields(fields).Debug(query)
 }
