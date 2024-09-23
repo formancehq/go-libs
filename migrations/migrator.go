@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"fmt"
 
 	"github.com/formancehq/go-libs/time"
@@ -36,16 +37,16 @@ type Migrator struct {
 	tableName    string
 }
 
-type option func(m *Migrator)
+type Option func(m *Migrator)
 
-func WithSchema(schema string, create bool) option {
+func WithSchema(schema string, create bool) Option {
 	return func(m *Migrator) {
 		m.schema = schema
 		m.createSchema = create
 	}
 }
 
-func WithTableName(name string) option {
+func WithTableName(name string) Option {
 	return func(m *Migrator) {
 		m.tableName = name
 	}
@@ -56,25 +57,33 @@ func (m *Migrator) RegisterMigrations(migrations ...Migration) *Migrator {
 	return m
 }
 
+func (m *Migrator) RegisterMigrationsFromFileSystem(dir embed.FS, rootDir string, transformer func(string) string) *Migrator {
+	migrations, err := CollectMigrationFiles(dir, rootDir, transformer)
+	if err != nil {
+		panic(err)
+	}
+	return m.RegisterMigrations(migrations...)
+}
+
 func (m *Migrator) createVersionTable(ctx context.Context, tx bun.Tx) error {
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`create table if not exists %s (
+	_, err := tx.ExecContext(ctx, fmt.Sprintf(`create table if not exists "%s" (
 		id serial primary key,
 		version_id bigint not null,
 		is_applied boolean not null,
 		tstamp timestamp default now()
 	);`, m.tableName))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create version table")
 	}
 
 	lastVersion, err := m.getLastVersion(ctx, tx)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get last version")
 	}
 
 	if lastVersion == -1 {
 		if err := m.insertVersion(ctx, tx, 0); err != nil {
-			return err
+			return errors.Wrap(err, "failed to insert version")
 		}
 	}
 
@@ -167,7 +176,7 @@ func (m *Migrator) Up(ctx context.Context, db bun.IDB) error {
 			for ind, migration := range m.migrations[lastMigration:] {
 				if migration.UpWithContext != nil {
 					if err := migration.UpWithContext(ctx, tx); err != nil {
-						return err
+						return errors.Wrapf(err, "executing migration %d", ind)
 					}
 				} else if migration.Up != nil {
 					if err := migration.Up(tx); err != nil {
@@ -182,6 +191,7 @@ func (m *Migrator) Up(ctx context.Context, db bun.IDB) error {
 				}
 			}
 		}
+
 		return nil
 	})
 }
@@ -224,7 +234,7 @@ func (m *Migrator) GetMigrations(ctx context.Context, db bun.IDB) ([]Info, error
 	return ret, nil
 }
 
-func (m *Migrator) IsUpToDate(ctx context.Context, db *bun.DB) (bool, error) {
+func (m *Migrator) IsUpToDate(ctx context.Context, db bun.IDB) (bool, error) {
 	ret := false
 	if err := m.runInTX(ctx, db, func(ctx context.Context, tx bun.Tx) error {
 		version, err := m.getLastVersion(ctx, tx)
@@ -241,7 +251,7 @@ func (m *Migrator) IsUpToDate(ctx context.Context, db *bun.DB) (bool, error) {
 	return ret, nil
 }
 
-func NewMigrator(opts ...option) *Migrator {
+func NewMigrator(opts ...Option) *Migrator {
 	ret := &Migrator{
 		tableName: migrationTable,
 	}
