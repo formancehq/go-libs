@@ -155,6 +155,10 @@ func findPaginationField(v any, fields ...reflect.StructField) *big.Int {
 		switch rawPaginationID := field.Interface().(type) {
 		case time.Time:
 			return big.NewInt(rawPaginationID.UTC().UnixMicro())
+		case *time.Time:
+			return big.NewInt(rawPaginationID.UTC().UnixMicro())
+		case *libtime.Time:
+			return big.NewInt(rawPaginationID.UTC().UnixMicro())
 		case libtime.Time:
 			return big.NewInt(rawPaginationID.UTC().UnixMicro())
 		case *BigInt:
