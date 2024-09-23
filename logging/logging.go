@@ -1,6 +1,9 @@
 package logging
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 type Logger interface {
 	Debugf(fmt string, args ...any)
@@ -12,6 +15,7 @@ type Logger interface {
 	WithFields(map[string]any) Logger
 	WithField(key string, value any) Logger
 	WithContext(ctx context.Context) Logger
+	Writer() io.Writer
 }
 
 func Debugf(fmt string, args ...any) {

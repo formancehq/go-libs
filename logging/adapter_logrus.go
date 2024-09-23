@@ -20,7 +20,12 @@ type LogrusLogger struct {
 		WithFields(fields logrus.Fields) *logrus.Entry
 		WithField(key string, value any) *logrus.Entry
 		WithContext(ctx context.Context) *logrus.Entry
+		Writer() *io.PipeWriter
 	}
+}
+
+func (l *LogrusLogger) Writer() io.Writer {
+	return l.entry.Writer()
 }
 
 func (l *LogrusLogger) WithContext(ctx context.Context) Logger {
