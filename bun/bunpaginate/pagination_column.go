@@ -17,8 +17,6 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	query ColumnPaginatedQuery[FILTERS]) (*Cursor[ENTITY], error) {
 	ret := make([]ENTITY, 0)
 
-	sb = sb.Model(&ret)
-
 	sb = sb.Limit(int(query.PageSize) + 1) // Fetch one additional item to find the next token
 	order := query.Order
 	if query.Reverse {
@@ -47,41 +45,15 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	if err := sb.Scan(ctx, &ret); err != nil {
 		return nil, err
 	}
-	var (
-		paginatedColumnIndex = 0
-	)
-	typeOfT := reflect.TypeOf(ret).Elem()
-	for ; paginatedColumnIndex < typeOfT.NumField(); paginatedColumnIndex++ {
-		field := typeOfT.Field(paginatedColumnIndex)
-		tag := field.Tag.Get("bun")
-		column := strings.Split(tag, ",")[0]
-		if column == query.Column {
-			break
-		}
-	}
+
+	var v ENTITY
+	fields := findPaginationFieldPath(v, query.Column)
 
 	var (
 		paginationIDs = make([]*big.Int, 0)
 	)
 	for _, t := range ret {
-		rawPaginationID := reflect.ValueOf(t).
-			Field(paginatedColumnIndex).
-			Interface()
-		var paginationID *big.Int
-		switch rawPaginationID := rawPaginationID.(type) {
-		case time.Time:
-			paginationID = big.NewInt(rawPaginationID.UTC().UnixMicro())
-		case libtime.Time:
-			paginationID = big.NewInt(rawPaginationID.UTC().UnixMicro())
-		case *BigInt:
-			paginationID = (*big.Int)(rawPaginationID)
-		case *big.Int:
-			paginationID = rawPaginationID
-		case int64:
-			paginationID = big.NewInt(rawPaginationID)
-		default:
-			panic(fmt.Sprintf("invalid paginationID, type %T not handled", rawPaginationID))
-		}
+		paginationID := findPaginationField(t, fields...)
 		if query.Bottom == nil {
 			query.Bottom = paginationID
 		}
@@ -132,4 +104,52 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 		Next:     next.EncodeAsCursor(),
 		Data:     ret,
 	}, nil
+}
+
+func findPaginationFieldPath(v any, paginationColumn string) []reflect.StructField {
+
+	typeOfT := reflect.TypeOf(v)
+	for i := 0; i < typeOfT.NumField(); i++ {
+		field := typeOfT.Field(i)
+		switch field.Type.Kind() {
+		case reflect.Struct:
+			fields := findPaginationFieldPath(reflect.New(field.Type).Elem().Interface(), paginationColumn)
+			if len(fields) > 0 {
+				return fields
+			}
+		default:
+			tag := field.Tag.Get("bun")
+			column := strings.Split(tag, ",")[0]
+			if column == paginationColumn {
+				return []reflect.StructField{field}
+			}
+		}
+	}
+
+	return nil
+}
+
+func findPaginationField(v any, fields ...reflect.StructField) *big.Int {
+	vOf := reflect.ValueOf(v)
+	field := vOf.FieldByName(fields[0].Name)
+	if len(fields) == 1 {
+		switch rawPaginationID := field.Interface().(type) {
+		case time.Time:
+			return big.NewInt(rawPaginationID.UTC().UnixMicro())
+		case libtime.Time:
+			return big.NewInt(rawPaginationID.UTC().UnixMicro())
+		case *BigInt:
+			return (*big.Int)(rawPaginationID)
+		case *big.Int:
+			return rawPaginationID
+		case int64:
+			return big.NewInt(rawPaginationID)
+		case int:
+			return big.NewInt(int64(rawPaginationID))
+		default:
+			panic(fmt.Sprintf("invalid paginationID, type %T not handled", rawPaginationID))
+		}
+	}
+
+	return findPaginationField(v, fields[1:]...)
 }

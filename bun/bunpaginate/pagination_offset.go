@@ -6,13 +6,9 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func usingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query OffsetPaginatedQuery[Q], withModel bool, builders ...func(query *bun.SelectQuery) *bun.SelectQuery) (*Cursor[T], error) {
+func usingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query OffsetPaginatedQuery[Q], builders ...func(query *bun.SelectQuery) *bun.SelectQuery) (*Cursor[T], error) {
 
 	ret := make([]T, 0)
-
-	if withModel {
-		sb = sb.Model(&ret)
-	}
 
 	for _, builder := range builders {
 		sb = sb.Apply(builder)
@@ -26,14 +22,8 @@ func usingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query O
 		sb = sb.Limit(int(query.PageSize) + 1)
 	}
 
-	if withModel {
-		if err := sb.Scan(ctx); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := sb.Scan(ctx, &ret); err != nil {
-			return nil, err
-		}
+	if err := sb.Scan(ctx, &ret); err != nil {
+		return nil, err
 	}
 
 	var previous, next *OffsetPaginatedQuery[Q]
@@ -67,9 +57,5 @@ func usingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query O
 }
 
 func UsingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query OffsetPaginatedQuery[Q], builders ...func(query *bun.SelectQuery) *bun.SelectQuery) (*Cursor[T], error) {
-	return usingOffset[Q, T](ctx, sb, query, true, builders...)
-}
-
-func UsingOffsetWithoutModel[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query OffsetPaginatedQuery[Q], builders ...func(query *bun.SelectQuery) *bun.SelectQuery) (*Cursor[T], error) {
-	return usingOffset[Q, T](ctx, sb, query, false, builders...)
+	return usingOffset[Q, T](ctx, sb, query, builders...)
 }
