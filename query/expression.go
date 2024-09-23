@@ -19,6 +19,7 @@ func (fn ContextFn) BuildMatcher(key, operator string, value any) (string, []any
 
 type Builder interface {
 	Build(Context) (string, []any, error)
+	Walk(f func(operator string, key string, value any) error) error
 }
 
 type set struct {
@@ -26,13 +27,23 @@ type set struct {
 	items    []Builder
 }
 
-func (s set) MarshalJSON() ([]byte, error) {
+func (set set) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{
-		"$" + s.operator: s.items,
+		"$" + set.operator: set.items,
 	})
 }
 
 var _ Builder = (*set)(nil)
+
+func (set set) Walk(f func(operator string, key string, value any) error) error {
+	for _, item := range set.items {
+		if err := item.Walk(f); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 func (set set) Build(ctx Context) (string, []any, error) {
 	if len(set.items) == 0 {
@@ -63,34 +74,42 @@ type keyValue struct {
 	value    any
 }
 
-func (s keyValue) MarshalJSON() ([]byte, error) {
+func (kv keyValue) Walk(f func(operator string, key string, value any) error) error {
+	return f(kv.operator, kv.key, kv.value)
+}
+
+func (kv keyValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{
-		s.operator: map[string]any{
-			s.key: s.value,
+		kv.operator: map[string]any{
+			kv.key: kv.value,
 		},
 	})
 }
 
 var _ Builder = (*keyValue)(nil)
 
-func (k keyValue) Build(ctx Context) (string, []any, error) {
-	return ctx.BuildMatcher(k.key, k.operator, k.value)
+func (kv keyValue) Build(ctx Context) (string, []any, error) {
+	return ctx.BuildMatcher(kv.key, kv.operator, kv.value)
 }
 
 type not struct {
 	expression Builder
 }
 
-func (s not) MarshalJSON() ([]byte, error) {
+func (not not) Walk(f func(operator string, key string, value any) error) error {
+	return not.expression.Walk(f)
+}
+
+func (not not) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{
-		"$not": s.expression,
+		"$not": not.expression,
 	})
 }
 
 var _ Builder = (*not)(nil)
 
-func (n not) Build(context Context) (string, []any, error) {
-	sub, args, err := n.expression.Build(context)
+func (not not) Build(context Context) (string, []any, error) {
+	sub, args, err := not.expression.Build(context)
 	if err != nil {
 		return "", nil, err
 	}
