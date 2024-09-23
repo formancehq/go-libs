@@ -114,17 +114,35 @@ func findPaginationFieldPath(v any, paginationColumn string) []reflect.StructFie
 		field := typeOfT.Field(i)
 		switch field.Type.Kind() {
 		case reflect.Struct:
-			fields := findPaginationFieldPath(reflect.New(field.Type).Elem().Interface(), paginationColumn)
-			if len(fields) > 0 {
-				return fields
+			if field.Type.AssignableTo(reflect.TypeOf(time.Time{})) ||
+				field.Type.AssignableTo(reflect.TypeOf(&time.Time{})) ||
+				field.Type.AssignableTo(reflect.TypeOf(libtime.Time{})) ||
+				field.Type.AssignableTo(reflect.TypeOf(&libtime.Time{})) {
+
+				if fields := checkTag(field, paginationColumn); len(fields) > 0 {
+					return fields
+				}
+			} else {
+				fields := findPaginationFieldPath(reflect.New(field.Type).Elem().Interface(), paginationColumn)
+				if len(fields) > 0 {
+					return fields
+				}
 			}
 		default:
-			tag := field.Tag.Get("bun")
-			column := strings.Split(tag, ",")[0]
-			if column == paginationColumn {
-				return []reflect.StructField{field}
+			if fields := checkTag(field, paginationColumn); len(fields) > 0 {
+				return fields
 			}
 		}
+	}
+
+	return nil
+}
+
+func checkTag(field reflect.StructField, paginationColumn string) []reflect.StructField {
+	tag := field.Tag.Get("bun")
+	column := strings.Split(tag, ",")[0]
+	if column == paginationColumn {
+		return []reflect.StructField{field}
 	}
 
 	return nil
