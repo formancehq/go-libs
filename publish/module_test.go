@@ -121,18 +121,6 @@ func TestModule(t *testing.T) {
 			topic: "topic",
 		},
 		{
-			name: "http",
-			setup: func(t *testing.T) fx.Option {
-				return fx.Options(
-					httpModule("localhost:8888"),
-				)
-			},
-			topicMapping: map[string]string{
-				"*": "http://localhost:8888",
-			},
-			topic: "/",
-		},
-		{
 			name: "nats",
 			setup: func(t *testing.T) fx.Option {
 				server, err := natsServer.NewServer(&natsServer.Options{

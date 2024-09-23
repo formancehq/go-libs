@@ -28,7 +28,7 @@ func WithClient(client *http.Client) IntrospecterOptionFn {
 	}
 }
 
-func WithCache(cache *ristretto.Cache, cacheTTL time.Duration) IntrospecterOptionFn {
+func WithCache(cache *ristretto.Cache[string, bool], cacheTTL time.Duration) IntrospecterOptionFn {
 	return func(introspecter *Introspecter) {
 		introspecter.cache = cache
 		introspecter.cacheTTL = cacheTTL
@@ -38,7 +38,7 @@ func WithCache(cache *ristretto.Cache, cacheTTL time.Duration) IntrospecterOptio
 type Introspecter struct {
 	introspectUrl string
 	client        *http.Client
-	cache         *ristretto.Cache
+	cache         *ristretto.Cache[string, bool]
 	cacheTTL      time.Duration
 }
 
@@ -47,7 +47,7 @@ func (i *Introspecter) Introspect(ctx context.Context, bearer string) (bool, err
 	if i.cache != nil {
 		v, ok := i.cache.Get(bearer)
 		if ok {
-			return v.(bool), nil
+			return v, nil
 		}
 	}
 
