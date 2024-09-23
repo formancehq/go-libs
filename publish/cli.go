@@ -198,8 +198,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 
 	switch {
 	case httpEnabled:
-		// Currently don't expose http listener, so pass addr == ""
-		options = append(options, httpModule(""))
+		options = append(options, httpModule())
 	case natsEnabled:
 		natsUrl, _ := cmd.Flags().GetString(PublisherNatsURLFlag)
 		autoProvision, _ := cmd.Flags().GetBool(PublisherNatsAutoProvisionFlag)
