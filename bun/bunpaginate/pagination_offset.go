@@ -10,6 +10,7 @@ func usingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query O
 
 	ret := make([]T, 0)
 
+	sb.Model(&ret)
 	for _, builder := range builders {
 		sb = sb.Apply(builder)
 	}
@@ -22,7 +23,7 @@ func usingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query O
 		sb = sb.Limit(int(query.PageSize) + 1)
 	}
 
-	if err := sb.Scan(ctx, &ret); err != nil {
+	if err := sb.Scan(ctx); err != nil {
 		return nil, err
 	}
 
