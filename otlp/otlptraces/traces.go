@@ -55,7 +55,10 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 		fx.Provide(fx.Annotate(func(options ...tracesdk.TracerProviderOption) *tracesdk.TracerProvider {
 			return tracesdk.NewTracerProvider(options...)
 		}, fx.ParamTags(TracerProviderOptionKey))),
-		fx.Invoke(func(tp *tracesdk.TracerProvider) trace.TracerProvider {
+		fx.Provide(func(defaultTracerProvider *tracesdk.TracerProvider) trace.TracerProvider {
+			return defaultTracerProvider
+		}),
+		fx.Invoke(func(tp trace.TracerProvider) trace.TracerProvider {
 			otel.SetTracerProvider(tp)
 
 			// set global propagator to tracecontext (the default is no-op).
