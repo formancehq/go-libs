@@ -42,6 +42,7 @@ require (
 	github.com/uptrace/bun/extra/bundebug v1.2.3
 	github.com/uptrace/bun/extra/bunotel v1.2.3
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2
+	github.com/uptrace/opentelemetry-go-extra/otelsql v0.3.2
 	github.com/xdg-go/scram v1.1.2
 	github.com/xo/dburl v0.23.2
 	github.com/zitadel/oidc/v2 v2.12.2
@@ -181,7 +182,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
-	github.com/uptrace/opentelemetry-go-extra/otelsql v0.3.2 // indirect
 	github.com/uptrace/opentelemetry-go-extra/otelutil v0.3.2 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect

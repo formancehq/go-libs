@@ -5,13 +5,14 @@ import (
 	"database/sql/driver"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/formancehq/go-libs/aws/iam"
 	"github.com/formancehq/go-libs/logging"
-	"github.com/lib/pq"
 	"github.com/spf13/pflag"
 )
 

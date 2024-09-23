@@ -17,6 +17,14 @@ func Module(connectionOptions ConnectionOptions, debug bool) fx.Option {
 				hooks = append(hooks, bundebug.NewQueryHook())
 			}
 
+			logger.
+				WithFields(map[string]any{
+					"max-idle-conns":         connectionOptions.MaxIdleConns,
+					"max-open-conns":         connectionOptions.MaxOpenConns,
+					"max-conn-max-idle-time": connectionOptions.ConnMaxIdleTime,
+				}).
+				Infof("opening database connection")
+
 			return OpenSQLDB(logging.ContextWithLogger(context.Background(), logger), connectionOptions, hooks...)
 		}),
 		fx.Invoke(func(lc fx.Lifecycle, db *bun.DB) {
