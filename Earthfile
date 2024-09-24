@@ -1,6 +1,6 @@
 VERSION 0.8
 
-IMPORT github.com/formancehq/earthly:feat/monorepo AS core
+IMPORT github.com/formancehq/earthly:v0.16.0 AS core
 
 FROM core+base-image
 

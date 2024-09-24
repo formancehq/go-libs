@@ -156,43 +156,15 @@ func (m *Migrator) runInTX(ctx context.Context, db bun.IDB, fn func(ctx context.
 
 func (m *Migrator) Up(ctx context.Context, db bun.IDB) error {
 	return m.runInTX(ctx, db, func(ctx context.Context, tx bun.Tx) error {
-		if m.schema != "" && m.createSchema {
-			_, err := tx.ExecContext(ctx, fmt.Sprintf(`create schema if not exists "%s"`, m.schema))
+		for {
+			more, err := m.upByOne(ctx, tx)
 			if err != nil {
-				return errors.Wrap(err, "creating schema")
+				return err
+			}
+			if !more {
+				return nil
 			}
 		}
-
-		if err := m.createVersionTable(ctx, tx); err != nil {
-			return errors.Wrap(err, "creating version table")
-		}
-
-		lastMigration, err := m.getLastVersion(ctx, tx)
-		if err != nil {
-			return errors.Wrap(err, "getting last migration")
-		}
-
-		if len(m.migrations) > int(lastMigration)-1 {
-			for ind, migration := range m.migrations[lastMigration:] {
-				if migration.UpWithContext != nil {
-					if err := migration.UpWithContext(ctx, tx); err != nil {
-						return errors.Wrapf(err, "executing migration %d", ind)
-					}
-				} else if migration.Up != nil {
-					if err := migration.Up(tx); err != nil {
-						return errors.Wrapf(err, "executing migration %d", ind)
-					}
-				} else {
-					return errors.New("no code defined for migration")
-				}
-
-				if err := m.insertVersion(ctx, tx, int(lastMigration)+ind+1); err != nil {
-					return errors.Wrap(err, "inserting new version")
-				}
-			}
-		}
-
-		return nil
 	})
 }
 
@@ -249,6 +221,59 @@ func (m *Migrator) IsUpToDate(ctx context.Context, db bun.IDB) (bool, error) {
 	}
 
 	return ret, nil
+}
+
+// upByOne returns a boolean indicating if there are more migrations to apply
+func (m *Migrator) upByOne(ctx context.Context, tx bun.Tx) (bool, error) {
+	if m.schema != "" && m.createSchema {
+		_, err := tx.ExecContext(ctx, fmt.Sprintf(`create schema if not exists "%s"`, m.schema))
+		if err != nil {
+			return false, errors.Wrap(err, "creating schema")
+		}
+	}
+
+	if err := m.createVersionTable(ctx, tx); err != nil {
+		return false, errors.Wrap(err, "creating version table")
+	}
+
+	lastMigration, err := m.getLastVersion(ctx, tx)
+	if err != nil {
+		return false, errors.Wrap(err, "getting last migration")
+	}
+
+	if len(m.migrations) > int(lastMigration) {
+		migration := m.migrations[lastMigration]
+		if migration.UpWithContext != nil {
+			if err := migration.UpWithContext(ctx, tx); err != nil {
+				return false, errors.Wrapf(err, "executing migration %d", lastMigration)
+			}
+		} else if migration.Up != nil {
+			if err := migration.Up(tx); err != nil {
+				return false, errors.Wrapf(err, "executing migration %d", lastMigration)
+			}
+		} else {
+			return false, errors.New("no code defined for migration")
+		}
+
+		if err := m.insertVersion(ctx, tx, int(lastMigration)+1); err != nil {
+			return false, errors.Wrap(err, "inserting new version")
+		}
+	}
+
+	return len(m.migrations) > int(lastMigration), nil
+}
+
+// upByOne returns a boolean indicating if there are more migrations to apply
+func (m *Migrator) UpByOne(ctx context.Context, db bun.IDB) (more bool, err error) {
+	err = m.runInTX(ctx, db, func(ctx context.Context, tx bun.Tx) error {
+		more, err = m.upByOne(ctx, tx)
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return more, nil
 }
 
 func NewMigrator(opts ...Option) *Migrator {
