@@ -29,6 +29,9 @@ func (s *HaveErrorCodeMatcher) Match(actual interface{}) (success bool, err erro
 }
 
 func (s *HaveErrorCodeMatcher) FailureMessage(actual interface{}) (message string) {
+	if actual == nil {
+		return fmt.Sprintf("error should have code %s but is nil", s.expected)
+	}
 	return fmt.Sprintf("error should have code %s but have %s", s.expected, s.lastSeen)
 }
 
