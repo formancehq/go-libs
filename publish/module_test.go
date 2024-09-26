@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	dockerlib "github.com/formancehq/go-libs/testing/docker"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
@@ -27,37 +29,36 @@ import (
 
 func createRedpandaServer(t *testing.T) string {
 
-	pool, err := dockertest.NewPool("")
-	require.NoError(t, err)
+	pool := dockerlib.NewPool(t, logging.Testing())
+	resource := pool.Run(dockerlib.Configuration{
+		RunOptions: &dockertest.RunOptions{
+			Repository: "docker.redpanda.com/vectorized/redpanda",
+			Tag:        "v22.3.11",
+			Tty:        true,
+			Cmd: []string{
+				"redpanda", "start",
+				"--smp", "1",
+				"--overprovisioned",
+				"--kafka-addr", "PLAINTEXT://0.0.0.0:9092",
+				"--advertise-kafka-addr", "PLAINTEXT://localhost:9092",
+				"--pandaproxy-addr", "0.0.0.0:8082",
+				"--advertise-pandaproxy-addr", "localhost:8082",
+			},
+			PortBindings: map[docker.Port][]docker.PortBinding{
+				"9092/tcp": {{
+					HostIP:   "0.0.0.0",
+					HostPort: "9092",
+				}},
+				"9644/tcp": {{
+					HostIP:   "0.0.0.0",
+					HostPort: "9644",
+				}},
+			},
+		},
+	})
 
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "docker.redpanda.com/vectorized/redpanda",
-		Tag:        "v22.3.11",
-		Tty:        true,
-		Cmd: []string{
-			"redpanda", "start",
-			"--smp", "1",
-			"--overprovisioned",
-			"--kafka-addr", "PLAINTEXT://0.0.0.0:9092",
-			"--advertise-kafka-addr", "PLAINTEXT://localhost:9092",
-			"--pandaproxy-addr", "0.0.0.0:8082",
-			"--advertise-pandaproxy-addr", "localhost:8082",
-		},
-		PortBindings: map[docker.Port][]docker.PortBinding{
-			"9092/tcp": {{
-				HostIP:   "0.0.0.0",
-				HostPort: "9092",
-			}},
-			"9644/tcp": {{
-				HostIP:   "0.0.0.0",
-				HostPort: "9644",
-			}},
-		},
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, pool.Purge(resource))
-	})
+	// todo: need to add a check function on the container
+	<-time.After(5 * time.Second)
 
 	stdout := io.Discard
 	stderr := io.Discard
