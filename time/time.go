@@ -27,6 +27,12 @@ type Time struct {
 	time.Time
 }
 
+func New(t time.Time) Time {
+	return Time{
+		Time: t.UTC().Round(DatePrecision),
+	}
+}
+
 func (t *Time) Scan(src interface{}) (err error) {
 	switch src := src.(type) {
 	case time.Time:
