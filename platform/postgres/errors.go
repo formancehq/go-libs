@@ -23,6 +23,8 @@ func ResolveError(err error) error {
 				return newErrTooManyClient(err)
 			case "40P01":
 				return ErrDeadlockDetected
+			case "40001":
+				return ErrSerialization
 			}
 		}
 
@@ -35,6 +37,7 @@ func ResolveError(err error) error {
 var (
 	ErrNotFound         = errors.New("not found")
 	ErrDeadlockDetected = errors.New("deadlock detected")
+	ErrSerialization    = errors.New("serialization error")
 )
 
 func IsNotFoundError(err error) bool {
