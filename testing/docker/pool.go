@@ -63,9 +63,11 @@ func (p *Pool) Run(cfg Configuration) *dockertest.Resource {
 
 	resource, err := p.pool.RunWithOptions(cfg.RunOptions, cfg.HostConfigOptions...)
 	require.NoError(p.t, err)
-	p.t.Cleanup(func() {
-		require.NoError(p.t, p.pool.Purge(resource))
-	})
+	if os.Getenv("NO_CLEANUP") != "true" {
+		p.t.Cleanup(func() {
+			require.NoError(p.t, p.pool.Purge(resource))
+		})
+	}
 
 	go p.streamContainerLogs(resource.Container.ID)
 
