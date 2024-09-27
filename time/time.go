@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/invopop/jsonschema"
 	"github.com/pkg/errors"
 )
 
@@ -25,6 +26,14 @@ var (
 
 type Time struct {
 	time.Time
+}
+
+func (Time) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type:   "string",
+		Title:  "Normalized date",
+		Format: "date-time",
+	}
 }
 
 func New(t time.Time) Time {
