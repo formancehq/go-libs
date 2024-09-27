@@ -79,7 +79,7 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 }
 
 func createSearchAttributes(ctx context.Context, c client.Client, namespace string, searchAttributes map[string]enums.IndexedValueType) error {
-	_, err := c.OperatorService().AddSearchAttributes(logging.TestingContext(), &operatorservice.AddSearchAttributesRequest{
+	_, err := c.OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: searchAttributes,
 		Namespace:        namespace,
 	})
