@@ -21,7 +21,7 @@ type NatsT interface {
 type NatsServer struct {
 	URL string
 
-	*nats.Conn
+	*nats.Conn `json:"-"`
 }
 
 func (s *NatsServer) ClientURL() string {
