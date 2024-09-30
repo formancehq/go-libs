@@ -112,7 +112,21 @@ func findPaginationFieldPath(v any, paginationColumn string) []reflect.StructFie
 	typeOfT := reflect.TypeOf(v)
 	for i := 0; i < typeOfT.NumField(); i++ {
 		field := typeOfT.Field(i)
-		switch field.Type.Kind() {
+		fieldType := field.Type
+
+		// If the field is a pointer, we unreference it to target the concrete type
+		// For example:
+		// type Object struct {
+		//     *AnotherObject
+		// }
+		for {
+			if field.Type.Kind() == reflect.Ptr {
+				fieldType = field.Type.Elem()
+			}
+			break
+		}
+
+		switch fieldType.Kind() {
 		case reflect.Struct:
 			if field.Type.AssignableTo(reflect.TypeOf(time.Time{})) ||
 				field.Type.AssignableTo(reflect.TypeOf(&time.Time{})) ||
@@ -123,7 +137,7 @@ func findPaginationFieldPath(v any, paginationColumn string) []reflect.StructFie
 					return fields
 				}
 			} else {
-				fields := findPaginationFieldPath(reflect.New(field.Type).Elem().Interface(), paginationColumn)
+				fields := findPaginationFieldPath(reflect.New(fieldType).Elem().Interface(), paginationColumn)
 				if len(fields) > 0 {
 					return fields
 				}
