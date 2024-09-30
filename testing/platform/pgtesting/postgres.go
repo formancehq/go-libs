@@ -229,6 +229,7 @@ func CreatePostgresServer(t T, pool *docker.Pool, opts ...Option) *PostgresServe
 				"-c", "shared_preload_libraries=auto_explain,pg_stat_statements",
 				"-c", "log_lock_waits=on",
 				"-c", "log_min_messages=info",
+				"-c", "max_connections=100",
 			},
 		},
 		CheckFn: func(ctx context.Context, resource *dockertest.Resource) error {
