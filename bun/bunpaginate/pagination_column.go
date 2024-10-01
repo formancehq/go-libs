@@ -128,10 +128,10 @@ func findPaginationFieldPath(v any, paginationColumn string) []reflect.StructFie
 
 		switch fieldType.Kind() {
 		case reflect.Struct:
-			if field.Type.AssignableTo(reflect.TypeOf(time.Time{})) ||
-				field.Type.AssignableTo(reflect.TypeOf(&time.Time{})) ||
-				field.Type.AssignableTo(reflect.TypeOf(libtime.Time{})) ||
-				field.Type.AssignableTo(reflect.TypeOf(&libtime.Time{})) {
+			if fieldType.AssignableTo(reflect.TypeOf(time.Time{})) ||
+				fieldType.AssignableTo(reflect.TypeOf(libtime.Time{})) ||
+				fieldType.AssignableTo(reflect.TypeOf(big.Int{})) ||
+				fieldType.AssignableTo(reflect.TypeOf(BigInt{})) {
 
 				if fields := checkTag(field, paginationColumn); len(fields) > 0 {
 					return fields
@@ -177,8 +177,12 @@ func findPaginationField(v any, fields ...reflect.StructField) *big.Int {
 			return big.NewInt(rawPaginationID.UTC().UnixMicro())
 		case *BigInt:
 			return (*big.Int)(rawPaginationID)
+		case BigInt:
+			return (*big.Int)(&rawPaginationID)
 		case *big.Int:
 			return rawPaginationID
+		case big.Int:
+			return &rawPaginationID
 		case int64:
 			return big.NewInt(rawPaginationID)
 		case int:
