@@ -2,11 +2,12 @@ package migrations
 
 import (
 	"context"
+	"testing"
+
 	"github.com/formancehq/go-libs/logging"
 	"github.com/formancehq/go-libs/migrations"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
-	"testing"
 )
 
 type HookFn func(ctx context.Context, t *testing.T, db bun.IDB)
