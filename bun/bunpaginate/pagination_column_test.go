@@ -9,7 +9,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"github.com/formancehq/go-libs/bun/bunconnect"
-	bunpaginate2 "github.com/formancehq/go-libs/bun/bunpaginate"
+	"github.com/formancehq/go-libs/bun/bunpaginate"
 	"github.com/formancehq/go-libs/logging"
 
 	"github.com/stretchr/testify/require"
@@ -38,14 +38,14 @@ func TestColumnPagination(t *testing.T) {
 	require.NoError(t, err)
 
 	type model struct {
-		ID   *bunpaginate2.BigInt `bun:"id,type:numeric"`
-		Pair bool                 `bun:"pair"`
+		ID   *bunpaginate.BigInt `bun:"id,type:numeric"`
+		Pair bool                `bun:"pair"`
 	}
 
 	models := make([]model, 0)
 	for i := 0; i < 100; i++ {
 		models = append(models, model{
-			ID:   (*bunpaginate2.BigInt)(big.NewInt(int64(i))),
+			ID:   (*bunpaginate.BigInt)(big.NewInt(int64(i))),
 			Pair: i%2 == 0,
 		})
 	}
@@ -57,67 +57,67 @@ func TestColumnPagination(t *testing.T) {
 
 	type testCase struct {
 		name                  string
-		query                 bunpaginate2.ColumnPaginatedQuery[bool]
-		expectedNext          *bunpaginate2.ColumnPaginatedQuery[bool]
-		expectedPrevious      *bunpaginate2.ColumnPaginatedQuery[bool]
+		query                 bunpaginate.ColumnPaginatedQuery[bool]
+		expectedNext          *bunpaginate.ColumnPaginatedQuery[bool]
+		expectedPrevious      *bunpaginate.ColumnPaginatedQuery[bool]
 		expectedNumberOfItems int64
 	}
 	testCases := []testCase{
 		{
 			name: "asc first page",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize: 10,
 				Column:   "id",
-				Order:    bunpaginate2.OrderAsc,
+				Order:    bunpaginate.OrderAsc,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(10)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Bottom:       big.NewInt(int64(0)),
 			},
 			expectedNumberOfItems: 10,
 		},
 		{
 			name: "asc second page using next cursor",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(10)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Bottom:       big.NewInt(int64(0)),
 			},
-			expectedPrevious: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedPrevious: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Bottom:       big.NewInt(int64(0)),
 				PaginationID: big.NewInt(int64(10)),
 				Reverse:      true,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(20)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Bottom:       big.NewInt(int64(0)),
 			},
 			expectedNumberOfItems: 10,
 		},
 		{
 			name: "asc last page using next cursor",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(90)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Bottom:       big.NewInt(int64(0)),
 			},
-			expectedPrevious: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedPrevious: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				PaginationID: big.NewInt(int64(90)),
 				Bottom:       big.NewInt(int64(0)),
 				Reverse:      true,
@@ -126,116 +126,116 @@ func TestColumnPagination(t *testing.T) {
 		},
 		{
 			name: "desc first page",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize: 10,
 				Column:   "id",
-				Order:    bunpaginate2.OrderDesc,
+				Order:    bunpaginate.OrderDesc,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(89)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 			},
 			expectedNumberOfItems: 10,
 		},
 		{
 			name: "desc second page using next cursor",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(89)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 			},
-			expectedPrevious: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedPrevious: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(89)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 				Reverse:      true,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(79)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 			},
 			expectedNumberOfItems: 10,
 		},
 		{
 			name: "desc last page using next cursor",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(9)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 			},
-			expectedPrevious: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedPrevious: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(9)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 				Reverse:      true,
 			},
 			expectedNumberOfItems: 10,
 		},
 		{
 			name: "asc first page using previous cursor",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(0)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(10)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Reverse:      true,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(0)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(10)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 			},
 			expectedNumberOfItems: 10,
 		},
 		{
 			name: "desc first page using previous cursor",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(89)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 				Reverse:      true,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Bottom:       big.NewInt(int64(99)),
 				Column:       "id",
 				PaginationID: big.NewInt(int64(89)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 			},
 			expectedNumberOfItems: 10,
 		},
 		{
 			name: "asc first page with filter",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize: 10,
 				Column:   "id",
-				Order:    bunpaginate2.OrderAsc,
+				Order:    bunpaginate.OrderAsc,
 				Options:  true,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(20)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(0)),
 			},
@@ -243,27 +243,27 @@ func TestColumnPagination(t *testing.T) {
 		},
 		{
 			name: "asc second page with filter",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(20)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(0)),
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(40)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(0)),
 			},
-			expectedPrevious: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedPrevious: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(20)),
-				Order:        bunpaginate2.OrderAsc,
+				Order:        bunpaginate.OrderAsc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(0)),
 				Reverse:      true,
@@ -272,17 +272,17 @@ func TestColumnPagination(t *testing.T) {
 		},
 		{
 			name: "desc first page with filter",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize: 10,
 				Column:   "id",
-				Order:    bunpaginate2.OrderDesc,
+				Order:    bunpaginate.OrderDesc,
 				Options:  true,
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(78)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(98)),
 			},
@@ -290,27 +290,27 @@ func TestColumnPagination(t *testing.T) {
 		},
 		{
 			name: "desc second page with filter",
-			query: bunpaginate2.ColumnPaginatedQuery[bool]{
+			query: bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(78)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(98)),
 			},
-			expectedNext: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedNext: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(58)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(98)),
 			},
-			expectedPrevious: &bunpaginate2.ColumnPaginatedQuery[bool]{
+			expectedPrevious: &bunpaginate.ColumnPaginatedQuery[bool]{
 				PageSize:     10,
 				Column:       "id",
 				PaginationID: big.NewInt(int64(78)),
-				Order:        bunpaginate2.OrderDesc,
+				Order:        bunpaginate.OrderDesc,
 				Options:      true,
 				Bottom:       big.NewInt(int64(98)),
 				Reverse:      true,
@@ -327,7 +327,7 @@ func TestColumnPagination(t *testing.T) {
 			if tc.query.Options {
 				query = query.Where("pair = ?", true)
 			}
-			cursor, err := bunpaginate2.UsingColumn[bool, model](context.Background(), query, tc.query)
+			cursor, err := bunpaginate.UsingColumn[bool, model](context.Background(), query, tc.query)
 			require.NoError(t, err)
 
 			if tc.expectedNext == nil {
@@ -335,8 +335,8 @@ func TestColumnPagination(t *testing.T) {
 			} else {
 				require.NotEmpty(t, cursor.Next)
 
-				q := bunpaginate2.ColumnPaginatedQuery[bool]{}
-				require.NoError(t, bunpaginate2.UnmarshalCursor(cursor.Next, &q))
+				q := bunpaginate.ColumnPaginatedQuery[bool]{}
+				require.NoError(t, bunpaginate.UnmarshalCursor(cursor.Next, &q))
 				require.EqualValues(t, *tc.expectedNext, q)
 			}
 
@@ -345,8 +345,8 @@ func TestColumnPagination(t *testing.T) {
 			} else {
 				require.NotEmpty(t, cursor.Previous)
 
-				q := bunpaginate2.ColumnPaginatedQuery[bool]{}
-				require.NoError(t, bunpaginate2.UnmarshalCursor(cursor.Previous, &q))
+				q := bunpaginate.ColumnPaginatedQuery[bool]{}
+				require.NoError(t, bunpaginate.UnmarshalCursor(cursor.Previous, &q))
 				require.EqualValues(t, *tc.expectedPrevious, q)
 			}
 		})
