@@ -2,6 +2,7 @@ package otlptraces
 
 import (
 	"context"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/formancehq/go-libs/otlp"
 	"go.opentelemetry.io/contrib/propagators/b3"
@@ -48,10 +49,13 @@ func ProvideTracerProviderOption(v any, annotations ...fx.Annotation) fx.Option 
 }
 
 func TracesModule(cfg ModuleConfig) fx.Option {
+	if cfg.Exporter == "" {
+		return fx.Provide(fx.Annotate(noop.NewTracerProvider, fx.As(new(trace.TracerProvider))))
+	}
+
 	options := make([]fx.Option, 0)
 	options = append(options,
 		fx.Supply(cfg),
-		otlp.LoadResource(cfg.ServiceName, cfg.ResourceAttributes),
 		fx.Provide(fx.Annotate(func(options ...tracesdk.TracerProviderOption) *tracesdk.TracerProvider {
 			return tracesdk.NewTracerProvider(options...)
 		}, fx.ParamTags(TracerProviderOptionKey))),
@@ -124,5 +128,6 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 			options = append(options, OTLPTracerHTTPClientModule())
 		}
 	}
+
 	return fx.Options(options...)
 }

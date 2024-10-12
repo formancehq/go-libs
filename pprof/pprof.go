@@ -16,6 +16,7 @@ func NewFXModule() fx.Option {
 			return otelpyroscope.NewTracerProvider(provider)
 		}),
 		fx.Invoke(func(lc fx.Lifecycle) {
+			// todo: attach on application routers
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
 					go func() {

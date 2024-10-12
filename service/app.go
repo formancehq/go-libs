@@ -32,8 +32,8 @@ type App struct {
 func (a *App) Run(cmd *cobra.Command) error {
 
 	loggerHooks := make([]logrus.Hook, 0)
-	otelTraces, _ := cmd.Flags().GetBool(otlptraces.OtelTracesFlag)
-	if otelTraces {
+	otelTraces, _ := cmd.Flags().GetString(otlptraces.OtelTracesExporterFlag)
+	if otelTraces != "" {
 		loggerHooks = append(loggerHooks, otellogrus.NewHook(otellogrus.WithLevels(
 			logrus.PanicLevel,
 			logrus.FatalLevel,

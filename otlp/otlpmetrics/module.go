@@ -5,16 +5,18 @@ import (
 	"time"
 
 	"github.com/formancehq/go-libs/logging"
-	"github.com/formancehq/go-libs/otlp"
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/propagation"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+
+	"github.com/formancehq/go-libs/otlp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/fx"
 )
 
@@ -24,12 +26,10 @@ const (
 
 	StdoutExporter = "stdout"
 	OTLPExporter   = "otlp"
+	MemoryExporter = "memory"
 )
 
 type ModuleConfig struct {
-	ServiceName    string
-	ServiceVersion string
-
 	RuntimeMetrics              bool
 	MinimumReadMemStatsInterval time.Duration
 
@@ -57,13 +57,21 @@ func ProvideRuntimeMetricsOption(v any, annotations ...fx.Annotation) fx.Option 
 }
 
 func MetricsModule(cfg ModuleConfig) fx.Option {
+	if cfg.Exporter == "" {
+		return fx.Provide(func() metric.MeterProvider {
+			return noop.NewMeterProvider()
+		})
+	}
+
 	options := make([]fx.Option, 0)
 	options = append(options,
 		fx.Supply(cfg),
-		otlp.LoadResource(cfg.ServiceName, cfg.ResourceAttributes),
-		fx.Decorate(fx.Annotate(func(mp *sdkmetric.MeterProvider) metric.MeterProvider { return mp }, fx.As(new(metric.MeterProvider)))),
+		fx.Provide(func(mp *sdkmetric.MeterProvider) metric.MeterProvider { return mp }),
 		fx.Provide(fx.Annotate(func(options ...sdkmetric.Option) *sdkmetric.MeterProvider {
-			return sdkmetric.NewMeterProvider(options...)
+			ret := sdkmetric.NewMeterProvider(options...)
+			otel.SetMeterProvider(ret)
+
+			return ret
 		}, fx.ParamTags(metricsProviderOptionKey))),
 		fx.Invoke(func(lc fx.Lifecycle, metricProvider *sdkmetric.MeterProvider, options ...runtime.Option) {
 			// set global propagator to tracecontext (the default is no-op).
@@ -71,7 +79,6 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 				b3.New(), propagation.TraceContext{})) // B3 format is common and used by zipkin. Always enabled right now.
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
-					otel.SetMeterProvider(metricProvider)
 					if cfg.RuntimeMetrics {
 						if err := runtime.Start(options...); err != nil {
 							return err
@@ -112,6 +119,8 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 	switch cfg.Exporter {
 	case StdoutExporter:
 		options = append(options, StdoutMetricsModule())
+	case MemoryExporter:
+		options = append(options, InMemoryMetricsModule())
 	case OTLPExporter:
 		mode := otlp.ModeGRPC
 		if cfg.OTLPConfig != nil {
