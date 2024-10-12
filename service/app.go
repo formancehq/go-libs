@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"go.uber.org/dig"
 	"io"
 	"os"
 
@@ -63,7 +64,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 			// We want to have a specific exit code for the error
 			os.Exit(err.(*errorsutils.ErrorWithExitCode).ExitCode)
 		default:
-			return err
+			return dig.RootCause(err)
 		}
 	}
 
