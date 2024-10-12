@@ -26,7 +26,6 @@ func TestOTLPTracesModule(t *testing.T) {
 		{
 			name: "otlp",
 			args: []string{
-				fmt.Sprintf("--%s", OtelTracesFlag),
 				fmt.Sprintf("--%s=%s", OtelTracesExporterFlag, "otlp"),
 			},
 			expectedSpanExporter: &otlptrace.Exporter{},

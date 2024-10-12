@@ -2,9 +2,10 @@ package service
 
 import (
 	"context"
-	"go.uber.org/dig"
 	"io"
 	"os"
+
+	"go.uber.org/dig"
 
 	"github.com/spf13/pflag"
 
@@ -51,10 +52,6 @@ func (a *App) Run(cmd *cobra.Command) error {
 		loggerHooks...,
 	)
 	logger.Infof("Starting application")
-	logger.Debugf("Environment variables")
-	for _, v := range os.Environ() {
-		logger.Debugf(v)
-	}
 
 	app := a.newFxApp(logger)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), logger)); err != nil {

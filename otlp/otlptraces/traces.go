@@ -2,6 +2,7 @@ package otlptraces
 
 import (
 	"context"
+
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/formancehq/go-libs/otlp"

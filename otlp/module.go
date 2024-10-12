@@ -6,7 +6,7 @@ import (
 )
 
 type Config struct {
-	ServiceName    string
+	ServiceName        string
 	ResourceAttributes []string
 }
 
@@ -21,7 +21,7 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 	otelResourceAttributes, _ := cmd.Flags().GetStringSlice(OtelResourceAttributesFlag)
 
 	return NewFxModule(Config{
-		ServiceName: otelServiceName,
+		ServiceName:        otelServiceName,
 		ResourceAttributes: otelResourceAttributes,
 	})
 }
