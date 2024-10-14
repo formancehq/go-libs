@@ -76,10 +76,15 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Validate Dependabot PR
-        if: steps.metadata.outputs.update-type == 'version-update:semver-minor'
         run: |
           gh pr review $PR_URL --approve -b "Auto approve dependencies bump PR"
-          gh pr merge --auto "$PR_URL"
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
-          GH_TOKEN: ${{secrets.NUMARY_TOKEN}}
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      - name: Enable auto-merge for Dependabot PRs
+        if: steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: |
+          gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{github.event.pull_request.html_url}}
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
