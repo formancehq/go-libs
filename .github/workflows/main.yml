@@ -18,17 +18,15 @@ concurrency:
 
 jobs:
   Ci:
-    runs-on: "formance-runner"
+    runs-on: "ubuntu-latest"
     steps:
       - uses: 'actions/checkout@v4'
         with:
           fetch-depth: 0
-      - name: Auto-Merge Dependabot PRs
-        if: github.event.pull_request.user.login == 'dependabot[bot]'
-        uses: fastify/github-action-merge-dependabot@v3
+      - uses: earthly/actions-setup@v1
         with:
-          use-github-auto-merge: 'true'
-          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version: "latest" # or pin to an specific version, e.g. "0.8.1"
       - name: Setup Env
         uses: ./.github/actions/env
       - run: >
@@ -48,10 +46,15 @@ jobs:
             git status
             echo "There are changes in the repository"
             exit 1
+          fi
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Validate Dependabot PR
         if: github.event.pull_request.user.login == 'dependabot[bot]'
-        run: |
-          gh pr review $PR_URL --approve -b "Auto approve dependencies bump PR"
+        run: gh pr review $PR_URL --approve -b "Auto approve dependencies bump PR"
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
