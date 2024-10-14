@@ -46,3 +46,8 @@ generate:
     COPY --dir (+tidy/src/*) /src
     DO --pass-args core+GO_GENERATE
     SAVE ARTIFACT ./* AS LOCAL ./
+
+ci:
+  LOCALLY
+  BUILD +pre-commit
+  BUILD +tests
