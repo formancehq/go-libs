@@ -61,6 +61,11 @@ func (a *App) Run(cmd *cobra.Command) error {
 			// We want to have a specific exit code for the error
 			os.Exit(err.(*errorsutils.ErrorWithExitCode).ExitCode)
 		default:
+			// Return complete error if we are debugging
+			// While polluting the output most of the time, it sometimes gives some precious information
+			if IsDebug(cmd) {
+				return err
+			}
 			return dig.RootCause(err)
 		}
 	}

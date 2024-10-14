@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
@@ -26,7 +25,6 @@ const (
 
 	StdoutExporter = "stdout"
 	OTLPExporter   = "otlp"
-	MemoryExporter = "memory"
 )
 
 type ModuleConfig struct {
@@ -37,6 +35,7 @@ type ModuleConfig struct {
 	OTLPConfig         *OTLPConfig
 	PushInterval       time.Duration
 	ResourceAttributes []string
+	KeepInMemory       bool
 }
 
 type OTLPConfig struct {
@@ -57,12 +56,6 @@ func ProvideRuntimeMetricsOption(v any, annotations ...fx.Annotation) fx.Option 
 }
 
 func MetricsModule(cfg ModuleConfig) fx.Option {
-	if cfg.Exporter == "" {
-		return fx.Provide(func() metric.MeterProvider {
-			return noop.NewMeterProvider()
-		})
-	}
-
 	options := make([]fx.Option, 0)
 	options = append(options,
 		fx.Supply(cfg),
@@ -119,8 +112,6 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 	switch cfg.Exporter {
 	case StdoutExporter:
 		options = append(options, StdoutMetricsModule())
-	case MemoryExporter:
-		options = append(options, InMemoryMetricsModule())
 	case OTLPExporter:
 		mode := otlp.ModeGRPC
 		if cfg.OTLPConfig != nil {
@@ -160,6 +151,17 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 
 			options = append(options, ProvideOTLPMetricsHTTPExporter())
 		}
+	default:
+		options = append(options, fx.Provide(fx.Annotate(NewNoOpExporter, fx.As(new(sdkmetric.Exporter)))))
+	}
+
+	if cfg.KeepInMemory {
+		options = append(options,
+			fx.Provide(NewInMemoryExporterDecorator),
+			fx.Decorate(func(exporter *InMemoryExporter) sdkmetric.Exporter {
+				return exporter
+			}),
+		)
 	}
 
 	return fx.Options(options...)
