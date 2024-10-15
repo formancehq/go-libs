@@ -6,7 +6,7 @@ toolchain go1.22.7
 
 require (
 	dario.cat/mergo v1.0.1
-	github.com/ClickHouse/clickhouse-go/v2 v2.28.3
+	github.com/ClickHouse/clickhouse-go/v2 v2.29.0
 	github.com/IBM/sarama v1.43.3
 	github.com/ThreeDotsLabs/watermill v1.3.7
 	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1
