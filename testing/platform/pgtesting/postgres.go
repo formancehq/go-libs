@@ -18,6 +18,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"math"
 )
 
 type T interface {
@@ -63,9 +64,12 @@ type PostgresServer struct {
 }
 
 func (s *PostgresServer) GetPort() int {
-	v, err := strconv.ParseInt(s.Port, 10, 64)
+	v, err := strconv.ParseInt(s.Port, 10, 32)
 	if err != nil {
 		panic(err)
+	}
+	if v < math.MinInt32 || v > math.MaxInt32 {
+		panic(fmt.Sprintf("Port value out of range: %d", v))
 	}
 	return int(v)
 }
