@@ -8,6 +8,9 @@
   "major": {
     "automerge": false
   },
+  "constraints": {
+    "go": "1.22"
+  },
   "postUpdateOptions": ["gomodTidy"],
   "labels": ["dependencies"],
   "baseBranches": ["main"],
