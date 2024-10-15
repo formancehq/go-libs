@@ -1,9 +1,16 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":prHourlyLimitNone",
+    ":rebaseStalePrs"
   ],
+  "major": {
+    "automerge": false
+  },
+  "postUpdateOptions": ["gomodTidy"],
   "labels": ["dependencies"],
+  "baseBranches": ["main"],
   "packageRules": [
     {
       "matchUpdateTypes": ["major"],
@@ -13,10 +20,12 @@
     {
       "matchDepNames": ["golang", "go"],
       "groupName": "go"
-    },
-    {
-      "automerge": true,
-      "platformAutomerge": true
     }
-  ]
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "automergeType": "pr",
+    "platformAutomerge": true
+  }
 }
