@@ -1,8 +1,8 @@
 package ginkgo
 
 import (
-	"github.com/formancehq/go-libs/logging"
-	"github.com/formancehq/go-libs/testing/docker"
+	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v2/testing/docker"
 	. "github.com/onsi/ginkgo/v2"
 )
 

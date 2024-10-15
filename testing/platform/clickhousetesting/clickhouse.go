@@ -11,7 +11,7 @@ import (
 	"github.com/ory/dockertest/v3"
 	"github.com/pkg/errors"
 
-	"github.com/formancehq/go-libs/testing/docker"
+	"github.com/formancehq/go-libs/v2/testing/docker"
 
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"

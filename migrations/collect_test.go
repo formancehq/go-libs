@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/formancehq/go-libs/collectionutils"
+	"github.com/formancehq/go-libs/v2/collectionutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )

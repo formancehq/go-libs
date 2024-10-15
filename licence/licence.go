@@ -3,7 +3,7 @@ package licence
 import (
 	"time"
 
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 )
 
 type Licence struct {

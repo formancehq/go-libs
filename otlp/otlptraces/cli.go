@@ -1,7 +1,7 @@
 package otlptraces
 
 import (
-	"github.com/formancehq/go-libs/otlp"
+	"github.com/formancehq/go-libs/v2/otlp"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/fx"

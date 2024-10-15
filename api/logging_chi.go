@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/go-chi/chi/v5/middleware"
 )
 

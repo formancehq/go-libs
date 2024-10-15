@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/publish/circuit_breaker/storage"
+	"github.com/formancehq/go-libs/v2/publish/circuit_breaker/storage"
 )
 
 type payload struct {

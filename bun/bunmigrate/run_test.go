@@ -4,12 +4,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/formancehq/go-libs/testing/docker"
+	"github.com/formancehq/go-libs/v2/testing/docker"
 
-	"github.com/formancehq/go-libs/testing/platform/pgtesting"
+	"github.com/formancehq/go-libs/v2/testing/platform/pgtesting"
 
-	"github.com/formancehq/go-libs/bun/bunconnect"
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/bun/bunconnect"
+	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )

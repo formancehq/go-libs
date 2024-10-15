@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 )
 
 func LoggerMiddleware(l logging.Logger) func(h http.Handler) http.Handler {

@@ -1,6 +1,6 @@
 package bunpaginate
 
-import "github.com/formancehq/go-libs/collectionutils"
+import "github.com/formancehq/go-libs/v2/collectionutils"
 
 type Cursor[T any] struct {
 	PageSize int    `json:"pageSize,omitempty"`

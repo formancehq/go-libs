@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/formancehq/go-libs/otlp"
+	"github.com/formancehq/go-libs/v2/otlp"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/fx"
 )

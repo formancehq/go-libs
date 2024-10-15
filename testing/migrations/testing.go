@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/formancehq/go-libs/logging"
-	"github.com/formancehq/go-libs/migrations"
+	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v2/migrations"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )

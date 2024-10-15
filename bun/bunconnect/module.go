@@ -3,8 +3,8 @@ package bunconnect
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/bun/bundebug"
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/bun/bundebug"
+	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/uptrace/bun"
 	"go.uber.org/fx"
 )

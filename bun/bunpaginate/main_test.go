@@ -3,12 +3,12 @@ package bunpaginate_test
 import (
 	"testing"
 
-	"github.com/formancehq/go-libs/testing/docker"
-	"github.com/formancehq/go-libs/testing/utils"
+	"github.com/formancehq/go-libs/v2/testing/docker"
+	"github.com/formancehq/go-libs/v2/testing/utils"
 
-	"github.com/formancehq/go-libs/testing/platform/pgtesting"
+	"github.com/formancehq/go-libs/v2/testing/platform/pgtesting"
 
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 )
 
 var srv *pgtesting.PostgresServer

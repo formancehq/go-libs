@@ -3,7 +3,7 @@ package publish
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/pkg/errors"
 
 	"sync"
@@ -11,7 +11,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
-	topicmapper "github.com/formancehq/go-libs/publish/topic_mapper"
+	topicmapper "github.com/formancehq/go-libs/v2/publish/topic_mapper"
 	"go.uber.org/fx"
 )
 
