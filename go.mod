@@ -2,7 +2,7 @@ module github.com/formancehq/go-libs
 
 go 1.22.0
 
-toolchain go1.22.7
+toolchain go1.23.2
 
 require (
 	dario.cat/mergo v1.0.1
