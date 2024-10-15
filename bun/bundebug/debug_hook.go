@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 
 	"github.com/uptrace/bun"
 )

@@ -1,8 +1,8 @@
 package pgtesting
 
 import (
-	. "github.com/formancehq/go-libs/testing/docker/ginkgo"
-	. "github.com/formancehq/go-libs/testing/utils"
+	. "github.com/formancehq/go-libs/v2/testing/docker/ginkgo"
+	. "github.com/formancehq/go-libs/v2/testing/utils"
 	. "github.com/onsi/ginkgo/v2"
 )
 

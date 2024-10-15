@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"time"
 
-	sharedlogging "github.com/formancehq/go-libs/logging"
+	sharedlogging "github.com/formancehq/go-libs/v2/logging"
 	"github.com/ory/dockertest/v3"
 
-	"github.com/formancehq/go-libs/bun/bunconnect"
+	"github.com/formancehq/go-libs/v2/bun/bunconnect"
 
-	"github.com/formancehq/go-libs/testing/docker"
+	"github.com/formancehq/go-libs/v2/testing/docker"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"

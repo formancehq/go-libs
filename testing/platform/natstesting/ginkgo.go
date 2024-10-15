@@ -1,8 +1,8 @@
 package natstesting
 
 import (
-	"github.com/formancehq/go-libs/logging"
-	. "github.com/formancehq/go-libs/testing/utils"
+	"github.com/formancehq/go-libs/v2/logging"
+	. "github.com/formancehq/go-libs/v2/testing/utils"
 	. "github.com/onsi/ginkgo/v2"
 )
 

@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs
+module github.com/formancehq/go-libs/v2
 
 go 1.22.0
 

@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/formancehq/go-libs/logging"
-	"github.com/formancehq/go-libs/testing/docker"
+	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v2/testing/docker"
 
-	"github.com/formancehq/go-libs/testing/platform/pgtesting"
+	"github.com/formancehq/go-libs/v2/testing/platform/pgtesting"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"

@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 	"go.uber.org/fx"
 )
 

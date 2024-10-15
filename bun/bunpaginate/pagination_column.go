@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	libtime "github.com/formancehq/go-libs/time"
+	libtime "github.com/formancehq/go-libs/v2/time"
 	"github.com/uptrace/bun"
 )
 

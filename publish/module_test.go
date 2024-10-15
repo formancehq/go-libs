@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	dockerlib "github.com/formancehq/go-libs/testing/docker"
+	dockerlib "github.com/formancehq/go-libs/v2/testing/docker"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -17,7 +17,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/logging"
 	natsServer "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/ory/dockertest/v3"

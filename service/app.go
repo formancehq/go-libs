@@ -9,12 +9,12 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/formancehq/go-libs/otlp/otlptraces"
+	"github.com/formancehq/go-libs/v2/otlp/otlptraces"
 	"github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otellogrus"
 
-	"github.com/formancehq/go-libs/errorsutils"
-	"github.com/formancehq/go-libs/logging"
+	"github.com/formancehq/go-libs/v2/errorsutils"
+	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 )
