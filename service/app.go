@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 
+	"go.uber.org/dig"
+
 	"github.com/spf13/pflag"
 
 	"github.com/formancehq/go-libs/otlp/otlptraces"
@@ -32,8 +34,8 @@ type App struct {
 func (a *App) Run(cmd *cobra.Command) error {
 
 	loggerHooks := make([]logrus.Hook, 0)
-	otelTraces, _ := cmd.Flags().GetBool(otlptraces.OtelTracesFlag)
-	if otelTraces {
+	otelTraces, _ := cmd.Flags().GetString(otlptraces.OtelTracesExporterFlag)
+	if otelTraces != "" {
 		loggerHooks = append(loggerHooks, otellogrus.NewHook(otellogrus.WithLevels(
 			logrus.PanicLevel,
 			logrus.FatalLevel,
@@ -50,10 +52,6 @@ func (a *App) Run(cmd *cobra.Command) error {
 		loggerHooks...,
 	)
 	logger.Infof("Starting application")
-	logger.Debugf("Environment variables")
-	for _, v := range os.Environ() {
-		logger.Debugf(v)
-	}
 
 	app := a.newFxApp(logger)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), logger)); err != nil {
@@ -63,7 +61,12 @@ func (a *App) Run(cmd *cobra.Command) error {
 			// We want to have a specific exit code for the error
 			os.Exit(err.(*errorsutils.ErrorWithExitCode).ExitCode)
 		default:
-			return err
+			// Return complete error if we are debugging
+			// While polluting the output most of the time, it sometimes gives some precious information
+			if IsDebug(cmd) {
+				return err
+			}
+			return dig.RootCause(err)
 		}
 	}
 

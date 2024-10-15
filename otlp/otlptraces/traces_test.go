@@ -2,7 +2,6 @@ package otlptraces
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/formancehq/go-libs/otlp"
@@ -55,11 +54,8 @@ func TestTracesModule(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Since we are doing multiple tests with the same otlp
-			// package, we have to reset the once variables.
-			otlp.OnceLoadResources = sync.Once{}
 
-			options := []fx.Option{TracesModule(test.config)}
+			options := []fx.Option{otlp.NewFxModule(otlp.Config{}), TracesModule(test.config)}
 			if !testing.Verbose() {
 				options = append(options, fx.NopLogger)
 			}

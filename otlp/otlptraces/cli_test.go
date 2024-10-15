@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/formancehq/go-libs/otlp"
+
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -26,7 +28,6 @@ func TestOTLPTracesModule(t *testing.T) {
 		{
 			name: "otlp",
 			args: []string{
-				fmt.Sprintf("--%s", OtelTracesFlag),
 				fmt.Sprintf("--%s=%s", OtelTracesExporterFlag, "otlp"),
 			},
 			expectedSpanExporter: &otlptrace.Exporter{},
@@ -37,6 +38,7 @@ func TestOTLPTracesModule(t *testing.T) {
 				RunE: func(cmd *cobra.Command, args []string) error {
 					app := fx.New(
 						fx.NopLogger,
+						otlp.NewFxModule(otlp.Config{}),
 						FXModuleFromFlags(cmd),
 						fx.Invoke(func(lc fx.Lifecycle, spanExporter tracesdk.SpanExporter) {
 							lc.Append(fx.Hook{
