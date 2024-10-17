@@ -7,7 +7,6 @@ import (
 )
 
 type Migration struct {
-	Name          string
-	Up            func(tx bun.Tx) error
-	UpWithContext func(ctx context.Context, tx bun.Tx) error
+	Name string
+	Up   func(ctx context.Context, db bun.IDB) error
 }

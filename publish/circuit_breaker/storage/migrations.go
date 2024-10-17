@@ -2,7 +2,7 @@ package storage
 
 import (
 	"context"
-	"fmt"
+	"database/sql"
 
 	"github.com/formancehq/go-libs/v2/migrations"
 	"github.com/uptrace/bun"
@@ -11,20 +11,15 @@ import (
 func registerMigrations(migrator *migrations.Migrator, schema string) {
 	migrator.RegisterMigrations(
 		migrations.Migration{
-			Up: func(tx bun.Tx) error {
-				_, err := tx.Exec(fmt.Sprintf(`
-					CREATE TABLE IF NOT EXISTS %s."circuit_breaker" (
-						id bigserial NOT NULL,
-						created_at timestamp with time zone NOT NULL,
-						topic text NOT NULL,
-						data bytea NOT NULL,
-						metadata jsonb,
-						PRIMARY KEY ("id")
-					);
-
-					CREATE INDEX IF NOT EXISTS "circuit_breaker_creation_date_idx" ON %s."circuit_breaker" ("created_at" ASC);
-				`, schema, schema))
-				return err
+			Up: func(ctx context.Context, db bun.IDB) error {
+				return db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+					_, err := tx.Exec("set search_path = ?", schema)
+					if err != nil {
+						return err
+					}
+					_, err = tx.Exec(initialSchema)
+					return err
+				})
 			},
 		},
 	)
@@ -39,3 +34,16 @@ func Migrate(ctx context.Context, schema string, db *bun.DB) error {
 
 	return migrator.Up(ctx, db)
 }
+
+const initialSchema = `
+CREATE TABLE IF NOT EXISTS "circuit_breaker" (
+	id bigserial NOT NULL,
+	created_at timestamp with time zone NOT NULL,
+	topic text NOT NULL,
+	data bytea NOT NULL,
+	metadata jsonb,
+	PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "circuit_breaker_creation_date_idx" ON "circuit_breaker" ("created_at" ASC);
+`
