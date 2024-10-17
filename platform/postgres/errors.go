@@ -4,10 +4,11 @@ import (
 	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/pkg/errors"
 )
 
-// postgresError is an helper to wrap postgres errors into storage errors
+// ResolveError is an helper to wrap postgres errors into storage errors
 func ResolveError(err error) error {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -27,6 +28,8 @@ func ResolveError(err error) error {
 				return ErrSerialization
 			case "42P01":
 				return ErrMissingTable
+			case "3F000":
+				return ErrMissingSchema
 			}
 		}
 
@@ -41,6 +44,7 @@ var (
 	ErrDeadlockDetected = errors.New("deadlock detected")
 	ErrSerialization    = errors.New("serialization error")
 	ErrMissingTable     = errors.New("missing table")
+	ErrMissingSchema    = errors.New("missing schema")
 )
 
 func IsNotFoundError(err error) bool {
