@@ -25,7 +25,6 @@ require (
 	github.com/invopop/jsonschema v0.12.0
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/lestrrat-go/jwx v1.2.30
-	github.com/lib/pq v1.10.9
 	github.com/nats-io/nats-server/v2 v2.10.21
 	github.com/nats-io/nats.go v1.37.0
 	github.com/olivere/elastic/v7 v7.0.32

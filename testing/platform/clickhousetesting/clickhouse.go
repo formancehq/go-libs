@@ -13,7 +13,6 @@ import (
 
 	"github.com/formancehq/go-libs/v2/testing/docker"
 
-	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 

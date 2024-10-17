@@ -3,7 +3,7 @@ package postgres
 import (
 	"database/sql"
 
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pkg/errors"
 )
 
@@ -15,7 +15,7 @@ func ResolveError(err error) error {
 		}
 
 		switch pge := err.(type) {
-		case *pq.Error:
+		case *pgconn.PgError:
 			switch pge.Code {
 			case "23505":
 				return newErrConstraintsFailed(pge)
@@ -45,7 +45,7 @@ func IsNotFoundError(err error) bool {
 }
 
 type ErrConstraintsFailed struct {
-	err *pq.Error
+	err *pgconn.PgError
 }
 
 func (e ErrConstraintsFailed) Error() string {
@@ -62,10 +62,10 @@ func (e ErrConstraintsFailed) Unwrap() error {
 }
 
 func (e ErrConstraintsFailed) GetConstraint() string {
-	return e.err.Constraint
+	return e.err.ConstraintName
 }
 
-func newErrConstraintsFailed(err *pq.Error) ErrConstraintsFailed {
+func newErrConstraintsFailed(err *pgconn.PgError) ErrConstraintsFailed {
 	return ErrConstraintsFailed{
 		err: err,
 	}

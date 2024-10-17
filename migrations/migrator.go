@@ -7,8 +7,7 @@ import (
 	"fmt"
 
 	"github.com/formancehq/go-libs/v2/time"
-
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/pkg/errors"
 	"github.com/uptrace/bun"
@@ -100,7 +99,7 @@ func (m *Migrator) getLastVersion(ctx context.Context, querier interface {
 			return -1, nil
 		default:
 			switch err := err.(type) {
-			case *pq.Error:
+			case *pgconn.PgError:
 				switch err.Code {
 				case "42P01": // Table not exists
 					return -1, ErrMissingVersionTable

@@ -15,7 +15,6 @@ import (
 
 	"github.com/formancehq/go-libs/v2/testing/docker"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +42,7 @@ func (s *Database) ConnectionOptions() bunconnect.ConnectionOptions {
 }
 
 func (s *Database) Delete() {
-	db, err := sql.Open("postgres", s.rootUrl)
+	db, err := sql.Open("pgx", s.rootUrl)
 	require.NoError(s.t, err)
 	defer func() {
 		require.NoError(s.t, db.Close())
@@ -92,7 +91,7 @@ func (s *PostgresServer) GetDatabaseDSN(databaseName string) string {
 }
 
 func (s *PostgresServer) setupDatabase(t T, name string) {
-	db, err := sql.Open("postgres", s.GetDatabaseDSN(name))
+	db, err := sql.Open("pgx", s.GetDatabaseDSN(name))
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, db.Close())
@@ -105,7 +104,7 @@ func (s *PostgresServer) setupDatabase(t T, name string) {
 }
 
 func (s *PostgresServer) NewDatabase(t T) *Database {
-	db, err := sql.Open("postgres", s.GetDSN())
+	db, err := sql.Open("pgx", s.GetDSN())
 	require.NoError(t, err)
 	defer func() {
 		require.Nil(t, db.Close())
@@ -240,7 +239,7 @@ func CreatePostgresServer(t T, pool *docker.Pool, opts ...Option) *PostgresServe
 				resource.GetPort("5432/tcp"),
 				cfg.InitialDatabaseName,
 			)
-			db, err := sql.Open("postgres", dsn)
+			db, err := sql.Open("pgx", dsn)
 			if err != nil {
 				return errors.Wrap(err, "opening database")
 			}
