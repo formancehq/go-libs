@@ -5,11 +5,13 @@ import (
 	"database/sql/driver"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	"github.com/formancehq/go-libs/v2/logging"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/xo/dburl"
 )
@@ -65,12 +67,14 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 	i.logger.Debugf("IAM: Connect using dsn '%s'", dsn)
 
-	pqConnector, err := pq.NewConnector(dsn)
+	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse dsn: %w", err)
 	}
 
-	return pqConnector.Connect(ctx)
+	connector := stdlib.GetConnector(*config)
+
+	return connector.Connect(ctx)
 }
 
 func (i iamConnector) Driver() driver.Driver {

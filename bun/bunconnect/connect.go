@@ -37,7 +37,7 @@ func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.Quer
 	)
 	if options.Connector == nil {
 		logging.FromContext(ctx).Debugf("Opening database with default connector and dsn: '%s'", options.DatabaseSourceName)
-		sqldb, err = otelsql.Open("postgres", options.DatabaseSourceName)
+		sqldb, err = otelsql.Open("pgx", options.DatabaseSourceName)
 		if err != nil {
 			return nil, err
 		}

@@ -3,9 +3,11 @@ package bunconnect
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 	"time"
 
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -53,7 +55,14 @@ func ConnectionOptionsFromFlags(cmd *cobra.Command) (*ConnectionOptions, error) 
 		}
 	} else {
 		connector = func(dsn string) (driver.Connector, error) {
-			return pq.NewConnector(dsn)
+			parseConfig, err := pgx.ParseConfig(dsn)
+			if err != nil {
+				return nil, err
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse dsn: %w", err)
+			}
+			return stdlib.GetConnector(*parseConfig), nil
 		}
 	}
 
