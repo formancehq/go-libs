@@ -41,9 +41,7 @@ func TestCollect(t *testing.T) {
 		shuffledFiles[i], shuffledFiles[j] = shuffledFiles[j], shuffledFiles[i]
 	})
 
-	migrations, err := CollectMigrationFiles(migrationsFS, "migrations", func(ret string) string {
-		return ret
-	})
+	migrations, err := CollectMigrationFiles(migrationsFS, "migrations")
 	require.NoError(t, err)
 
 	require.Equal(t, sortedFiles, collectionutils.Map(migrations, func(from Migration) string {

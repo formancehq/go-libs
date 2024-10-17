@@ -56,8 +56,8 @@ func (m *Migrator) RegisterMigrations(migrations ...Migration) *Migrator {
 	return m
 }
 
-func (m *Migrator) RegisterMigrationsFromFileSystem(dir embed.FS, rootDir string, transformer func(string) string) *Migrator {
-	migrations, err := CollectMigrationFiles(dir, rootDir, transformer)
+func (m *Migrator) RegisterMigrationsFromFileSystem(dir embed.FS, rootDir string) *Migrator {
+	migrations, err := CollectMigrationFiles(dir, rootDir)
 	if err != nil {
 		panic(err)
 	}
