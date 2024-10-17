@@ -29,35 +29,37 @@ func AddFlags(flags *pflag.FlagSet) {
 type App struct {
 	options []fx.Option
 	output  io.Writer
+	logger  logging.Logger
 }
 
 func (a *App) Run(cmd *cobra.Command) error {
+	if a.logger == nil {
+		loggerHooks := make([]logrus.Hook, 0)
+		otelTraces, _ := cmd.Flags().GetString(otlptraces.OtelTracesExporterFlag)
+		if otelTraces != "" {
+			loggerHooks = append(loggerHooks, otellogrus.NewHook(otellogrus.WithLevels(
+				logrus.PanicLevel,
+				logrus.FatalLevel,
+				logrus.ErrorLevel,
+				logrus.WarnLevel,
+			)))
+		}
 
-	loggerHooks := make([]logrus.Hook, 0)
-	otelTraces, _ := cmd.Flags().GetString(otlptraces.OtelTracesExporterFlag)
-	if otelTraces != "" {
-		loggerHooks = append(loggerHooks, otellogrus.NewHook(otellogrus.WithLevels(
-			logrus.PanicLevel,
-			logrus.FatalLevel,
-			logrus.ErrorLevel,
-			logrus.WarnLevel,
-		)))
+		jsonFormatting, _ := cmd.Flags().GetBool(logging.JsonFormattingLoggerFlag)
+		a.logger = logging.NewDefaultLogger(
+			a.output,
+			IsDebug(cmd),
+			jsonFormatting,
+			loggerHooks...,
+		)
 	}
+	a.logger.Infof("Starting application")
 
-	jsonFormatting, _ := cmd.Flags().GetBool(logging.JsonFormattingLoggerFlag)
-	logger := logging.NewDefaultLogger(
-		a.output,
-		IsDebug(cmd),
-		jsonFormatting,
-		loggerHooks...,
-	)
-	logger.Infof("Starting application")
-
-	app := a.newFxApp(logger)
-	if err := app.Start(logging.ContextWithLogger(cmd.Context(), logger)); err != nil {
+	app := a.newFxApp(a.logger)
+	if err := app.Start(logging.ContextWithLogger(cmd.Context(), a.logger)); err != nil {
 		switch {
 		case errorsutils.IsErrorWithExitCode(err):
-			logger.Errorf("Error: %v", err)
+			a.logger.Errorf("Error: %v", err)
 			// We want to have a specific exit code for the error
 			os.Exit(err.(*errorsutils.ErrorWithExitCode).ExitCode)
 		default:
@@ -79,15 +81,15 @@ func (a *App) Run(cmd *cobra.Command) error {
 		exitCode = shutdownSignal.ExitCode
 	}
 
-	logger.Infof("Stopping app...")
+	a.logger.Infof("Stopping app...")
 	defer func() {
-		logger.Infof("App stopped!")
+		a.logger.Infof("App stopped!")
 	}()
 
 	if err := app.Stop(logging.ContextWithLogger(contextWithLifecycle(
 		context.Background(), // Don't reuse original context as it can have been cancelled, and we really need to properly stop the app
 		lifecycleFromContext(cmd.Context()),
-	), logger)); err != nil {
+	), a.logger)); err != nil {
 		return err
 	}
 
@@ -131,5 +133,12 @@ func New(output io.Writer, options ...fx.Option) *App {
 	return &App{
 		options: options,
 		output:  output,
+	}
+}
+
+func NewWithLogger(l logging.Logger, options ...fx.Option) *App {
+	return &App{
+		options: options,
+		logger:  l,
 	}
 }
