@@ -19,7 +19,8 @@ func TestHcLogAdapterHook(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), hookKey, hookVal)
 	opts := &hclog.LoggerOptions{Level: hclog.Debug, Output: &buf}
-	logger := logging.NewHcLogLoggerAdapter(opts, []string{hookKey})
+	hl := hclog.New(opts)
+	logger := logging.NewHcLogLoggerAdapter(hl, []string{hookKey})
 	logger = logger.WithContext(ctx)
 
 	logger.Error("this is the message")
