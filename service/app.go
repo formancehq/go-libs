@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/formancehq/go-libs/v2/otlp/otlptraces"
-	"github.com/sirupsen/logrus"
-	"github.com/uptrace/opentelemetry-go-extra/otellogrus"
 
 	"github.com/formancehq/go-libs/v2/errorsutils"
 	"github.com/formancehq/go-libs/v2/logging"
@@ -34,23 +32,14 @@ type App struct {
 
 func (a *App) Run(cmd *cobra.Command) error {
 	if a.logger == nil {
-		loggerHooks := make([]logrus.Hook, 0)
 		otelTraces, _ := cmd.Flags().GetString(otlptraces.OtelTracesExporterFlag)
-		if otelTraces != "" {
-			loggerHooks = append(loggerHooks, otellogrus.NewHook(otellogrus.WithLevels(
-				logrus.PanicLevel,
-				logrus.FatalLevel,
-				logrus.ErrorLevel,
-				logrus.WarnLevel,
-			)))
-		}
 
 		jsonFormatting, _ := cmd.Flags().GetBool(logging.JsonFormattingLoggerFlag)
 		a.logger = logging.NewDefaultLogger(
 			a.output,
 			IsDebug(cmd),
 			jsonFormatting,
-			loggerHooks...,
+			otelTraces,
 		)
 	}
 	a.logger.Infof("Starting application")
