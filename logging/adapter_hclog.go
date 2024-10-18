@@ -14,13 +14,11 @@ type HcLogLoggerAdapter struct {
 	backend hclog.Logger
 
 	hooks []string
-	opts  *hclog.LoggerOptions
 }
 
 // NewLogger returns new logging.Logger using passed *hclog.Logger as backend.
-func NewHcLogLoggerAdapter(opts *hclog.LoggerOptions, hookKeys []string) Logger {
-	z := hclog.New(opts)
-	return &HcLogLoggerAdapter{backend: z, opts: opts, hooks: hookKeys}
+func NewHcLogLoggerAdapter(z hclog.Logger, hookKeys []string) Logger {
+	return &HcLogLoggerAdapter{backend: z, hooks: hookKeys}
 }
 
 func (l *HcLogLoggerAdapter) parseArgs(args []any) (msg string, ret []any) {
@@ -74,7 +72,6 @@ func (l *HcLogLoggerAdapter) WithFields(fields map[string]any) Logger {
 		ctx:     l.ctx,
 		backend: l.backend.With(args...),
 		hooks:   l.hooks,
-		opts:    l.opts,
 	}
 }
 
@@ -83,7 +80,6 @@ func (l *HcLogLoggerAdapter) WithField(key string, val any) Logger {
 		ctx:     l.ctx,
 		backend: l.backend.With(key, val),
 		hooks:   l.hooks,
-		opts:    l.opts,
 	}
 }
 
@@ -92,7 +88,6 @@ func (l *HcLogLoggerAdapter) WithContext(ctx context.Context) Logger {
 		ctx:     ctx,
 		backend: l.backend,
 		hooks:   l.hooks,
-		opts:    l.opts,
 	}
 }
 
@@ -114,5 +109,5 @@ func (l *HcLogLoggerAdapter) fireHooks() hclog.Logger {
 }
 
 func (l *HcLogLoggerAdapter) Writer() io.Writer {
-	return l.opts.Output
+	return l.backend.StandardWriter(&hclog.StandardLoggerOptions{})
 }
