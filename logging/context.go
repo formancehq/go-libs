@@ -3,6 +3,8 @@ package logging
 import (
 	"context"
 	"os"
+
+	"github.com/formancehq/go-libs/v2/otlp/otlptraces"
 )
 
 type contextKey string
@@ -12,7 +14,11 @@ var loggerKey contextKey = "_logger"
 func FromContext(ctx context.Context) Logger {
 	l := ctx.Value(loggerKey)
 	if l == nil {
-		return NewDefaultLogger(os.Stderr, false, false)
+		var otelTraces string
+		if flag := ctx.Value(otlptraces.OtelTracesExporterFlag); flag != nil {
+			otelTraces = flag.(string)
+		}
+		return NewDefaultLogger(os.Stderr, false, false, otelTraces)
 	}
 	return l.(Logger)
 }
