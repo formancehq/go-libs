@@ -20,11 +20,11 @@ func WithNewPostgresServer(fn func(p *Deferred[*PostgresServer])) bool {
 	})
 }
 
-func UsePostgresDatabase(server *Deferred[*PostgresServer]) *Deferred[*Database] {
+func UsePostgresDatabase(server *Deferred[*PostgresServer], options ...CreateDatabaseOption) *Deferred[*Database] {
 	ret := &Deferred[*Database]{}
 	BeforeEach(func() {
 		ret.Reset()
-		ret.SetValue(server.GetValue().NewDatabase(GinkgoT()))
+		ret.SetValue(server.GetValue().NewDatabase(GinkgoT(), options...))
 	})
 	return ret
 }
