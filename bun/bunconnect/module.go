@@ -27,9 +27,10 @@ func Module(connectionOptions ConnectionOptions, debug bool) fx.Option {
 
 			return OpenSQLDB(logging.ContextWithLogger(context.Background(), logger), connectionOptions, hooks...)
 		}),
-		fx.Invoke(func(lc fx.Lifecycle, db *bun.DB) {
+		fx.Invoke(func(lc fx.Lifecycle, db *bun.DB, logger logging.Logger) {
 			lc.Append(fx.Hook{
 				OnStop: func(ctx context.Context) error {
+					logger.Info("closing database connection...")
 					return db.Close()
 				},
 			})
