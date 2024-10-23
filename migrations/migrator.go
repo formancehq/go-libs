@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"math"
 
 	"github.com/formancehq/go-libs/v2/time"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -168,7 +169,7 @@ func (m *Migrator) Up(ctx context.Context, db bun.IDB) error {
 }
 
 func (m *Migrator) GetMigrations(ctx context.Context, db bun.IDB) ([]Info, error) {
-	ret := make([]Info, 0)
+	ret := make([]Info, len(m.migrations))
 	if err := m.runInTX(ctx, db, func(ctx context.Context, tx bun.Tx) error {
 		migrationTableName := m.tableName
 		if m.schema != "" {
@@ -180,11 +181,12 @@ func (m *Migrator) GetMigrations(ctx context.Context, db bun.IDB) ([]Info, error
 			Order("version_id").
 			Where("version_id >= 1").
 			Column("version_id", "tstamp").
+			Limit(len(m.migrations)).
 			Scan(ctx, &ret); err != nil {
 			return err
 		}
 
-		for i := 0; i < len(ret); i++ {
+		for i := 0; i < int(math.Min(float64(len(ret)), float64(len(m.migrations)))); i++ {
 			ret[i].Name = m.migrations[i].Name
 			ret[i].State = "DONE"
 		}
