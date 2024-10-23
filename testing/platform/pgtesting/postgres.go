@@ -98,20 +98,42 @@ func (s *PostgresServer) setupDatabase(t T, name string) {
 	}()
 
 	for _, extension := range s.Config.Extensions {
-		_, err = db.ExecContext(sharedlogging.TestingContext(), fmt.Sprintf(`create extension "%s" schema public`, extension))
+		_, err = db.ExecContext(sharedlogging.TestingContext(), fmt.Sprintf(`create extension if not exists "%s" schema public`, extension))
 		require.NoError(t, err)
 	}
 }
 
-func (s *PostgresServer) NewDatabase(t T) *Database {
+type createDatabaseOptions struct {
+	template string
+}
+
+type CreateDatabaseOption func(opts *createDatabaseOptions)
+
+func CreateWithTemplate(template string) CreateDatabaseOption {
+	return func(opts *createDatabaseOptions) {
+		opts.template = template
+	}
+}
+
+func (s *PostgresServer) NewDatabase(t T, options ...CreateDatabaseOption) *Database {
 	db, err := sql.Open("pgx", s.GetDSN())
 	require.NoError(t, err)
 	defer func() {
 		require.Nil(t, db.Close())
 	}()
 
-	databaseName := uuid.NewString()
-	_, err = db.ExecContext(sharedlogging.TestingContext(), fmt.Sprintf(`create database "%s"`, databaseName))
+	databaseOptions := &createDatabaseOptions{}
+	for _, option := range options {
+		option(databaseOptions)
+	}
+
+	databaseName := uuid.NewString()[:8]
+	createDatabaseQuery := fmt.Sprintf(`create database "%s"`, databaseName)
+	if databaseOptions.template != "" {
+		createDatabaseQuery += fmt.Sprintf(` template "%s"`, databaseOptions.template)
+	}
+
+	_, err = db.ExecContext(sharedlogging.TestingContext(), createDatabaseQuery)
 	require.NoError(t, err)
 
 	s.setupDatabase(t, databaseName)
