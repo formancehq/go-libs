@@ -94,7 +94,7 @@ func NewDefaultLogger(
 	w io.Writer,
 	debug,
 	formatJSON bool,
-	otelTraces string,
+	otelTraces bool,
 ) *LogrusLogger {
 	l := logrus.New()
 	l.SetOutput(w)
@@ -118,8 +118,8 @@ func NewDefaultLogger(
 	return NewLogrus(l)
 }
 
-func SetHooks(l *logrus.Logger, otelTraces string) {
-	if otelTraces == "" {
+func SetHooks(l *logrus.Logger, otelTraces bool) {
+	if !otelTraces {
 		return
 	}
 

@@ -14,7 +14,7 @@ func FromContext(ctx context.Context) Logger {
 	if l == nil {
 		// if a logger is not set in the context we initialize a new one without tracing hooks configured
 		// this is mostly expected to happen in testing contexts as the app root should be propagating the logger when creating contexts
-		return NewDefaultLogger(os.Stderr, false, false, "")
+		return NewDefaultLogger(os.Stderr, false, false, false)
 	}
 	return l.(Logger)
 }

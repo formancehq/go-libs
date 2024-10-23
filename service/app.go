@@ -39,7 +39,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 			a.output,
 			IsDebug(cmd),
 			jsonFormatting,
-			otelTraces,
+			otelTraces != "",
 		)
 	}
 	a.logger.Infof("Starting application")
