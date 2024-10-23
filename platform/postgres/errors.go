@@ -25,6 +25,8 @@ func ResolveError(err error) error {
 				return ErrDeadlockDetected
 			case "40001":
 				return ErrSerialization
+			case "42P01":
+				return ErrMissingTable
 			}
 		}
 
@@ -38,6 +40,7 @@ var (
 	ErrNotFound         = errors.New("not found")
 	ErrDeadlockDetected = errors.New("deadlock detected")
 	ErrSerialization    = errors.New("serialization error")
+	ErrMissingTable     = errors.New("missing table")
 )
 
 func IsNotFoundError(err error) bool {
