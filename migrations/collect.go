@@ -54,8 +54,8 @@ func CollectMigrationFiles(fs MigrationFileSystem, rootDir string) ([]Migration,
 
 		ret[i] = Migration{
 			Name: entry,
-			UpWithContext: func(ctx context.Context, tx bun.Tx) error {
-				_, err := tx.ExecContext(ctx, string(fileContent))
+			Up: func(ctx context.Context, db bun.IDB) error {
+				_, err := db.ExecContext(ctx, string(fileContent))
 				return err
 			},
 		}

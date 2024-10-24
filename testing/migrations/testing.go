@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pkg/errors"
+
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/formancehq/go-libs/v2/migrations"
 	"github.com/stretchr/testify/require"
@@ -34,8 +36,10 @@ func (mt *MigrationTest) Run() {
 			}
 		}
 
-		more, err := mt.migrator.UpByOne(ctx, mt.db)
-		require.NoError(mt.t, err)
+		err := mt.migrator.UpByOne(ctx, mt.db)
+		if !errors.Is(err, migrations.ErrAlreadyUpToDate) {
+			require.NoError(mt.t, err)
+		}
 
 		for _, hook := range mt.hooks[i] {
 			if hook.After != nil {
@@ -45,7 +49,7 @@ func (mt *MigrationTest) Run() {
 
 		i++
 
-		if !more {
+		if errors.Is(err, migrations.ErrAlreadyUpToDate) {
 			break
 		}
 	}
