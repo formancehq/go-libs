@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sirupsen/logrus"
+	"github.com/uptrace/opentelemetry-go-extra/otellogrus"
 )
 
 type LogrusLogger struct {
@@ -89,7 +90,12 @@ func Testing() *LogrusLogger {
 	return NewLogrus(logger)
 }
 
-func NewDefaultLogger(w io.Writer, debug, formatJSON bool, hooks ...logrus.Hook) *LogrusLogger {
+func NewDefaultLogger(
+	w io.Writer,
+	debug,
+	formatJSON bool,
+	otelTraces bool,
+) *LogrusLogger {
 	l := logrus.New()
 	l.SetOutput(w)
 	if debug {
@@ -107,10 +113,24 @@ func NewDefaultLogger(w io.Writer, debug, formatJSON bool, hooks ...logrus.Hook)
 	}
 
 	l.SetFormatter(formatter)
+	SetHooks(l, otelTraces)
 
+	return NewLogrus(l)
+}
+
+func SetHooks(l *logrus.Logger, otelTraces bool) {
+	if !otelTraces {
+		return
+	}
+
+	hooks := make([]logrus.Hook, 0)
+	hooks = append(hooks, otellogrus.NewHook(otellogrus.WithLevels(
+		logrus.PanicLevel,
+		logrus.FatalLevel,
+		logrus.ErrorLevel,
+		logrus.WarnLevel,
+	)))
 	for _, hook := range hooks {
 		l.AddHook(hook)
 	}
-
-	return NewLogrus(l)
 }
