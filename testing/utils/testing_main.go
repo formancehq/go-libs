@@ -19,6 +19,9 @@ func (t *TestingTForMain) Errorf(format string, args ...interface{}) {
 	_, _ = fmt.Fprintf(os.Stderr, format, args...)
 }
 
+func (t *TestingTForMain) TempDir() string {
+	return os.TempDir()
+}
 func (t *TestingTForMain) FailNow() {
 	t.callCleanup()
 	os.Exit(1)
