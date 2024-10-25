@@ -3,7 +3,6 @@ package migrations
 import (
 	"fmt"
 	"io/fs"
-	"math/rand"
 	"path/filepath"
 	"testing"
 
@@ -18,14 +17,18 @@ func TestCollect(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	migrationsFS := NewMockMigrationFileSystem(ctrl)
 
-	const numberOfFiles = 100
+	const numberOfMigrations = 100
 
 	sortedFiles := make([]string, 0)
-	for i := 0; i < numberOfFiles; i++ {
-		filename := fmt.Sprintf("%d-migrate.sql", i)
+	for i := 0; i < numberOfMigrations; i++ {
+		filename := fmt.Sprintf("%d", i)
 		sortedFiles = append(sortedFiles, filename)
 
-		migrationsFS.EXPECT().ReadFile(filepath.Join("migrations", filename)).Return([]byte(""), nil)
+		migrationsFS.EXPECT().
+			ReadFile(filepath.Join("migrations", filename, "notes.yaml")).Return([]byte(fmt.Sprintf("name: %d", i)), nil)
+
+		migrationsFS.EXPECT().
+			ReadFile(filepath.Join("migrations", filename, "up.sql")).Return([]byte(""), nil)
 	}
 
 	migrationsFS.EXPECT().
@@ -34,14 +37,7 @@ func TestCollect(t *testing.T) {
 			return mockDirEntry(from)
 		}), nil)
 
-	// shuffle migration names to ensure the collector sort them
-	shuffledFiles := make([]string, numberOfFiles)
-	copy(shuffledFiles, sortedFiles)
-	rand.Shuffle(len(sortedFiles), func(i, j int) {
-		shuffledFiles[i], shuffledFiles[j] = shuffledFiles[j], shuffledFiles[i]
-	})
-
-	migrations, err := CollectMigrationFiles(migrationsFS, "migrations")
+	migrations, err := CollectMigrations(migrationsFS, "migrations")
 	require.NoError(t, err)
 
 	require.Equal(t, sortedFiles, collectionutils.Map(migrations, func(from Migration) string {

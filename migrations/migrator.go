@@ -38,6 +38,13 @@ type Migrator struct {
 	tableName    string
 }
 
+func (m *Migrator) GetSchema() string {
+	if m.schema == "" {
+		return "public"
+	}
+	return m.schema
+}
+
 func (m *Migrator) RegisterMigrations(migrations ...Migration) *Migrator {
 	m.migrations = append(m.migrations, migrations...)
 	return m
