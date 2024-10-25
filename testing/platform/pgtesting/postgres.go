@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/google/uuid"
 
 	sharedlogging "github.com/formancehq/go-libs/v2/logging"
 	"github.com/ory/dockertest/v3"

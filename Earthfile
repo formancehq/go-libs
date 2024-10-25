@@ -4,6 +4,10 @@ IMPORT github.com/formancehq/earthly:v0.16.0 AS core
 
 FROM core+base-image
 
+CACHE --sharing=shared --id go-mod-cache /go/pkg/mod
+CACHE --sharing=shared --id golangci-cache /root/.cache/golangci-lint
+CACHE --sharing=shared --id go-cache /root/.cache/go-build
+
 sources:
     WORKDIR src
     COPY --dir . /src
@@ -11,6 +15,8 @@ sources:
 
 tidy:
     FROM core+builder-image
+    CACHE --id go-mod-cache /go/pkg/mod
+    CACHE --id go-cache /root/.cache/go-build
     WORKDIR /src
     COPY --dir (+sources/src/*) /src
     DO --pass-args core+GO_TIDY
@@ -19,6 +25,9 @@ tidy:
 
 lint:
     FROM core+builder-image
+    CACHE --id go-mod-cache /go/pkg/mod
+    CACHE --id go-cache /root/.cache/go-build
+    CACHE --id golangci-cache /root/.cache/golangci-lint
     WORKDIR /src
     COPY --dir (+tidy/src/*) /src
     DO --pass-args core+GO_LINT
@@ -26,6 +35,8 @@ lint:
 
 tests:
     FROM core+builder-image
+    CACHE --id go-mod-cache /go/pkg/mod
+    CACHE --id go-cache /root/.cache/go-build
     WORKDIR /src
     COPY --dir (+tidy/src/*) /src
     WITH DOCKER
@@ -40,6 +51,8 @@ pre-commit:
 
 generate:
     FROM core+builder-image
+    CACHE --id go-mod-cache /go/pkg/mod
+    CACHE --id go-cache /root/.cache/go-build
     RUN apk update && apk add openjdk11
     DO --pass-args core+GO_INSTALL --package=go.uber.org/mock/mockgen@latest
     WORKDIR /src
