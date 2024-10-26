@@ -242,9 +242,6 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 		return ErrAlreadyUpToDate
 	}
 
-	// notes(gfyrag): run migration using db provided and not the tx we just created.
-	// we need this tx to be able to lock the migrations table,
-	// but we want migrations has the control and start a transaction if they need to.
 	logging.FromContext(ctx).Debugf("Running migration %d: %s", lastVersion, m.migrations[lastVersion].Name)
 	if err := m.migrations[lastVersion].Up(ctx, db); err != nil {
 		return fmt.Errorf("failed to run migration '%s': %w", m.migrations[lastVersion].Name, err)
