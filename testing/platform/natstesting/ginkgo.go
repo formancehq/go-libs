@@ -7,7 +7,7 @@ import (
 )
 
 func WithNewNatsServer(logger logging.Logger, fn func(p *Deferred[*NatsServer])) bool {
-	return Context("With new postgres server", func() {
+	return Context("With new nats server", func() {
 		ret := NewDeferred[*NatsServer]()
 		BeforeEach(func() {
 			ret.Reset()
