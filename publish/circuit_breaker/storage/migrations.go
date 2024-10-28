@@ -27,12 +27,13 @@ func registerMigrations(migrator *migrations.Migrator, schema string) {
 
 func Migrate(ctx context.Context, schema string, db *bun.DB) error {
 	migrator := migrations.NewMigrator(
+		db,
 		migrations.WithTableName("circuit_breaker_migrations"),
 	)
 
 	registerMigrations(migrator, schema)
 
-	return migrator.Up(ctx, db)
+	return migrator.Up(ctx)
 }
 
 const initialSchema = `

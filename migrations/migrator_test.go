@@ -87,7 +87,7 @@ func TestMigrationsConcurrently(t *testing.T) {
 			migrationStarted := make(chan struct{})
 			terminatedMigration := make(chan struct{})
 
-			migrator1 := NewMigrator(testCase.options...)
+			migrator1 := NewMigrator(bunDB, testCase.options...)
 			migrator1.RegisterMigrations(Migration{
 				Up: func(ctx context.Context, db bun.IDB) error {
 					close(migrationStarted)
@@ -105,12 +105,12 @@ func TestMigrationsConcurrently(t *testing.T) {
 
 			migrator1Err := make(chan error, 1)
 			go func() {
-				migrator1Err <- migrator1.UpByOne(ctx, bunDB)
+				migrator1Err <- migrator1.UpByOne(ctx)
 			}()
 
 			<-migrationStarted
 
-			migrator2 := NewMigrator(testCase.options...)
+			migrator2 := NewMigrator(bunDB, testCase.options...)
 			migrator2.RegisterMigrations(Migration{
 				Up: func(ctx context.Context, db bun.IDB) error {
 					return errors.New("should not have been called")
@@ -119,7 +119,7 @@ func TestMigrationsConcurrently(t *testing.T) {
 
 			migrator2Err := make(chan error, 1)
 			go func() {
-				migrator2Err <- migrator2.UpByOne(ctx, bunDB)
+				migrator2Err <- migrator2.UpByOne(ctx)
 			}()
 
 			close(terminatedMigration)
@@ -154,13 +154,13 @@ func TestMigrationsMissingSchema(t *testing.T) {
 
 	ctx := logging.TestingContext()
 
-	migrator1 := NewMigrator(WithSchema("foo", false))
+	migrator1 := NewMigrator(bunDB, WithSchema("foo", false))
 	migrator1.RegisterMigrations(Migration{
 		Up: func(ctx context.Context, db bun.IDB) error {
 			return nil
 		},
 	})
 
-	err := migrator1.UpByOne(ctx, bunDB)
+	err := migrator1.UpByOne(ctx)
 	require.True(t, errors.Is(err, postgres.ErrMissingSchema))
 }

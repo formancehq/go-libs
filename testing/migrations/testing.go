@@ -36,7 +36,7 @@ func (mt *MigrationTest) Run() {
 			}
 		}
 
-		err := mt.migrator.UpByOne(ctx, mt.db)
+		err := mt.migrator.UpByOne(ctx)
 		if !errors.Is(err, migrations.ErrAlreadyUpToDate) {
 			require.NoError(mt.t, err)
 		}

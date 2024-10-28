@@ -70,6 +70,7 @@ require (
 	go.uber.org/fx v1.22.2
 	go.uber.org/mock v0.4.0
 	go.uber.org/zap v1.27.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -214,5 +215,4 @@ require (
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
