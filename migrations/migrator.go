@@ -6,10 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
+
+	"github.com/jackc/pgxlisten"
 
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/formancehq/go-libs/v2/platform/postgres"
 	"github.com/formancehq/go-libs/v2/time"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/uptrace/bun"
 )
@@ -25,18 +32,19 @@ var (
 )
 
 type Info struct {
-	Version string    `json:"version" bun:"version_id"`
-	Name    string    `json:"name" bun:"-"`
-	State   string    `json:"state,omitempty" bun:"-"`
-	Date    time.Time `json:"date,omitempty" bun:"tstamp"`
+	Version      string     `json:"version"`
+	Name         string     `json:"name"`
+	State        string     `json:"state,omitempty"`
+	Date         time.Time  `json:"date,omitempty"`
+	TerminatedAt *time.Time `json:"terminatedAt,omitempty"`
+	Progress     *int       `json:"progress,omitempty"`
 }
 
 type Migrator struct {
-	migrations   []Migration
-	schema       string
-	createSchema bool
-	tableName    string
-	db           *bun.DB
+	migrations []Migration
+	schema     string
+	tableName  string
+	db         *bun.DB
 }
 
 func (m *Migrator) GetSchema() string {
@@ -58,12 +66,27 @@ func (m *Migrator) getVersionsTable() string {
 	return fmt.Sprintf(`"%s"`, m.tableName)
 }
 
-func (m *Migrator) createVersionTableIfNeeded(ctx context.Context) error {
-	_, err := m.db.NewCreateTable().
-		Model(&VersionTable{}).
-		ModelTableExpr(m.getVersionsTable()).
-		IfNotExists().
-		Exec(ctx)
+func (m *Migrator) initSchema(ctx context.Context) error {
+	_, err := m.db.Exec(`
+		create schema if not exists "` + m.GetSchema() + `";
+
+		set search_path = '` + m.GetSchema() + `';
+
+		create table if not exists ` + m.tableName + ` (
+			version_id bigint not null,
+			is_applied boolean not null default false,
+			tstamp timestamp not null default now(),
+			id serial primary key
+		);
+
+		alter table ` + m.tableName + `
+		add column if not exists max_counter numeric,
+		add column if not exists actual_counter numeric,
+		add column if not exists terminated_at timestamp;
+	
+		create unique index if not exists 
+		idx_version_id on ` + m.tableName + ` (version_id);
+	`)
 	if err != nil {
 		return postgres.ResolveError(err)
 	}
@@ -74,8 +97,17 @@ func (m *Migrator) createVersionTableIfNeeded(ctx context.Context) error {
 	}
 
 	if lastVersion == -1 {
-		if err := m.insertVersion(ctx, 0); err != nil {
-			return fmt.Errorf("failed to insert version: %w", err)
+		// Insert a first noop row to keep compatibility with goose
+		_, err := m.db.NewInsert().
+			Model(&Version{
+				VersionID: 0,
+				IsApplied: true,
+				Timestamp: time.Now(),
+			}).
+			ModelTableExpr(m.getVersionsTable()).
+			Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
 		}
 	}
 
@@ -83,12 +115,13 @@ func (m *Migrator) createVersionTableIfNeeded(ctx context.Context) error {
 }
 
 func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
-	version := &VersionTable{}
+	version := &Version{}
 	if err := m.db.NewSelect().
 		Model(version).
 		ModelTableExpr(m.getVersionsTable()).
 		Order("version_id DESC").
 		Limit(1).
+		Where("is_applied").
 		ColumnExpr("*").
 		Scan(ctx); err != nil {
 		err = postgres.ResolveError(err)
@@ -105,18 +138,6 @@ func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
 	return version.VersionID, nil
 }
 
-func (m *Migrator) insertVersion(ctx context.Context, version int) error {
-	_, err := m.db.NewInsert().
-		Model(&VersionTable{
-			VersionID: version,
-			IsApplied: true,
-			Timestamp: time.Now(),
-		}).
-		ModelTableExpr(m.getVersionsTable()).
-		Exec(ctx)
-	return postgres.ResolveError(err)
-}
-
 func (m *Migrator) Up(ctx context.Context) error {
 	for {
 		err := m.UpByOne(ctx)
@@ -130,24 +151,48 @@ func (m *Migrator) Up(ctx context.Context) error {
 }
 
 func (m *Migrator) GetMigrations(ctx context.Context) ([]Info, error) {
-	ret := make([]Info, len(m.migrations))
+	ret := make([]Info, 0, len(m.migrations))
+	versions := make([]Version, 0)
 
 	if err := m.db.NewSelect().
 		TableExpr(m.getVersionsTable()).
 		Order("version_id").
 		Where("version_id >= 1").
-		Column("version_id", "tstamp").
 		Limit(len(m.migrations)).
-		Scan(ctx, &ret); err != nil {
+		Scan(ctx, &versions); err != nil {
 		return nil, postgres.ResolveError(err)
 	}
 
-	for i := 0; i < int(math.Min(float64(len(ret)), float64(len(m.migrations)))); i++ {
-		ret[i].Name = m.migrations[i].Name
-		ret[i].State = "DONE"
+	for i := 0; i < int(math.Min(float64(len(versions)), float64(len(m.migrations)))); i++ {
+		var (
+			state    string
+			progress *int
+		)
+		if versions[i].IsApplied {
+			state = "DONE"
+		} else {
+			state = "PROGRESS"
+			if versions[i].MaxCounter > 0 {
+				completion := versions[i].ActualCounter * 100 / versions[i].MaxCounter
+				progress = &completion
+			}
+		}
+		ret = append(ret, Info{
+			Version: fmt.Sprint(versions[i].VersionID),
+			Name:    m.migrations[i].Name,
+			State:   state,
+			Date:    versions[i].Timestamp,
+			TerminatedAt: func() *time.Time {
+				if versions[i].TerminatedAt.IsZero() {
+					return nil
+				}
+				return &versions[i].TerminatedAt
+			}(),
+			Progress: progress,
+		})
 	}
 
-	for i := len(ret); i < len(m.migrations); i++ {
+	for i := len(versions); i < len(m.migrations); i++ {
 		ret = append(ret, Info{
 			Version: fmt.Sprint(i),
 			Name:    m.migrations[i].Name,
@@ -170,28 +215,7 @@ func (m *Migrator) IsUpToDate(ctx context.Context) (bool, error) {
 	return version == len(m.migrations), nil
 }
 
-func (m *Migrator) createSchemaIfNeeded(ctx context.Context) error {
-	if m.schema != "" && m.createSchema {
-		_, err := m.db.ExecContext(ctx, fmt.Sprintf(`create schema if not exists "%s"`, m.schema))
-		if err != nil {
-			return postgres.ResolveError(err)
-		}
-	}
-
-	return nil
-}
-
 func (m *Migrator) upByOne(ctx context.Context) error {
-
-	err := m.createSchemaIfNeeded(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create schema: %w", err)
-	}
-
-	err = m.createVersionTableIfNeeded(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create version table: %w", err)
-	}
 
 	// We need to lock something to prevent concurrent migration
 	// We could have started a transaction and lock and full table,
@@ -227,15 +251,117 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 		}
 	}()
 
+	err = m.initSchema(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create version table: %w", err)
+	}
+
 	lastVersion, err := m.GetLastVersion(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get last version: %w", err)
 	}
+	logging.FromContext(ctx).Debugf("Detected last version: %d", lastVersion)
 
 	// At this point, there is no pending migration occurring
 	if len(m.migrations) == lastVersion {
+		logging.FromContext(ctx).Debug("All migrations done!")
 		// no more migration to play
 		return ErrAlreadyUpToDate
+	}
+
+	_, err = conn.NewInsert().
+		Model(&Version{
+			VersionID: lastVersion + 1,
+			IsApplied: false,
+			Timestamp: time.Now(),
+		}).
+		ModelTableExpr(m.getVersionsTable()).
+		On("conflict (version_id) do nothing").
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
+	}
+
+	listeningContext, cancel := context.WithCancel(ctx)
+	listenerStopped := make(chan struct{})
+	defer func() {
+		cancel()
+		<-listenerStopped
+	}()
+
+	if err := conn.Raw(func(driverConn any) error {
+		channel := "migrations-" + m.GetSchema()
+		logging.FromContext(ctx).Debugf("Listening for migrations notifications on " + channel)
+
+		listener := pgxlisten.Listener{
+			Connect: func(ctx context.Context) (*pgx.Conn, error) {
+				return pgx.Connect(ctx, driverConn.(*stdlib.Conn).Conn().Config().ConnString())
+			},
+			LogError: func(ctx context.Context, err error) {
+				if !errors.Is(err, context.Canceled) {
+					logging.FromContext(ctx).Errorf("pgxlisten error: %v", err)
+				}
+			},
+		}
+		listener.Handle(channel, pgxlisten.HandlerFunc(func(ctx context.Context, notification *pgconn.Notification, conn *pgx.Conn) error {
+
+			logging.FromContext(ctx).Debugf("Received notification: %s", notification.Payload)
+
+			switch {
+			case strings.HasPrefix(notification.Payload, "init: "):
+				value := strings.TrimPrefix(notification.Payload, "init: ")
+				maxCounter, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					logging.FromContext(ctx).Errorf("failed to parse max counter: %v", err)
+					return nil
+				}
+				_, err = m.db.NewUpdate().
+					Model(&Version{}).
+					ModelTableExpr(m.getVersionsTable()).
+					Where("version_id = ?", lastVersion+1).
+					Set("max_counter = ?", maxCounter).
+					Where("max_counter is null").
+					Exec(ctx)
+				if err != nil {
+					logging.FromContext(ctx).Errorf("failed to update max counter: %v", err)
+					return nil
+				}
+			case strings.HasPrefix(notification.Payload, "continue: "):
+				value := strings.TrimPrefix(notification.Payload, "continue: ")
+				increment, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					logging.FromContext(ctx).Errorf("failed to parse actual counter: %v", err)
+					return nil
+				}
+				_, err = m.db.NewUpdate().
+					Model(&Version{}).
+					ModelTableExpr(m.getVersionsTable()).
+					Where("version_id = ?", lastVersion+1).
+					Set("actual_counter = coalesce(actual_counter, 0) + ?", increment).
+					Exec(ctx)
+				if err != nil {
+					logging.FromContext(ctx).Errorf("failed to update actual counter: %v", err)
+					return nil
+				}
+			default:
+				logging.FromContext(ctx).Errorf("unknown notification: %s", notification.Payload)
+			}
+
+			return nil
+		}))
+		go func() {
+			if err := listener.Listen(listeningContext); err != nil {
+				if errors.Is(err, context.Canceled) {
+					close(listenerStopped)
+					return
+				}
+				panic(err)
+			}
+		}()
+
+		return nil
+	}); err != nil {
+		logging.FromContext(ctx).Errorf("Failed so setup migrations listener: %v", err)
 	}
 
 	logging.FromContext(ctx).Debugf("Running migration %d: %s", lastVersion, m.migrations[lastVersion].Name)
@@ -243,9 +369,16 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 		return fmt.Errorf("failed to run migration '%s': %w", m.migrations[lastVersion].Name, err)
 	}
 
-	newVersion := lastVersion + 1
-	if err := m.insertVersion(ctx, newVersion); err != nil {
-		return fmt.Errorf("failed to insert new version: %w", err)
+	logging.FromContext(ctx).Debugf("Migration %d done", lastVersion)
+	_, err = m.db.NewUpdate().
+		Model(&Version{}).
+		Where("version_id = ? and not is_applied", lastVersion+1).
+		Set("is_applied = true").
+		Set("terminated_at = ?", time.Now()).
+		ModelTableExpr(m.getVersionsTable()).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to insert new version: %w", postgres.ResolveError(err))
 	}
 
 	return nil
@@ -268,10 +401,9 @@ func NewMigrator(db *bun.DB, opts ...Option) *Migrator {
 
 type Option func(m *Migrator)
 
-func WithSchema(schema string, create bool) Option {
+func WithSchema(schema string) Option {
 	return func(m *Migrator) {
 		m.schema = schema
-		m.createSchema = create
 	}
 }
 
