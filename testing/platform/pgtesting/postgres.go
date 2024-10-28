@@ -8,13 +8,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
+
 	sharedlogging "github.com/formancehq/go-libs/v2/logging"
 	"github.com/ory/dockertest/v3"
 
 	"github.com/formancehq/go-libs/v2/bun/bunconnect"
 
 	"github.com/formancehq/go-libs/v2/testing/docker"
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -105,6 +106,7 @@ func (s *PostgresServer) setupDatabase(t T, name string) {
 
 type createDatabaseOptions struct {
 	template string
+	name     string
 }
 
 type CreateDatabaseOption func(opts *createDatabaseOptions)
@@ -112,6 +114,12 @@ type CreateDatabaseOption func(opts *createDatabaseOptions)
 func CreateWithTemplate(template string) CreateDatabaseOption {
 	return func(opts *createDatabaseOptions) {
 		opts.template = template
+	}
+}
+
+func WithName(name string) CreateDatabaseOption {
+	return func(opts *createDatabaseOptions) {
+		opts.name = name
 	}
 }
 
@@ -127,7 +135,10 @@ func (s *PostgresServer) NewDatabase(t T, options ...CreateDatabaseOption) *Data
 		option(databaseOptions)
 	}
 
-	databaseName := uuid.NewString()[:8]
+	databaseName := databaseOptions.name
+	if databaseName == "" {
+		databaseName = uuid.NewString()[:8]
+	}
 	createDatabaseQuery := fmt.Sprintf(`create database "%s"`, databaseName)
 	if databaseOptions.template != "" {
 		createDatabaseQuery += fmt.Sprintf(` template "%s"`, databaseOptions.template)

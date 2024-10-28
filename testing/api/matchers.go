@@ -9,8 +9,9 @@ import (
 )
 
 type HaveErrorCodeMatcher struct {
-	lastSeen string
-	expected string
+	lastSeen        string
+	lastSeenMessage string
+	expected        string
 }
 
 func (s *HaveErrorCodeMatcher) Match(actual interface{}) (success bool, err error) {
@@ -24,6 +25,7 @@ func (s *HaveErrorCodeMatcher) Match(actual interface{}) (success bool, err erro
 		return false, nil
 	}
 	s.lastSeen = errorResponse.ErrorCode
+	s.lastSeenMessage = errorResponse.ErrorMessage
 
 	return errorResponse.ErrorCode == s.expected, nil
 }
@@ -32,7 +34,7 @@ func (s *HaveErrorCodeMatcher) FailureMessage(actual interface{}) (message strin
 	if actual == nil {
 		return fmt.Sprintf("error should have code %s but is nil", s.expected)
 	}
-	return fmt.Sprintf("error should have code %s but have %s", s.expected, s.lastSeen)
+	return fmt.Sprintf("error should have code %s but have %s with message '%s'", s.expected, s.lastSeen, s.lastSeenMessage)
 }
 
 func (s *HaveErrorCodeMatcher) NegatedFailureMessage(actual interface{}) (message string) {
