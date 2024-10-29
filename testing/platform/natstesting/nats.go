@@ -3,6 +3,7 @@ package natstesting
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/formancehq/go-libs/v2/logging"
@@ -20,6 +21,7 @@ type NatsT interface {
 
 type NatsServer struct {
 	URL string
+	mu  sync.Mutex
 
 	*nats.Conn `json:"-"`
 }
@@ -29,6 +31,9 @@ func (s *NatsServer) ClientURL() string {
 }
 
 func (s *NatsServer) initClient() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Conn != nil {
 		return nil
 	}
