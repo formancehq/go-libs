@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/formancehq/go-libs/v2/platform/postgres"
 	"github.com/formancehq/go-libs/v2/testing/utils"
 	"github.com/google/uuid"
 
@@ -57,104 +56,103 @@ func TestMain(m *testing.M) {
 	})
 }
 
+func TestMigrationsListen(t *testing.T) {
+	t.Parallel()
+
+	ctx := logging.TestingContext()
+
+	schema := uuid.NewString()[:8]
+	migrator := NewMigrator(bunDB, WithSchema(schema))
+	migrator.RegisterMigrations(Migration{
+		Up: func(ctx context.Context, db bun.IDB) error {
+			_, err := db.ExecContext(ctx, `
+				do $$
+				begin
+					perform pg_notify('migrations-`+schema+`', 'init: 100');
+					for ind in 1..10 loop
+						perform pg_notify('migrations-`+schema+`', 'continue: 10');
+						perform pg_sleep(0.1);
+					end loop;
+				end
+				$$;
+			`)
+			return err
+		},
+	})
+	require.NoError(t, migrator.Up(ctx))
+
+	// todo: what test at this point?
+}
+
 func TestMigrationsConcurrently(t *testing.T) {
 	t.Parallel()
 
 	ctx := logging.TestingContext()
 
-	type testCase struct {
-		name        string
-		options     []Option
-		expectError error
+	migrationStarted := make(chan struct{})
+	terminatedMigration := make(chan struct{})
+
+	options := []Option{
+		WithSchema(uuid.NewString()[:8]),
 	}
-
-	testCases := []testCase{
-		{
-			name: "default",
-		},
-		{
-			name: "with schema and create",
-			options: []Option{
-				WithSchema(uuid.NewString()[:8], true),
-			},
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			migrationStarted := make(chan struct{})
-			terminatedMigration := make(chan struct{})
-
-			migrator1 := NewMigrator(bunDB, testCase.options...)
-			migrator1.RegisterMigrations(Migration{
-				Up: func(ctx context.Context, db bun.IDB) error {
-					close(migrationStarted)
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-terminatedMigration:
-						return nil
-					}
-				},
-			})
-
-			ctx, cancel := context.WithTimeout(ctx, time.Second)
-			t.Cleanup(cancel)
-
-			migrator1Err := make(chan error, 1)
-			go func() {
-				migrator1Err <- migrator1.UpByOne(ctx)
-			}()
-
-			<-migrationStarted
-
-			migrator2 := NewMigrator(bunDB, testCase.options...)
-			migrator2.RegisterMigrations(Migration{
-				Up: func(ctx context.Context, db bun.IDB) error {
-					return errors.New("should not have been called")
-				},
-			})
-
-			migrator2Err := make(chan error, 1)
-			go func() {
-				migrator2Err <- migrator2.UpByOne(ctx)
-			}()
-
-			close(terminatedMigration)
-
+	migrator1 := NewMigrator(bunDB, options...)
+	migrator1.RegisterMigrations(Migration{
+		Up: func(ctx context.Context, db bun.IDB) error {
+			close(migrationStarted)
 			select {
-			case err := <-migrator1Err:
-				if testCase.expectError != nil {
-					require.True(t, errors.Is(err, testCase.expectError))
-				} else {
-					require.NoError(t, err)
-				}
-
-				select {
-				case err := <-migrator2Err:
-					if testCase.expectError != nil {
-						require.True(t, errors.Is(err, testCase.expectError))
-					} else {
-						require.True(t, errors.Is(err, ErrAlreadyUpToDate))
-					}
-				case <-time.After(time.Second):
-					t.Fatal("migrator2 did not finish")
-				}
-			case <-time.After(time.Second):
-				t.Fatal("migrator1 did not finish")
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-terminatedMigration:
+				return nil
 			}
-		})
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	t.Cleanup(cancel)
+
+	migrator1Err := make(chan error, 1)
+	go func() {
+		migrator1Err <- migrator1.UpByOne(ctx)
+	}()
+
+	<-migrationStarted
+
+	migrator2 := NewMigrator(bunDB, options...)
+	migrator2.RegisterMigrations(Migration{
+		Up: func(ctx context.Context, db bun.IDB) error {
+			return errors.New("should not have been called")
+		},
+	})
+
+	migrator2Err := make(chan error, 1)
+	go func() {
+		migrator2Err <- migrator2.UpByOne(ctx)
+	}()
+
+	close(terminatedMigration)
+
+	select {
+	case err := <-migrator1Err:
+		require.NoError(t, err)
+
+		select {
+		case err := <-migrator2Err:
+			require.True(t, errors.Is(err, ErrAlreadyUpToDate))
+		case <-time.After(time.Second):
+			t.Fatal("migrator2 did not finish")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("migrator1 did not finish")
 	}
 }
 
-func TestMigrationsMissingSchema(t *testing.T) {
+func TestMigrationsNominal(t *testing.T) {
 	t.Parallel()
 
 	ctx := logging.TestingContext()
 
-	migrator1 := NewMigrator(bunDB, WithSchema("foo", false))
+	migrator1 := NewMigrator(bunDB, WithSchema(uuid.NewString()[:8]))
 	migrator1.RegisterMigrations(Migration{
 		Up: func(ctx context.Context, db bun.IDB) error {
 			return nil
@@ -162,5 +160,5 @@ func TestMigrationsMissingSchema(t *testing.T) {
 	})
 
 	err := migrator1.UpByOne(ctx)
-	require.True(t, errors.Is(err, postgres.ErrMissingSchema))
+	require.NoError(t, err)
 }

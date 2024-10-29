@@ -154,3 +154,11 @@ func ParseDuration(v string) (time.Duration, error) {
 func Until(v Time) Duration {
 	return time.Until(v.Time)
 }
+
+func After(d Duration) chan Time {
+	ret := make(chan Time, 1)
+	go func() {
+		ret <- New(<-time.After(d))
+	}()
+	return ret
+}

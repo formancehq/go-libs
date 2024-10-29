@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/uptrace/opentelemetry-go-extra/otelsql"
-
 	"github.com/formancehq/go-libs/v2/logging"
 
 	"github.com/uptrace/bun"
@@ -37,7 +35,7 @@ func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.Quer
 	)
 	if options.Connector == nil {
 		logging.FromContext(ctx).Debugf("Opening database with default connector and dsn: '%s'", options.DatabaseSourceName)
-		sqldb, err = otelsql.Open("pgx", options.DatabaseSourceName)
+		sqldb, err = sql.Open("pgx", options.DatabaseSourceName)
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +45,7 @@ func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.Quer
 		if err != nil {
 			return nil, err
 		}
-		sqldb = otelsql.OpenDB(connector)
+		sqldb = sql.OpenDB(connector)
 	}
 	sqldb.SetMaxIdleConns(options.MaxIdleConns)
 	if options.ConnMaxIdleTime != 0 {
