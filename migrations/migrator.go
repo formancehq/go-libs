@@ -65,7 +65,7 @@ func (m *Migrator) createVersionTableIfNeeded(ctx context.Context) error {
 		IfNotExists().
 		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create version table: %w", postgres.ResolveError(err))
+		return postgres.ResolveError(err)
 	}
 
 	lastVersion, err := m.GetLastVersion(ctx)
@@ -114,7 +114,7 @@ func (m *Migrator) insertVersion(ctx context.Context, version int) error {
 		}).
 		ModelTableExpr(m.getVersionsTable()).
 		Exec(ctx)
-	return err
+	return postgres.ResolveError(err)
 }
 
 func (m *Migrator) Up(ctx context.Context) error {
@@ -139,7 +139,7 @@ func (m *Migrator) GetMigrations(ctx context.Context) ([]Info, error) {
 		Column("version_id", "tstamp").
 		Limit(len(m.migrations)).
 		Scan(ctx, &ret); err != nil {
-		return nil, err
+		return nil, postgres.ResolveError(err)
 	}
 
 	for i := 0; i < int(math.Min(float64(len(ret)), float64(len(m.migrations)))); i++ {
@@ -174,7 +174,7 @@ func (m *Migrator) createSchemaIfNeeded(ctx context.Context) error {
 	if m.schema != "" && m.createSchema {
 		_, err := m.db.ExecContext(ctx, fmt.Sprintf(`create schema if not exists "%s"`, m.schema))
 		if err != nil {
-			return fmt.Errorf("failed to create schema: %w", err)
+			return postgres.ResolveError(err)
 		}
 	}
 
@@ -201,7 +201,7 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 	// we grab a connection from the pool if we are not already in a transaction (a sql transaction already keep the same connection).
 	conn, err := m.db.Conn(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get connection: %w", err)
+		return fmt.Errorf("failed to get connection: %w", postgres.ResolveError(err))
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
@@ -211,7 +211,7 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 
 	_, err = conn.ExecContext(ctx, "select pg_advisory_lock(hashtext(?))", m.getVersionsTable())
 	if err != nil {
-		return fmt.Errorf("failed to acquire lock: %w", err)
+		return fmt.Errorf("failed to acquire lock: %w", postgres.ResolveError(err))
 	}
 
 	defer func() {
@@ -252,7 +252,7 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 }
 
 func (m *Migrator) UpByOne(ctx context.Context) error {
-	return postgres.ResolveError(m.upByOne(ctx))
+	return m.upByOne(ctx)
 }
 
 func NewMigrator(db *bun.DB, opts ...Option) *Migrator {
