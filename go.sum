@@ -22,8 +22,8 @@ github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1 h1:M0iYM5HsGcoxtiQqprRlYZNZnGk
 github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1/go.mod h1:RwGHEzGsEEXC/rQNLWQqR83+WPlABgOgnv2kTB56Y4Y=
 github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.5 h1:ud+4txnRgtr3kZXfXZ5+C7kVQEvsLc5HSNUEa0g+X1Q=
 github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.5/go.mod h1:t4o+4A6GB+XC8WL3DandhzPwd265zQuyWMQC/I+WIOU=
-github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.1 h1:afAkAFzeooBRQvxElR+6xoigXKCukcZXnE9ACxhwlPI=
-github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.1/go.mod h1:stjbT+s4u/s5ime5jdIyvPyjBGwGeJewIN7jxH8gp4k=
+github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2 h1:9d7Vb2gepq73Rn/aKaAJWbBiJzS6nDyOm4O353jVsTM=
+github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2/go.mod h1:stjbT+s4u/s5ime5jdIyvPyjBGwGeJewIN7jxH8gp4k=
 github.com/ajg/form v1.5.1 h1:t9c7v8JUKu/XxOGBU0yjNpaMloxGEJhUkqFRq0ibGeU=
 github.com/ajg/form v1.5.1/go.mod h1:uL1WgH+h2mgNtvBq0339dVnzXdBETtL2LeUXaIv25UY=
 github.com/andybalholm/brotli v1.1.0 h1:eLKJA0d02Lf0mVpIDgYnqXcUn0GqVmEFny3VuID1U3M=
