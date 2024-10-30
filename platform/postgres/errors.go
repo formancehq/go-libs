@@ -30,6 +30,8 @@ func ResolveError(err error) error {
 				return ErrMissingTable
 			case "3F000":
 				return ErrMissingSchema
+			case "P0001":
+				return newErrRaisedException(pge)
 			}
 		}
 
@@ -88,6 +90,33 @@ func (e ErrTooManyClient) Error() string {
 
 func newErrTooManyClient(err error) ErrTooManyClient {
 	return ErrTooManyClient{
+		err: err,
+	}
+}
+
+type ErrRaisedException struct {
+	err *pgconn.PgError
+}
+
+func (e ErrRaisedException) Error() string {
+	return e.err.Error()
+}
+
+func (e ErrRaisedException) Is(err error) bool {
+	_, ok := err.(ErrRaisedException)
+	return ok
+}
+
+func (e ErrRaisedException) Unwrap() error {
+	return e.err
+}
+
+func (e ErrRaisedException) GetMessage() string {
+	return e.err.Message
+}
+
+func newErrRaisedException(err *pgconn.PgError) ErrRaisedException {
+	return ErrRaisedException{
 		err: err,
 	}
 }
