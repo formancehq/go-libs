@@ -19,9 +19,10 @@ type T interface {
 }
 
 type Pool struct {
-	t      T
-	pool   *dockertest.Pool
-	logger logging.Logger
+	t       T
+	pool    *dockertest.Pool
+	options []PoolOption
+	logger  logging.Logger
 }
 
 type Configuration struct {
@@ -60,6 +61,10 @@ func (p *Pool) streamContainerLogs(containerID string) {
 
 func (p *Pool) Run(cfg Configuration) *dockertest.Resource {
 	p.t.Helper()
+
+	for _, opt := range p.options {
+		cfg = *opt(&cfg)
+	}
 
 	resource, err := p.pool.RunWithOptions(cfg.RunOptions, cfg.HostConfigOptions...)
 	require.NoError(p.t, err)
@@ -103,13 +108,23 @@ func (p *Pool) Run(cfg Configuration) *dockertest.Resource {
 	return resource
 }
 
-func NewPool(t T, logger logging.Logger) *Pool {
+type PoolOption func(p *Configuration) *Configuration
+
+func WithTimeout(timeout time.Duration) PoolOption {
+	return func(p *Configuration) *Configuration {
+		p.Timeout = timeout
+		return p
+	}
+}
+
+func NewPool(t T, logger logging.Logger, opts ...PoolOption) *Pool {
 	pool, err := dockertest.NewPool("")
 	require.NoError(t, err)
 
 	return &Pool{
-		t:      t,
-		pool:   pool,
-		logger: logger,
+		t:       t,
+		pool:    pool,
+		options: opts,
+		logger:  logger,
 	}
 }
