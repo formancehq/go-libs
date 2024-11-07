@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"time"
 
 	"go.uber.org/dig"
 
@@ -17,11 +18,15 @@ import (
 	"go.uber.org/fx"
 )
 
-const DebugFlag = "debug"
+const (
+	DebugFlag       = "debug"
+	GracePeriodFlag = "grace-period"
+)
 
 func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(DebugFlag, false, "Debug mode")
 	flags.Bool(logging.JsonFormattingLoggerFlag, false, "Format logs as json")
+	flags.Duration(GracePeriodFlag, 0, "Grace period for shutdown")
 }
 
 type App struct {
@@ -44,7 +49,9 @@ func (a *App) Run(cmd *cobra.Command) error {
 	}
 	a.logger.Infof("Starting application")
 
-	app := a.newFxApp(a.logger)
+	gracePeriod, _ := cmd.Flags().GetDuration(GracePeriodFlag)
+
+	app := a.newFxApp(a.logger, gracePeriod)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), a.logger)); err != nil {
 		switch {
 		case errorsutils.IsErrorWithExitCode(err):
@@ -89,7 +96,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 	return nil
 }
 
-func (a *App) newFxApp(logger logging.Logger) *fx.App {
+func (a *App) newFxApp(logger logging.Logger, gracePeriod time.Duration) *fx.App {
 	options := append(
 		a.options,
 		fx.NopLogger,
@@ -115,6 +122,21 @@ func (a *App) newFxApp(logger logging.Logger) *fx.App {
 			})
 		}),
 	}, options...)
+	if gracePeriod != 0 {
+		options = append(options, fx.Invoke(func(lc fx.Lifecycle) {
+			lc.Append(fx.Hook{
+				OnStop: func(ctx context.Context) error {
+					logging.FromContext(ctx).Infof("Waiting for grace period (%s)...", gracePeriod)
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(gracePeriod):
+						return nil
+					}
+				},
+			})
+		}))
+	}
 	return fx.New(options...)
 }
 
