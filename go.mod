@@ -13,7 +13,7 @@ require (
 	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.5
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.1
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.0
-	github.com/aws/aws-sdk-go-v2 v1.32.2
+	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/config v1.27.43
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.4.21
 	github.com/dgraph-io/ristretto v1.0.0
