@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.0
 	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/config v1.28.2
-	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.4.21
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.4.23
 	github.com/dgraph-io/ristretto v1.0.0
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/go-sql-driver/mysql v1.8.1
