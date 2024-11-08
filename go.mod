@@ -41,7 +41,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/uptrace/bun v1.2.5
 	github.com/uptrace/bun/dialect/pgdialect v1.2.5
-	github.com/uptrace/bun/extra/bundebug v1.2.3
+	github.com/uptrace/bun/extra/bundebug v1.2.5
 	github.com/uptrace/bun/extra/bunotel v1.2.5
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2
 	github.com/xdg-go/scram v1.1.2
@@ -110,7 +110,7 @@ require (
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/ebitengine/purego v0.8.0 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
-	github.com/fatih/color v1.17.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/go-chi/render v1.0.3 // indirect
