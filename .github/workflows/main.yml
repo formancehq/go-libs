@@ -53,3 +53,9 @@ jobs:
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      - name: Merge Dependabot PR
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        run: gh pr merge $PR_URL
+        env:
+          PR_URL: ${{github.event.pull_request.html_url}}
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
