@@ -392,8 +392,8 @@ github.com/uptrace/bun/dialect/pgdialect v1.2.5 h1:dWLUxpjTdglzfBks2x+U2WIi+nRVj
 github.com/uptrace/bun/dialect/pgdialect v1.2.5/go.mod h1:stwnlE8/6x8cuQ2aXcZqwDK/d+6jxgO3iQewflJT6C4=
 github.com/uptrace/bun/extra/bundebug v1.2.3 h1:2QBykz9/u4SkN9dnraImDcbrMk2fUhuq2gL6hkh9qSc=
 github.com/uptrace/bun/extra/bundebug v1.2.3/go.mod h1:bihsYJxXxWZXwc1R3qALTHvp+npE0ElgaCvcjzyPPdw=
-github.com/uptrace/bun/extra/bunotel v1.2.3 h1:G19QpDE68TXw97x6NciB6nKVDuK0Wb2KgtyMqNIyqBI=
-github.com/uptrace/bun/extra/bunotel v1.2.3/go.mod h1:jHRgTqLlX/Zj1KIDokCMDat6JwZHJyErOx0PQ10UFgQ=
+github.com/uptrace/bun/extra/bunotel v1.2.5 h1:kkuuTbrG9d5leYZuSBKhq2gtq346lIrxf98Mig2y128=
+github.com/uptrace/bun/extra/bunotel v1.2.5/go.mod h1:rCHLszRZwppWE9cGDodO2FCI1qCrLwDjONp38KD3bA8=
 github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2 h1:H8wwQwTe5sL6x30z71lUgNiwBdeCHQjrphCfLwqIHGo=
 github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2/go.mod h1:/kR4beFhlz2g+V5ik8jW+3PMiMQAPt29y6K64NNY53c=
 github.com/uptrace/opentelemetry-go-extra/otelsql v0.3.2 h1:ZjUj9BLYf9PEqBn8W/OapxhPjVRdC6CsXTdULHsyk5c=
