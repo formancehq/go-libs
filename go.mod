@@ -8,7 +8,7 @@ require (
 	dario.cat/mergo v1.0.1
 	github.com/ClickHouse/clickhouse-go/v2 v2.29.0
 	github.com/IBM/sarama v1.43.3
-	github.com/ThreeDotsLabs/watermill v1.3.7
+	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1
 	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.5
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.1
