@@ -58,4 +58,4 @@ jobs:
         run: gh pr merge $PR_URL
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
-          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_TOKEN: ${{secrets.NUMARY_GITHUB_TOKEN}}
