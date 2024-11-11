@@ -112,7 +112,6 @@ func AddFlags(serviceName string, flags *pflag.FlagSet, options ...func(*ConfigD
 		option(&values)
 	}
 	flags.StringSlice(PublisherTopicMappingFlag, values.PublisherTopicMapping, "Define mapping between internal event types and topics")
-	flags.String(PublisherQueueGroupFlag, serviceName, "Define queue group for consumers")
 
 	// Circuit Breaker
 	flags.Bool(PublisherCircuitBreakerEnabledFlag, values.PublisherCircuitBreakerEnabled, "Enable circuit breaker for publisher")
@@ -136,16 +135,17 @@ func AddFlags(serviceName string, flags *pflag.FlagSet, options ...func(*ConfigD
 	flags.Bool(PublisherKafkaTLSEnabledFlag, values.PublisherKafkaTLSEnabled, "Enable TLS to connect on kafka")
 
 	// NATS
-	InitNatsCLIFlags(flags, options...)
+	InitNatsCLIFlags(flags, serviceName, options...)
 }
 
-// DO NOT REMOVE: Used by membership
-func InitNatsCLIFlags(flags *pflag.FlagSet, options ...func(*ConfigDefault)) {
+// Used by membership
+func InitNatsCLIFlags(flags *pflag.FlagSet, serviceName string, options ...func(*ConfigDefault)) {
 	values := defaultConfigValues
 	for _, option := range options {
 		option(&values)
 	}
 
+	flags.String(PublisherQueueGroupFlag, serviceName, "Define queue group for consumers")
 	flags.Bool(PublisherNatsEnabledFlag, values.PublisherNatsEnabled, "Publish write events to nats")
 	flags.String(PublisherNatsClientIDFlag, values.PublisherNatsClientID, "Nats client ID")
 	flags.Int(PublisherNatsMaxReconnectFlag, values.PublisherNatsMaxReconnect, "Nats: set the maximum number of reconnect attempts.")
