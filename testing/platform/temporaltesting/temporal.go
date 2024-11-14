@@ -30,6 +30,9 @@ func CreateTemporalServer(t TemporalT, w io.Writer) *TemporalServer {
 	if err != nil {
 		require.Failf(t, "failed to start temporal dev server: %s", err.Error())
 	}
+	t.Cleanup(func() {
+		_ = srv.Stop()
+	})
 	return &TemporalServer{DevServer: srv, defaultNamespace: defaultNamespace}
 }
 
