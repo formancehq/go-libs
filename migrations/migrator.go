@@ -41,10 +41,11 @@ type Info struct {
 }
 
 type Migrator struct {
-	migrations []Migration
-	schema     string
-	tableName  string
-	db         *bun.DB
+	migrations        []Migration
+	schema            string
+	tableName         string
+	db                *bun.DB
+	lockRetryInterval time.Duration
 }
 
 func (m *Migrator) GetSchema() string {
@@ -233,12 +234,32 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 		}
 	}()
 
-	_, err = conn.ExecContext(ctx, "select pg_advisory_lock(hashtext(?))", m.getVersionsTable())
-	if err != nil {
-		return fmt.Errorf("failed to acquire lock: %w", postgres.ResolveError(err))
+	// use pg_advisory_lock lead to creating new sql transaction (as any query)
+	// so we need to use pg_advisory_try_lock to avoid this
+	for {
+		logging.FromContext(ctx).Debugf("Try to acquire lock on %s", m.getVersionsTable())
+		var acquired bool
+		err := conn.NewSelect().
+			ColumnExpr("pg_try_advisory_lock(hashtext(?))", m.getVersionsTable()).
+			Scan(ctx, &acquired)
+		if err != nil {
+			return fmt.Errorf("failed to acquire lock: %w", postgres.ResolveError(err))
+		}
+		if acquired {
+			logging.FromContext(ctx).Debugf("Lock acquired on %s", m.getVersionsTable())
+			break
+		}
+
+		logging.FromContext(ctx).Debugf("Lock not acquired on %s, retry in %s", m.getVersionsTable(), m.lockRetryInterval)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(m.lockRetryInterval):
+		}
 	}
 
 	defer func() {
+		logging.FromContext(ctx).Debugf("Unlock %s", m.getVersionsTable())
 		_, err = conn.ExecContext(ctx, "select pg_advisory_unlock(hashtext(?))", m.getVersionsTable())
 		if err != nil {
 			if errors.Is(err, driver.ErrBadConn) {
@@ -393,8 +414,11 @@ func NewMigrator(db *bun.DB, opts ...Option) *Migrator {
 		db:        db,
 		tableName: migrationTable,
 	}
-	for _, opt := range opts {
+	for _, opt := range append(defaultOptions, opts...) {
 		opt(ret)
+	}
+	if ret.lockRetryInterval == 0 {
+		ret.lockRetryInterval = defaultLockRetryInterval
 	}
 	return ret
 }
@@ -412,3 +436,15 @@ func WithTableName(name string) Option {
 		m.tableName = name
 	}
 }
+
+func WithLockRetryInterval(interval time.Duration) Option {
+	return func(m *Migrator) {
+		m.lockRetryInterval = interval
+	}
+}
+
+var defaultOptions = []Option{
+	WithLockRetryInterval(defaultLockRetryInterval),
+}
+
+var defaultLockRetryInterval = time.Second
