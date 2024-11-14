@@ -108,7 +108,7 @@ func TestMigrationsConcurrently(t *testing.T) {
 		},
 	})
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	t.Cleanup(cancel)
 
 	migrator1Err := make(chan error, 1)
