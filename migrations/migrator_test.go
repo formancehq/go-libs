@@ -212,4 +212,13 @@ func TestMigrateUntil(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, v)
 	})
+
+	t.Run("Until previous version", func(t *testing.T) {
+		err := migrator.Until(ctx, 1)
+		require.ErrorIs(t, err, ErrTargetVersionGreaterThan)
+
+		v, err := migrator.GetLastVersion(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, v)
+	})
 }

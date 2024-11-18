@@ -3,11 +3,12 @@ package migrations
 import (
 	"context"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/jackc/pgxlisten"
 
@@ -27,8 +28,9 @@ const (
 )
 
 var (
-	ErrMissingVersionTable = errors.New("missing version table")
-	ErrAlreadyUpToDate     = errors.New("already up to date")
+	ErrMissingVersionTable      = errors.New("missing version table")
+	ErrAlreadyUpToDate          = errors.New("already up to date")
+	ErrTargetVersionGreaterThan = errors.New("last version is greater than target version")
 )
 
 type Info struct {
@@ -167,7 +169,7 @@ func (m *Migrator) Until(ctx context.Context, version int) error {
 	}
 
 	if lastVersion > version {
-		return fmt.Errorf("last version is greater than target version: %d > %d", lastVersion, version)
+		return errors.Wrap(ErrTargetVersionGreaterThan, fmt.Sprintf("lastversion: %d > targetversion: %d", lastVersion, version))
 	}
 
 	for {
