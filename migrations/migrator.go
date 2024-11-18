@@ -69,7 +69,7 @@ func (m *Migrator) getVersionsTable() string {
 	return fmt.Sprintf(`"%s"`, m.tableName)
 }
 
-func (m *Migrator) initSchema(ctx context.Context) error {
+func (m *Migrator) initSchema(ctx context.Context) (int, error) {
 	_, err := m.db.Exec(`
 		create schema if not exists "` + m.GetSchema() + `";
 
@@ -91,12 +91,12 @@ func (m *Migrator) initSchema(ctx context.Context) error {
 		idx_version_id on ` + m.tableName + ` (version_id);
 	`)
 	if err != nil {
-		return postgres.ResolveError(err)
+		return -1, postgres.ResolveError(err)
 	}
 
 	lastVersion, err := m.GetLastVersion(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get last version: %w", err)
+		return -1, fmt.Errorf("failed to get last version: %w", err)
 	}
 
 	if lastVersion == -1 {
@@ -110,11 +110,12 @@ func (m *Migrator) initSchema(ctx context.Context) error {
 			ModelTableExpr(m.getVersionsTable()).
 			Exec(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
+			return -1, fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
 		}
+		return 0, nil
 	}
 
-	return err
+	return lastVersion, err
 }
 
 func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
@@ -155,13 +156,9 @@ func (m *Migrator) Up(ctx context.Context) error {
 
 func (m *Migrator) Until(ctx context.Context, version int) error {
 
-	if err := m.initSchema(ctx); err != nil {
-		return fmt.Errorf("failed to create version table: %w", err)
-	}
-
-	lastVersion, err := m.GetLastVersion(ctx)
+	lastVersion, err := m.initSchema(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create version table: %w", err)
 	}
 
 	if lastVersion == version {
@@ -308,17 +305,12 @@ func (m *Migrator) upByOne(ctx context.Context) (int, error) {
 		}
 	}()
 
-	err = m.initSchema(ctx)
+	lastVersion, err := m.initSchema(ctx)
 	if err != nil {
 		return -1, fmt.Errorf("failed to create version table: %w", err)
 	}
 
-	lastVersion, err := m.GetLastVersion(ctx)
-	if err != nil {
-		return -1, fmt.Errorf("failed to get last version: %w", err)
-	}
-	logging.FromContext(ctx).Debugf("Detected last version: %d", lastVersion)
-
+	logging.FromContext(ctx).Debugf("Last version: %d", lastVersion)
 	// At this point, there is no pending migration occurring
 	if len(m.migrations) == lastVersion {
 		logging.FromContext(ctx).Debug("All migrations done!")
@@ -338,6 +330,7 @@ func (m *Migrator) upByOne(ctx context.Context) (int, error) {
 	if err != nil {
 		return -1, fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
 	}
+	logging.FromContext(ctx).Debugf("New version: %d", lastVersion+1)
 
 	listeningContext, cancel := context.WithCancel(ctx)
 	listenerStopped := make(chan struct{})
