@@ -162,3 +162,54 @@ func TestMigrationsNominal(t *testing.T) {
 	err := migrator1.UpByOne(ctx)
 	require.NoError(t, err)
 }
+
+func TestMigrateUntil(t *testing.T) {
+	t.Parallel()
+
+	ctx := logging.TestingContext()
+
+	migrator := NewMigrator(bunDB, WithSchema(uuid.NewString()[:8]))
+	migrator.RegisterMigrations(
+		Migration{
+			Up: func(ctx context.Context, db bun.IDB) error {
+				return nil
+			},
+		}, Migration{
+			Up: func(ctx context.Context, db bun.IDB) error {
+				return nil
+			},
+		},
+		Migration{
+			Up: func(ctx context.Context, db bun.IDB) error {
+				return nil
+			},
+		},
+	)
+
+	t.Run("Until first migration", func(t *testing.T) {
+		err := migrator.Until(ctx, 1)
+		require.NoError(t, err)
+
+		v, err := migrator.GetLastVersion(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, v)
+	})
+
+	t.Run("Until second migration", func(t *testing.T) {
+		err := migrator.Until(ctx, 2)
+		require.NoError(t, err)
+
+		v, err := migrator.GetLastVersion(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, v)
+	})
+
+	t.Run("Until same version", func(t *testing.T) {
+		err := migrator.Until(ctx, 2)
+		require.NoError(t, err)
+
+		v, err := migrator.GetLastVersion(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, v)
+	})
+}
