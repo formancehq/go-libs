@@ -156,9 +156,9 @@ func (m *Migrator) Up(ctx context.Context) error {
 
 func (m *Migrator) Until(ctx context.Context, version int) error {
 
-	lastVersion, err := m.initSchema(ctx)
+	lastVersion, err := m.GetLastVersion(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create version table: %w", err)
+		logging.FromContext(ctx).Errorf("failed to get initial state: %v", err)
 	}
 
 	if lastVersion == version {
@@ -173,10 +173,10 @@ func (m *Migrator) Until(ctx context.Context, version int) error {
 		v, err := m.upByOne(ctx)
 		switch {
 		case v == -1:
-			return fmt.Errorf("failed to get last version, error: %w", err)
+			return err
 		case v == version:
 			return nil
-		case v < version && !errors.Is(err, ErrAlreadyUpToDate):
+		case v < version:
 			continue
 		default:
 			return fmt.Errorf("unexpected version: %d, error: %w", v, err)
