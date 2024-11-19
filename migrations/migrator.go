@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -260,15 +261,18 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 
 	defer func() {
 		logging.FromContext(ctx).Debugf("Unlock %s", m.getVersionsTable())
-		_, err = conn.ExecContext(ctx, "select pg_advisory_unlock(hashtext(?))", m.getVersionsTable())
+		_, err = conn.ExecContext(context.WithoutCancel(ctx), "select pg_advisory_unlock(hashtext(?))", m.getVersionsTable())
 		if err != nil {
-			if errors.Is(err, driver.ErrBadConn) {
+			switch {
+			case errors.Is(err, sql.ErrConnDone):
+				fallthrough
+			case errors.Is(err, driver.ErrBadConn):
 				// If we have a driver.ErrBadConn, it means the connection is already closed and the advisory lock is released.
 				// notes(gfyrag): I'm not 100% confident about this, but I think it's the best we can do.
 				return
+			default:
+				panic(err)
 			}
-
-			panic(err)
 		}
 	}()
 
