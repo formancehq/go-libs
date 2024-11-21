@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/formancehq/go-libs/v2/logging"
@@ -16,7 +15,7 @@ import (
 
 type serverInfo struct {
 	started chan struct{}
-	port    int
+	address string
 }
 
 type serverInfoContextKey string
@@ -45,16 +44,16 @@ func Started(ctx context.Context) chan struct{} {
 	return si.started
 }
 
-func Port(ctx context.Context) int {
+func Address(ctx context.Context) string {
 	si := GetActualServerInfo(ctx)
 	if si == nil {
-		return 0
+		return ""
 	}
-	return si.port
+	return si.address
 }
 
 func URL(ctx context.Context) string {
-	return fmt.Sprintf("http://127.0.0.1:%d", Port(ctx))
+	return fmt.Sprintf("http://%s", Address(ctx))
 }
 
 func StartedServer(ctx context.Context, listener net.Listener) {
@@ -63,10 +62,8 @@ func StartedServer(ctx context.Context, listener net.Listener) {
 		return
 	}
 
-	_, portAsString, _ := net.SplitHostPort(listener.Addr().String())
-	port, _ := strconv.ParseInt(portAsString, 10, 32)
+	si.address = listener.Addr().String()
 
-	si.port = int(port)
 	close(si.started)
 }
 
