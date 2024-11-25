@@ -9,6 +9,7 @@ import (
 
 	"github.com/formancehq/go-libs/v2/testing/utils"
 	"github.com/google/uuid"
+	"github.com/spf13/pflag"
 
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/formancehq/go-libs/v2/testing/docker"
@@ -163,4 +164,20 @@ func TestMigrationsNominal(t *testing.T) {
 
 	err := migrator1.UpByOne(ctx)
 	require.NoError(t, err)
+}
+
+func TestAddFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := pflag.NewFlagSet("test", pflag.PanicOnError)
+	AddFlags(flags)
+
+	table, _ := flags.GetString(MigratorTableFlag)
+	require.Equal(t, migrationTable, table)
+	schema, _ := flags.GetString(MigratorSchemaFlag)
+	require.Equal(t, "public", schema)
+
+	require.NoError(t, flags.Set(MigratorSchemaFlag, "test"))
+	table, _ = flags.GetString(MigratorSchemaFlag)
+	require.Equal(t, table, "test")
 }
