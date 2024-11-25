@@ -27,7 +27,6 @@ func TestMigrations(ctx context.Context, _fs embed.FS, migrator *Migrator) error
 			switch {
 			case errors.Is(err, ErrAlreadyUpToDate):
 				return nil, nil
-			case err == nil:
 			default:
 				return nil, err
 			}
