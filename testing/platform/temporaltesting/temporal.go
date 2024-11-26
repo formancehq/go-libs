@@ -36,8 +36,8 @@ func CreateTemporalServer(t TemporalT, w io.Writer) *TemporalServer {
 	return &TemporalServer{DevServer: srv, defaultNamespace: defaultNamespace}
 }
 
-func (s *TemporalServer) Client(ctx context.Context) client.Client {
-	return s.Client(ctx)
+func (s *TemporalServer) DefaultClient() client.Client {
+	return s.Client()
 }
 
 func (s *TemporalServer) Address() string {
