@@ -69,11 +69,15 @@ func (m *Migrator) getVersionsTable() string {
 }
 
 func (m *Migrator) initSchema(ctx context.Context) error {
-	_, err := m.db.Exec(`
-		create schema if not exists "` + m.GetSchema() + `";
-
-		set search_path = '` + m.GetSchema() + `';
-
+	query := ""
+	if m.schema != "" {
+		query += `
+			create schema if not exists "` + m.GetSchema() + `";
+	
+			set search_path = '` + m.GetSchema() + `';
+		`
+	}
+	query += `
 		create table if not exists ` + m.tableName + ` (
 			version_id bigint not null,
 			is_applied boolean not null default false,
@@ -88,7 +92,9 @@ func (m *Migrator) initSchema(ctx context.Context) error {
 	
 		create unique index if not exists 
 		idx_version_id on ` + m.tableName + ` (version_id);
-	`)
+	`
+
+	_, err := m.db.Exec(query)
 	if err != nil {
 		return postgres.ResolveError(err)
 	}
