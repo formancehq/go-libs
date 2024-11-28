@@ -3,10 +3,12 @@ package temporal
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"time"
 
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -29,7 +31,7 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 	initSearchAttributes, _ := cmd.Flags().GetBool(TemporalInitSearchAttributesFlag)
 
 	return fx.Options(
-		fx.Provide(func(logger logging.Logger) (client.Options, error) {
+		fx.Provide(func(logger logging.Logger, meterProvider metric.MeterProvider) (client.Options, error) {
 
 			var cert *tls.Certificate
 			if key != "" && certStr != "" {
@@ -57,6 +59,14 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 				options.ConnectionOptions = client.ConnectionOptions{
 					TLS: &tls.Config{Certificates: []tls.Certificate{*cert}},
 				}
+			}
+
+			if meterProvider != nil {
+				logger.Info("temporal sdk metrics handler initiated")
+				metricsHandler := opentelemetry.NewMetricsHandler(opentelemetry.MetricsHandlerOptions{
+					Meter: meterProvider.Meter(fmt.Sprintf("go-temporal-sdk-%s", namespace)),
+				})
+				options.MetricsHandler = metricsHandler
 			}
 			return options, nil
 		}),
