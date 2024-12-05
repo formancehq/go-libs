@@ -8,15 +8,24 @@ import (
 type Config struct {
 	ServiceName        string
 	ResourceAttributes []string
+	serviceVersion     string
+}
+
+type Option func(*Config)
+
+func WithServiceVersion(version string) Option {
+	return func(cfg *Config) {
+		cfg.serviceVersion = version
+	}
 }
 
 func NewFxModule(cfg Config) fx.Option {
 	return fx.Options(
-		LoadResource(cfg.ServiceName, cfg.ResourceAttributes),
+		LoadResource(cfg.ServiceName, cfg.ResourceAttributes, cfg.serviceVersion),
 	)
 }
 
-func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
+func FXModuleFromFlags(cmd *cobra.Command, opts ...Option) fx.Option {
 	otelServiceName, _ := cmd.Flags().GetString(OtelServiceNameFlag)
 	otelResourceAttributes, _ := cmd.Flags().GetStringSlice(OtelResourceAttributesFlag)
 
