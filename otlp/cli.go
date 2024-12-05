@@ -22,13 +22,17 @@ func AddFlags(flags *flag.FlagSet) {
 	}
 }
 
-func LoadResource(serviceName string, resourceAttributes []string) fx.Option {
+func LoadResource(serviceName string, resourceAttributes []string, version string) fx.Option {
 	return fx.Options(
 		fx.Provide(func() (*resource.Resource, error) {
 			defaultResource := resource.Default()
 			attributes := make([]attribute.KeyValue, 0)
 			if serviceName != "" {
 				attributes = append(attributes, attribute.String("service.name", serviceName))
+			}
+
+			if version != "" {
+				attributes = append(attributes, attribute.String("service.version", version))
 			}
 			for _, ra := range resourceAttributes {
 				parts := strings.SplitN(ra, "=", 2)
