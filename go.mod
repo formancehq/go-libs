@@ -33,7 +33,7 @@ require (
 	github.com/nats-io/nats.go v1.38.0
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/onsi/ginkgo/v2 v2.22.0
-	github.com/onsi/gomega v1.36.0
+	github.com/onsi/gomega v1.36.1
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/riandyrn/otelchi v0.11.0
