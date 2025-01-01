@@ -43,7 +43,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/uptrace/bun v1.2.7
 	github.com/uptrace/bun/dialect/pgdialect v1.2.7
-	github.com/uptrace/bun/extra/bundebug v1.2.5
+	github.com/uptrace/bun/extra/bundebug v1.2.7
 	github.com/uptrace/bun/extra/bunotel v1.2.7
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2
 	github.com/xdg-go/scram v1.1.2
