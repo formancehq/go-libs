@@ -41,8 +41,8 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.10.0
-	github.com/uptrace/bun v1.2.7
-	github.com/uptrace/bun/dialect/pgdialect v1.2.7
+	github.com/uptrace/bun v1.2.8
+	github.com/uptrace/bun/dialect/pgdialect v1.2.8
 	github.com/uptrace/bun/extra/bundebug v1.2.5
 	github.com/uptrace/bun/extra/bunotel v1.2.7
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2
@@ -209,7 +209,7 @@ require (
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
