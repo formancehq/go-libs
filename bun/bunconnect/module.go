@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/formancehq/go-libs/v2/bun/bundebug"
+
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/uptrace/bun"
 	"go.uber.org/fx"
@@ -13,9 +14,9 @@ func Module(connectionOptions ConnectionOptions, debug bool) fx.Option {
 	return fx.Options(
 		fx.Provide(func(logger logging.Logger) (*bun.DB, error) {
 			hooks := make([]bun.QueryHook, 0)
-			if debug {
-				hooks = append(hooks, bundebug.NewQueryHook())
-			}
+			debugHook := bundebug.NewQueryHook()
+			debugHook.Debug = debug
+			hooks = append(hooks, debugHook)
 
 			logger.
 				WithFields(map[string]any{
