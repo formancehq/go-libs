@@ -11,7 +11,9 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type QueryHook struct{}
+type QueryHook struct {
+	Debug bool
+}
 
 var _ bun.QueryHook = (*QueryHook)(nil)
 
@@ -26,6 +28,10 @@ func (h *QueryHook) BeforeQuery(
 }
 
 func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
+	if !h.Debug && !isDebug(ctx) {
+		return
+	}
+
 	dur := time.Since(event.StartTime)
 
 	fields := map[string]any{
@@ -45,4 +51,23 @@ func (h *QueryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
 	}
 
 	logging.FromContext(ctx).WithFields(fields).Debug(query)
+}
+
+type contextKey string
+
+var debugContextKey contextKey = "debug"
+
+func WithDebug(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, debugContextKey, true)
+}
+
+func isDebug(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	debug := ctx.Value(debugContextKey)
+	return debug != nil && debug.(bool)
 }

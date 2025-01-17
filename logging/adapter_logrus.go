@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"testing"
 
 	"github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otellogrus"
@@ -77,7 +76,7 @@ func Testing() *LogrusLogger {
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 
-	if testing.Verbose() {
+	if os.Getenv("DEBUG") == "true" {
 		logger.SetOutput(os.Stderr)
 		logger.SetLevel(logrus.DebugLevel)
 	}
