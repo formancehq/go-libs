@@ -6,10 +6,10 @@ filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 h1:L/gRVlceqvL25UVaW/CKtUDjefjrs0SPonmDGUVOYP0=
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/ClickHouse/ch-go v0.62.0 h1:eXH0hytXeCEEZHgMvOX9IiW7wqBb4w1MJMp9rArbkrc=
-github.com/ClickHouse/ch-go v0.62.0/go.mod h1:uzso52/PD9+gZj7tL6XAo8/EYDrx7CIwNF4c6PnO6S0=
-github.com/ClickHouse/clickhouse-go/v2 v2.30.0 h1:AG4D/hW39qa58+JHQIFOSnxyL46H6h2lrmGGk17dhFo=
-github.com/ClickHouse/clickhouse-go/v2 v2.30.0/go.mod h1:i9ZQAojcayW3RsdCb3YR+n+wC2h65eJsZCscZ1Z1wyo=
+github.com/ClickHouse/ch-go v0.63.1 h1:s2JyZvWLTCSAGdtjMBBmAgQQHMco6pawLJMOXi0FODM=
+github.com/ClickHouse/ch-go v0.63.1/go.mod h1:I1kJJCL3WJcBMGe1m+HVK0+nREaG+JOYYBWjrDrF3R0=
+github.com/ClickHouse/clickhouse-go/v2 v2.30.1 h1:Dy0n0l+cMbPXs8hFkeeWGaPKrB+MDByUNQBSmRO3W6k=
+github.com/ClickHouse/clickhouse-go/v2 v2.30.1/go.mod h1:szk8BMoQV/NgHXZ20ZbwDyvPWmpfhRKjFkc6wzASGxM=
 github.com/IBM/sarama v1.45.0 h1:IzeBevTn809IJ/dhNKhP5mpxEXTmELuezO2tgHD9G5E=
 github.com/IBM/sarama v1.45.0/go.mod h1:EEay63m8EZkeumco9TDXf2JT3uDnZsZqFgV46n4yZdY=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
@@ -89,8 +89,8 @@ github.com/dnwe/otelsarama v0.0.0-20240308230250-9388d9d40bc0 h1:R2zQhFwSCyyd7L4
 github.com/dnwe/otelsarama v0.0.0-20240308230250-9388d9d40bc0/go.mod h1:2MqLKYJfjs3UriXXF9Fd0Qmh/lhxi/6tHXkqtXxyIHc=
 github.com/docker/cli v27.3.1+incompatible h1:qEGdFBF3Xu6SCvCYhc7CzaQTlBmqDuzxPDpigSyeKQQ=
 github.com/docker/cli v27.3.1+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
-github.com/docker/docker v27.3.1+incompatible h1:KttF0XoteNTicmUtBO0L2tP+J7FGRFTjaEF4k6WdhfI=
-github.com/docker/docker v27.3.1+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
+github.com/docker/docker v27.4.1+incompatible h1:ZJvcY7gfwHn1JF48PfbyXg7Jyt9ZCWDW+GGXOIxEwp4=
+github.com/docker/docker v27.4.1+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
 github.com/docker/go-connections v0.5.0 h1:USnMq7hx7gwdVZq1L49hLXaFtUdTADjXGp+uj1Br63c=
 github.com/docker/go-connections v0.5.0/go.mod h1:ov60Kzw0kKElRwhNs9UlUHAE/F9Fe6GLaXnqyDdmEXc=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
