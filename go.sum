@@ -30,8 +30,8 @@ github.com/andybalholm/brotli v1.1.1 h1:PR2pgnyFznKEugtsUo0xLdDop5SKXd5Qf5ysW+7X
 github.com/andybalholm/brotli v1.1.1/go.mod h1:05ib4cKhjx3OQYUY22hTVd34Bc8upXjOLL2rKwwZBoA=
 github.com/aws/aws-msk-iam-sasl-signer-go v1.0.0 h1:UyjtGmO0Uwl/K+zpzPwLoXzMhcN9xmnR2nrqJoBrg3c=
 github.com/aws/aws-msk-iam-sasl-signer-go v1.0.0/go.mod h1:TJAXuFs2HcMib3sN5L0gUC+Q01Qvy3DemvA55WuC+iA=
-github.com/aws/aws-sdk-go-v2 v1.34.0 h1:9iyL+cjifckRGEVpRKZP3eIxVlL06Qk1Tk13vreaVQU=
-github.com/aws/aws-sdk-go-v2 v1.34.0/go.mod h1:JgstGg0JjWU1KpVJjD5H0y0yyAIpSdKEq556EI6yOOM=
+github.com/aws/aws-sdk-go-v2 v1.35.0 h1:jTPxEJyzjSuuz0wB+302hr8Eu9KUI+Zv8zlujMGJpVI=
+github.com/aws/aws-sdk-go-v2 v1.35.0/go.mod h1:JgstGg0JjWU1KpVJjD5H0y0yyAIpSdKEq556EI6yOOM=
 github.com/aws/aws-sdk-go-v2/config v1.29.2 h1:JuIxOEPcSKpMB0J+khMjznG9LIhIBdmqNiEcPclnwqc=
 github.com/aws/aws-sdk-go-v2/config v1.29.2/go.mod h1:HktTHregOZwNSM/e7WTfVSu9RCX+3eOv+6ij27PtaYs=
 github.com/aws/aws-sdk-go-v2/credentials v1.17.55 h1:CDhKnDEaGkLA5ZszV/qw5uwN5M8rbv9Cl0JRN+PRsaM=
