@@ -21,7 +21,7 @@ const (
 )
 
 func AddFlags(flags *pflag.FlagSet) {
-	flags.Bool(LicenceEnabled, false, "Enable licence check")
+	flags.Bool(LicenceEnabled, true, "Enable licence check")
 	flags.String(LicenceTokenFlag, "", "Licence token")
 	flags.Duration(LicenceValidateTickFlag, 2*time.Minute, "Licence validate tick")
 	flags.String(LicenceClusterIDFlag, "", "Licence cluster ID")
