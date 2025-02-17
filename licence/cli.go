@@ -15,7 +15,6 @@ import (
 var licenceEnabled = false
 
 const (
-	LicenceEnabled            = "licence-enabled"
 	LicenceTokenFlag          = "licence-token"
 	LicenceValidateTickFlag   = "licence-validate-tick"
 	LicenceClusterIDFlag      = "licence-cluster-id"
@@ -23,7 +22,6 @@ const (
 )
 
 func AddFlags(flags *pflag.FlagSet) {
-	flags.Bool(LicenceEnabled, false, "Enable licence check")
 	flags.String(LicenceTokenFlag, "", "Licence token")
 	flags.Duration(LicenceValidateTickFlag, 2*time.Minute, "Licence validate tick")
 	flags.String(LicenceClusterIDFlag, "", "Licence cluster ID")
@@ -37,51 +35,43 @@ func FXModuleFromFlags(
 	if !licenceEnabled {
 		return fx.Options()
 	}
-	options := make([]fx.Option, 0)
 
 	licenceChanError := make(chan error, 1)
 
-	licenceEnabled, _ := cmd.Flags().GetBool(LicenceEnabled)
+	licenceToken, _ := cmd.Flags().GetString(LicenceTokenFlag)
+	licenceValidateTick, _ := cmd.Flags().GetDuration(LicenceValidateTickFlag)
+	licenceClusterID, _ := cmd.Flags().GetString(LicenceClusterIDFlag)
+	licenceExpectedIssuer, _ := cmd.Flags().GetString(LicenceExpectedIssuerFlag)
 
-	if licenceEnabled {
-		licenceToken, _ := cmd.Flags().GetString(LicenceTokenFlag)
-		licenceValidateTick, _ := cmd.Flags().GetDuration(LicenceValidateTickFlag)
-		licenceClusterID, _ := cmd.Flags().GetString(LicenceClusterIDFlag)
-		licenceExpectedIssuer, _ := cmd.Flags().GetString(LicenceExpectedIssuerFlag)
+	return fx.Options(
+		fx.Provide(func(logger logging.Logger) *Licence {
+			return NewLicence(
+				logger,
+				licenceToken,
+				licenceValidateTick,
+				serviceName,
+				licenceClusterID,
+				licenceExpectedIssuer,
+			)
+		}),
+		fx.Invoke(func(lc fx.Lifecycle, l *Licence, shutdowner fx.Shutdowner) {
+			lc.Append(fx.Hook{
+				OnStart: func(ctx context.Context) error {
+					if err := l.Start(licenceChanError); err != nil {
+						return errorsutils.NewErrorWithExitCode(err, 126)
+					}
 
-		options = append(options,
-			fx.Provide(func(logger logging.Logger) *Licence {
-				return NewLicence(
-					logger,
-					licenceToken,
-					licenceValidateTick,
-					serviceName,
-					licenceClusterID,
-					licenceExpectedIssuer,
-				)
-			}),
-			fx.Invoke(func(lc fx.Lifecycle, l *Licence, shutdowner fx.Shutdowner) {
-				lc.Append(fx.Hook{
-					OnStart: func(ctx context.Context) error {
-						if err := l.Start(licenceChanError); err != nil {
-							return errorsutils.NewErrorWithExitCode(err, 126)
-						}
+					go waitLicenceError(licenceChanError, shutdowner)
 
-						go waitLicenceError(licenceChanError, shutdowner)
-
-						return nil
-					},
-					OnStop: func(ctx context.Context) error {
-						l.Stop()
-						close(licenceChanError)
-						return nil
-					},
-				})
-			}),
-		)
-	}
-
-	return fx.Options(options...)
+					return nil
+				},
+				OnStop: func(ctx context.Context) error {
+					l.Stop()
+					close(licenceChanError)
+					return nil
+				},
+			})
+		}))
 }
 
 func waitLicenceError(
