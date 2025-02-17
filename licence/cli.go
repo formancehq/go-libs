@@ -12,6 +12,8 @@ import (
 	"go.uber.org/fx"
 )
 
+var licenceEnabled = false
+
 const (
 	LicenceEnabled            = "licence-enabled"
 	LicenceTokenFlag          = "licence-token"
@@ -32,6 +34,9 @@ func FXModuleFromFlags(
 	cmd *cobra.Command,
 	serviceName string,
 ) fx.Option {
+	if !licenceEnabled {
+		return fx.Options()
+	}
 	options := make([]fx.Option, 0)
 
 	licenceChanError := make(chan error, 1)
