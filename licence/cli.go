@@ -36,13 +36,13 @@ func FXModuleFromFlags(
 
 	licenceChanError := make(chan error, 1)
 
-	licenceEnabled, _ := cmd.PersistentFlags().GetBool(LicenceEnabled)
+	licenceEnabled, _ := cmd.Flags().GetBool(LicenceEnabled)
 
 	if licenceEnabled {
-		licenceToken, _ := cmd.PersistentFlags().GetString(LicenceTokenFlag)
-		licenceValidateTick, _ := cmd.PersistentFlags().GetDuration(LicenceValidateTickFlag)
-		licenceClusterID, _ := cmd.PersistentFlags().GetString(LicenceClusterIDFlag)
-		licenceExpectedIssuer, _ := cmd.PersistentFlags().GetString(LicenceExpectedIssuerFlag)
+		licenceToken, _ := cmd.Flags().GetString(LicenceTokenFlag)
+		licenceValidateTick, _ := cmd.Flags().GetDuration(LicenceValidateTickFlag)
+		licenceClusterID, _ := cmd.Flags().GetString(LicenceClusterIDFlag)
+		licenceExpectedIssuer, _ := cmd.Flags().GetString(LicenceExpectedIssuerFlag)
 
 		options = append(options,
 			fx.Provide(func(logger logging.Logger) *Licence {
