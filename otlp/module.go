@@ -25,12 +25,20 @@ func NewFxModule(cfg Config) fx.Option {
 	)
 }
 
+func newConfig(opts []Option) Config {
+	cfg := Config{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg
+}
+
 func FXModuleFromFlags(cmd *cobra.Command, opts ...Option) fx.Option {
 	otelServiceName, _ := cmd.Flags().GetString(OtelServiceNameFlag)
 	otelResourceAttributes, _ := cmd.Flags().GetStringSlice(OtelResourceAttributesFlag)
 
-	return NewFxModule(Config{
-		ServiceName:        otelServiceName,
-		ResourceAttributes: otelResourceAttributes,
-	})
+	cfg := newConfig(opts)
+	cfg.ServiceName = otelServiceName
+	cfg.ResourceAttributes = otelResourceAttributes
+	return NewFxModule(cfg)
 }
