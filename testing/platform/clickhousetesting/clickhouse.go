@@ -34,7 +34,7 @@ func (s *Server) GetDSN() string {
 }
 
 func (s *Server) GetDatabaseDSN(databaseName string) string {
-	return fmt.Sprintf("clickhouse://%s:%s/%s", s.GetHost(), s.Port, databaseName)
+	return fmt.Sprintf("clickhouse://default:password@%s:%s/%s", s.GetHost(), s.Port, databaseName)
 }
 
 func (s *Server) NewDatabase(t TestingT) *Database {
@@ -69,9 +69,10 @@ func CreateServer(pool *docker.Pool) *Server {
 		RunOptions: &dockertest.RunOptions{
 			Repository: "clickhouse/clickhouse-server",
 			Tag:        "head",
+			Env:        []string{"CLICKHOUSE_PASSWORD=password"},
 		},
 		CheckFn: func(ctx context.Context, resource *dockertest.Resource) error {
-			dsn := fmt.Sprintf("clickhouse://127.0.0.1:%s", resource.GetPort("9000/tcp"))
+			dsn := fmt.Sprintf("clickhouse://default:password@127.0.0.1:%s", resource.GetPort("9000/tcp"))
 			options, _ := clickhouse.ParseDSN(dsn)
 
 			db, err := clickhouse.Open(options)
