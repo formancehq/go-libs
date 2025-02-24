@@ -12,7 +12,7 @@ import (
 
 func TestMigrations(ctx context.Context, _fs embed.FS, migrator *Migrator) error {
 	_, err := WalkMigrations(_fs, func(entry fs.DirEntry) (*struct{}, error) {
-		before, err := TemplateSQLFile(_fs, migrator.GetSchema(), entry.Name(), "up_tests_before.sql")
+		before, err := TemplateSQLFile(_fs, migrator.GetSchema(), entry.Name(), "up_tests_before.sql", nil)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
@@ -32,7 +32,7 @@ func TestMigrations(ctx context.Context, _fs embed.FS, migrator *Migrator) error
 			}
 		}
 
-		after, err := TemplateSQLFile(_fs, migrator.GetSchema(), entry.Name(), "up_tests_after.sql")
+		after, err := TemplateSQLFile(_fs, migrator.GetSchema(), entry.Name(), "up_tests_after.sql", nil)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}

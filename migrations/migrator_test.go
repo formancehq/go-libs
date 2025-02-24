@@ -96,7 +96,6 @@ func TestMigrationsConcurrently(t *testing.T) {
 	waitTime := time.Second
 	options := []Option{
 		WithSchema(uuid.NewString()[:8]),
-		WithLockRetryInterval(waitTime / 2), // lock retry interval should be smaller than the time we are willing to wait for migrations to complete
 	}
 	migrator1 := NewMigrator(bunDB, options...)
 	migrator1.RegisterMigrations(Migration{
