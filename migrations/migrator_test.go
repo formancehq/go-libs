@@ -93,10 +93,8 @@ func TestMigrationsConcurrently(t *testing.T) {
 	migrationStarted := make(chan struct{})
 	terminatedMigration := make(chan struct{})
 
-	waitTime := time.Second
 	options := []Option{
 		WithSchema(uuid.NewString()[:8]),
-		WithLockRetryInterval(waitTime / 2), // lock retry interval should be smaller than the time we are willing to wait for migrations to complete
 	}
 	migrator1 := NewMigrator(bunDB, options...)
 	migrator1.RegisterMigrations(Migration{
@@ -142,10 +140,10 @@ func TestMigrationsConcurrently(t *testing.T) {
 		select {
 		case err := <-migrator2Err:
 			require.True(t, errors.Is(err, ErrAlreadyUpToDate))
-		case <-time.After(waitTime):
+		case <-time.After(time.Second * 2):
 			t.Fatal("migrator2 did not finish")
 		}
-	case <-time.After(waitTime):
+	case <-time.After(time.Second * 2):
 		t.Fatal("migrator1 did not finish")
 	}
 }

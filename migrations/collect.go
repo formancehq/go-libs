@@ -26,7 +26,19 @@ type notes struct {
 	Name string `yaml:"name"`
 }
 
-func CollectMigrations(_fs MigrationFileSystem, dir string) ([]Migration, error) {
+type collectOptions struct {
+	templateVars map[string]any
+}
+
+type CollectOption func(*collectOptions)
+
+func WithTemplateVars(vars map[string]any) CollectOption {
+	return func(o *collectOptions) {
+		o.templateVars = vars
+	}
+}
+
+func CollectMigrations(_fs MigrationFileSystem, dir string, options ...CollectOption) ([]Migration, error) {
 	return WalkMigrations(_fs, func(entry fs.DirEntry) (*Migration, error) {
 		rawNotes, err := _fs.ReadFile(filepath.Join("migrations", entry.Name(), "notes.yaml"))
 		if err != nil {
@@ -38,7 +50,12 @@ func CollectMigrations(_fs MigrationFileSystem, dir string) ([]Migration, error)
 			return nil, fmt.Errorf("failed to unmarshal notes.yaml: %w", err)
 		}
 
-		sqlFile, err := TemplateSQLFile(_fs, dir, entry.Name(), "up.sql")
+		co := collectOptions{}
+		for _, option := range options {
+			option(&co)
+		}
+
+		sqlFile, err := TemplateSQLFile(_fs, dir, entry.Name(), "up.sql", co.templateVars)
 		if err != nil {
 			return nil, fmt.Errorf("failed to template sql file: %w", err)
 		}
@@ -87,18 +104,21 @@ func WalkMigrations[T any](_fs MigrationFileSystem, transformer func(entry fs.Di
 	return ret, nil
 }
 
-func TemplateSQLFile(_fs MigrationFileSystem, schema, migrationDir, file string) (string, error) {
+func TemplateSQLFile(_fs MigrationFileSystem, schema, migrationDir, file string, vars map[string]any) (string, error) {
 	rawSQL, err := _fs.ReadFile(filepath.Join("migrations", migrationDir, file))
 	if err != nil {
 		return "", fmt.Errorf("failed to read file %s: %w", file, err)
 	}
 
+	if vars == nil {
+		vars = map[string]any{}
+	}
+	vars["Schema"] = schema
+
 	buf := bytes.NewBuffer(nil)
 	err = template.Must(template.New("migration").
 		Parse(string(rawSQL))).
-		Execute(buf, map[string]any{
-			"Schema": schema,
-		})
+		Execute(buf, vars)
 	if err != nil {
 		panic(err)
 	}

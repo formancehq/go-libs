@@ -2,15 +2,11 @@ package migrations
 
 import (
 	"context"
-	"database/sql"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
-
-	"github.com/jackc/pgxlisten"
 
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/formancehq/go-libs/v2/platform/postgres"
@@ -18,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
-
+	"github.com/jackc/pgxlisten"
 	"github.com/uptrace/bun"
 )
 
@@ -42,11 +38,10 @@ type Info struct {
 }
 
 type Migrator struct {
-	migrations        []Migration
-	schema            string
-	tableName         string
-	db                *bun.DB
-	lockRetryInterval time.Duration
+	migrations []Migration
+	schema     string
+	tableName  string
+	db         bun.IDB
 }
 
 func (m *Migrator) GetSchema() string {
@@ -94,7 +89,7 @@ func (m *Migrator) initSchema(ctx context.Context) error {
 		idx_version_id on ` + m.tableName + ` (version_id);
 	`
 
-	_, err := m.db.Exec(query)
+	_, err := m.db.ExecContext(ctx, query)
 	if err != nil {
 		return postgres.ResolveError(err)
 	}
@@ -123,24 +118,34 @@ func (m *Migrator) initSchema(ctx context.Context) error {
 }
 
 func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
+	// run in dedicated to avoid aborting the current transaction (if any) if the table does not exist yer
 	version := &Version{}
-	if err := m.db.NewSelect().
-		Model(version).
-		ModelTableExpr(m.getVersionsTable()).
-		Order("version_id DESC").
-		Limit(1).
-		Where("is_applied").
-		ColumnExpr("*").
-		Scan(ctx); err != nil {
-		err = postgres.ResolveError(err)
-		switch {
-		case errors.Is(err, postgres.ErrMissingTable):
-			return -1, ErrMissingVersionTable
-		case errors.Is(err, postgres.ErrNotFound):
-			return -1, nil
-		default:
-			return -1, err
+	if err := m.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if err := m.db.NewSelect().
+			Model(version).
+			ModelTableExpr(m.getVersionsTable()).
+			Order("version_id DESC").
+			Limit(1).
+			Where("is_applied").
+			ColumnExpr("*").
+			Scan(ctx); err != nil {
+			err = postgres.ResolveError(err)
+			switch {
+			case errors.Is(err, postgres.ErrMissingTable):
+				return ErrMissingVersionTable
+			case errors.Is(err, postgres.ErrNotFound):
+				return nil
+			default:
+				return err
+			}
 		}
+
+		return nil
+	}); err != nil {
+		return -1, err
+	}
+	if !version.IsApplied {
+		return -1, nil
 	}
 
 	return version.VersionID, nil
@@ -225,62 +230,33 @@ func (m *Migrator) IsUpToDate(ctx context.Context) (bool, error) {
 
 func (m *Migrator) upByOne(ctx context.Context) error {
 
-	// We need to lock something to prevent concurrent migration
-	// We could have started a transaction and lock and full table,
-	// but the downside is than the underlying migrations could not use "create index concurrently".
-	// So, we will use advisory locks, at session level.
-	// As advisory locks at session level need to be taken and released with the same underlying connection,
-	// we grab a connection from the pool if we are not already in a transaction (a sql transaction already keep the same connection).
-	conn, err := m.db.Conn(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get connection: %w", postgres.ResolveError(err))
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("unable to close connection: %v", err)
-		}
-	}()
-
-	// use pg_advisory_lock lead to creating new sql transaction (as any query)
-	// so we need to use pg_advisory_try_lock to avoid this
-	for {
-		logging.FromContext(ctx).Debugf("Try to acquire lock on %s", m.getVersionsTable())
-		var acquired bool
-		err := conn.NewSelect().
-			ColumnExpr("pg_try_advisory_lock(hashtext(?))", m.getVersionsTable()).
-			Scan(ctx, &acquired)
+	var (
+		actualDB bun.IDB
+		lockFn   string
+	)
+	switch db := m.db.(type) {
+	case bun.Tx:
+		actualDB = db
+		lockFn = "pg_advisory_xact"
+	case *bun.DB:
+		conn, err := db.Conn(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to acquire lock: %w", postgres.ResolveError(err))
+			return fmt.Errorf("failed to get connection: %w", postgres.ResolveError(err))
 		}
-		if acquired {
-			logging.FromContext(ctx).Debugf("Lock acquired on %s", m.getVersionsTable())
-			break
-		}
-
-		logging.FromContext(ctx).Debugf("Lock not acquired on %s, retry in %s", m.getVersionsTable(), m.lockRetryInterval)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(m.lockRetryInterval):
-		}
-	}
-
-	defer func() {
-		logging.FromContext(ctx).Debugf("Unlock %s", m.getVersionsTable())
-		_, err = conn.ExecContext(context.WithoutCancel(ctx), "select pg_advisory_unlock(hashtext(?))", m.getVersionsTable())
-		if err != nil {
-			switch {
-			case errors.Is(err, sql.ErrConnDone):
-				fallthrough
-			case errors.Is(err, driver.ErrBadConn):
-				// If we have a driver.ErrBadConn, it means the connection is already closed and the advisory lock is released.
-				// notes(gfyrag): I'm not 100% confident about this, but I think it's the best we can do.
-				return
-			default:
-				panic(err)
+		defer func() {
+			if err := conn.Close(); err != nil {
+				logging.FromContext(ctx).Errorf("unable to close connection: %v", err)
 			}
-		}
-	}()
+		}()
+		actualDB = conn
+		lockFn = "pg_advisory"
+	}
+
+	_, err := actualDB.NewRaw(fmt.Sprintf("select %s_lock(hashtext(?))", lockFn), m.getVersionsTable()).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to acquire lock: %w", postgres.ResolveError(err))
+	}
 
 	err = m.initSchema(ctx)
 	if err != nil {
@@ -300,7 +276,7 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 		return ErrAlreadyUpToDate
 	}
 
-	_, err = conn.NewInsert().
+	_, err = m.db.NewInsert().
 		Model(&Version{
 			VersionID: lastVersion + 1,
 			IsApplied: false,
@@ -313,86 +289,89 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 		return fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
 	}
 
-	listeningContext, cancel := context.WithCancel(ctx)
-	listenerStopped := make(chan struct{})
-	defer func() {
-		cancel()
-		<-listenerStopped
-	}()
-
-	if err := conn.Raw(func(driverConn any) error {
-		channel := "migrations-" + m.GetSchema()
-		logging.FromContext(ctx).Debugf("Listening for migrations notifications on " + channel)
-
-		listener := pgxlisten.Listener{
-			Connect: func(ctx context.Context) (*pgx.Conn, error) {
-				return pgx.Connect(ctx, driverConn.(*stdlib.Conn).Conn().Config().ConnString())
-			},
-			LogError: func(ctx context.Context, err error) {
-				if !errors.Is(err, context.Canceled) {
-					logging.FromContext(ctx).Errorf("pgxlisten error: %v", err)
-				}
-			},
-		}
-		listener.Handle(channel, pgxlisten.HandlerFunc(func(ctx context.Context, notification *pgconn.Notification, conn *pgx.Conn) error {
-
-			logging.FromContext(ctx).Debugf("Received notification: %s", notification.Payload)
-
-			switch {
-			case strings.HasPrefix(notification.Payload, "init: "):
-				value := strings.TrimPrefix(notification.Payload, "init: ")
-				maxCounter, err := strconv.ParseInt(value, 10, 64)
-				if err != nil {
-					logging.FromContext(ctx).Errorf("failed to parse max counter: %v", err)
-					return nil
-				}
-				_, err = m.db.NewUpdate().
-					Model(&Version{}).
-					ModelTableExpr(m.getVersionsTable()).
-					Where("version_id = ?", lastVersion+1).
-					Set("max_counter = ?", maxCounter).
-					Where("max_counter is null").
-					Exec(ctx)
-				if err != nil {
-					logging.FromContext(ctx).Errorf("failed to update max counter: %v", err)
-					return nil
-				}
-			case strings.HasPrefix(notification.Payload, "continue: "):
-				value := strings.TrimPrefix(notification.Payload, "continue: ")
-				increment, err := strconv.ParseInt(value, 10, 64)
-				if err != nil {
-					logging.FromContext(ctx).Errorf("failed to parse actual counter: %v", err)
-					return nil
-				}
-				_, err = m.db.NewUpdate().
-					Model(&Version{}).
-					ModelTableExpr(m.getVersionsTable()).
-					Where("version_id = ?", lastVersion+1).
-					Set("actual_counter = coalesce(actual_counter, 0) + ?", increment).
-					Exec(ctx)
-				if err != nil {
-					logging.FromContext(ctx).Errorf("failed to update actual counter: %v", err)
-					return nil
-				}
-			default:
-				logging.FromContext(ctx).Errorf("unknown notification: %s", notification.Payload)
-			}
-
-			return nil
-		}))
-		go func() {
-			if err := listener.Listen(listeningContext); err != nil {
-				if errors.Is(err, context.Canceled) {
-					close(listenerStopped)
-					return
-				}
-				panic(err)
-			}
+	switch conn := actualDB.(type) {
+	case bun.Conn:
+		listeningContext, cancel := context.WithCancel(ctx)
+		listenerStopped := make(chan struct{})
+		defer func() {
+			cancel()
+			<-listenerStopped
 		}()
 
-		return nil
-	}); err != nil {
-		logging.FromContext(ctx).Errorf("Failed so setup migrations listener: %v", err)
+		if err := conn.Raw(func(driverConn any) error {
+			channel := "migrations-" + m.GetSchema()
+			logging.FromContext(ctx).Debugf("Listening for migrations notifications on " + channel)
+
+			listener := pgxlisten.Listener{
+				Connect: func(ctx context.Context) (*pgx.Conn, error) {
+					return pgx.Connect(ctx, driverConn.(*stdlib.Conn).Conn().Config().ConnString())
+				},
+				LogError: func(ctx context.Context, err error) {
+					if !errors.Is(err, context.Canceled) {
+						logging.FromContext(ctx).Errorf("pgxlisten error: %v", err)
+					}
+				},
+			}
+			listener.Handle(channel, pgxlisten.HandlerFunc(func(ctx context.Context, notification *pgconn.Notification, conn *pgx.Conn) error {
+
+				logging.FromContext(ctx).Debugf("Received notification: %s", notification.Payload)
+
+				switch {
+				case strings.HasPrefix(notification.Payload, "init: "):
+					value := strings.TrimPrefix(notification.Payload, "init: ")
+					maxCounter, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						logging.FromContext(ctx).Errorf("failed to parse max counter: %v", err)
+						return nil
+					}
+					_, err = m.db.NewUpdate().
+						Model(&Version{}).
+						ModelTableExpr(m.getVersionsTable()).
+						Where("version_id = ?", lastVersion+1).
+						Set("max_counter = ?", maxCounter).
+						Where("max_counter is null").
+						Exec(ctx)
+					if err != nil {
+						logging.FromContext(ctx).Debugf("failed to update max counter: %v", err)
+						return nil
+					}
+				case strings.HasPrefix(notification.Payload, "continue: "):
+					value := strings.TrimPrefix(notification.Payload, "continue: ")
+					increment, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						logging.FromContext(ctx).Errorf("failed to parse actual counter: %v", err)
+						return nil
+					}
+					_, err = m.db.NewUpdate().
+						Model(&Version{}).
+						ModelTableExpr(m.getVersionsTable()).
+						Where("version_id = ?", lastVersion+1).
+						Set("actual_counter = coalesce(actual_counter, 0) + ?", increment).
+						Exec(ctx)
+					if err != nil {
+						logging.FromContext(ctx).Debugf("failed to update actual counter: %v", err)
+						return nil
+					}
+				default:
+					logging.FromContext(ctx).Errorf("unknown notification: %s", notification.Payload)
+				}
+
+				return nil
+			}))
+			go func() {
+				if err := listener.Listen(listeningContext); err != nil {
+					if errors.Is(err, context.Canceled) {
+						close(listenerStopped)
+						return
+					}
+					panic(err)
+				}
+			}()
+
+			return nil
+		}); err != nil {
+			logging.FromContext(ctx).Errorf("Failed so setup migrations listener: %v", err)
+		}
 	}
 
 	logging.FromContext(ctx).Debugf("Running migration %d: %s", lastVersion, m.migrations[lastVersion].Name)
@@ -419,16 +398,13 @@ func (m *Migrator) UpByOne(ctx context.Context) error {
 	return m.upByOne(ctx)
 }
 
-func NewMigrator(db *bun.DB, opts ...Option) *Migrator {
+func NewMigrator(db bun.IDB, opts ...Option) *Migrator {
 	ret := &Migrator{
 		db:        db,
 		tableName: migrationTable,
 	}
-	for _, opt := range append(defaultOptions, opts...) {
+	for _, opt := range opts {
 		opt(ret)
-	}
-	if ret.lockRetryInterval == 0 {
-		ret.lockRetryInterval = defaultLockRetryInterval
 	}
 	return ret
 }
@@ -446,15 +422,3 @@ func WithTableName(name string) Option {
 		m.tableName = name
 	}
 }
-
-func WithLockRetryInterval(interval time.Duration) Option {
-	return func(m *Migrator) {
-		m.lockRetryInterval = interval
-	}
-}
-
-var defaultOptions = []Option{
-	WithLockRetryInterval(defaultLockRetryInterval),
-}
-
-var defaultLockRetryInterval = time.Second
