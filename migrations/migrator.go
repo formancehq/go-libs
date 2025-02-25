@@ -41,7 +41,7 @@ type Migrator struct {
 	migrations []Migration
 	schema     string
 	tableName  string
-	db         bun.IDB
+	rootDB     bun.IDB
 }
 
 func (m *Migrator) GetSchema() string {
@@ -63,7 +63,7 @@ func (m *Migrator) getVersionsTable() string {
 	return fmt.Sprintf(`"%s"`, m.tableName)
 }
 
-func (m *Migrator) initSchema(ctx context.Context) error {
+func (m *Migrator) initSchema(ctx context.Context, db bun.IDB) error {
 	query := ""
 	if m.schema != "" {
 		query += `
@@ -89,19 +89,19 @@ func (m *Migrator) initSchema(ctx context.Context) error {
 		idx_version_id on ` + m.tableName + ` (version_id);
 	`
 
-	_, err := m.db.ExecContext(ctx, query)
+	_, err := db.ExecContext(ctx, query)
 	if err != nil {
 		return postgres.ResolveError(err)
 	}
 
-	lastVersion, err := m.GetLastVersion(ctx)
+	lastVersion, err := m.getLastVersion(ctx, db)
 	if err != nil {
 		return fmt.Errorf("failed to get last version: %w", err)
 	}
 
 	if lastVersion == -1 {
 		// Insert a first noop row to keep compatibility with goose
-		_, err := m.db.NewInsert().
+		_, err := db.NewInsert().
 			Model(&Version{
 				VersionID: 0,
 				IsApplied: true,
@@ -117,11 +117,11 @@ func (m *Migrator) initSchema(ctx context.Context) error {
 	return err
 }
 
-func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
+func (m *Migrator) getLastVersion(ctx context.Context, db bun.IDB) (int, error) {
 	// run in dedicated to avoid aborting the current transaction (if any) if the table does not exist yer
 	version := &Version{}
-	if err := m.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		if err := m.db.NewSelect().
+	if err := db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if err := tx.NewSelect().
 			Model(version).
 			ModelTableExpr(m.getVersionsTable()).
 			Order("version_id DESC").
@@ -151,6 +151,10 @@ func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
 	return version.VersionID, nil
 }
 
+func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
+	return m.getLastVersion(ctx, m.rootDB)
+}
+
 func (m *Migrator) Up(ctx context.Context) error {
 	for {
 		err := m.UpByOne(ctx)
@@ -167,7 +171,7 @@ func (m *Migrator) GetMigrations(ctx context.Context) ([]Info, error) {
 	ret := make([]Info, 0, len(m.migrations))
 	versions := make([]Version, 0)
 
-	if err := m.db.NewSelect().
+	if err := m.rootDB.NewSelect().
 		TableExpr(m.getVersionsTable()).
 		Order("version_id").
 		Where("version_id >= 1").
@@ -228,13 +232,13 @@ func (m *Migrator) IsUpToDate(ctx context.Context) (bool, error) {
 	return version == len(m.migrations), nil
 }
 
-func (m *Migrator) upByOne(ctx context.Context) error {
+func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 
 	var (
 		actualDB bun.IDB
 		lockFn   string
 	)
-	switch db := m.db.(type) {
+	switch db := db.(type) {
 	case bun.Tx:
 		actualDB = db
 		lockFn = "pg_advisory_xact"
@@ -252,13 +256,22 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 		lockFn = "pg_advisory"
 	}
 
-	_, err := actualDB.NewRaw(fmt.Sprintf("select %s_lock(hashtext(?))", lockFn), m.getVersionsTable()).
-		Exec(ctx)
+	_, err := actualDB.ExecContext(ctx, fmt.Sprintf("select %s_lock(hashtext(?))", lockFn), m.getVersionsTable())
 	if err != nil {
 		return fmt.Errorf("failed to acquire lock: %w", postgres.ResolveError(err))
 	}
 
-	err = m.initSchema(ctx)
+	switch actualDB.(type) {
+	case bun.Conn:
+		defer func() {
+			_, err := actualDB.ExecContext(ctx, fmt.Sprintf("select %s_unlock(hashtext(?))", lockFn), m.getVersionsTable())
+			if err != nil {
+				logging.FromContext(ctx).Errorf("failed to release lock: %v", err)
+			}
+		}()
+	}
+
+	err = m.initSchema(ctx, actualDB)
 	if err != nil {
 		return fmt.Errorf("failed to create version table: %w", err)
 	}
@@ -276,7 +289,7 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 		return ErrAlreadyUpToDate
 	}
 
-	_, err = m.db.NewInsert().
+	_, err = db.NewInsert().
 		Model(&Version{
 			VersionID: lastVersion + 1,
 			IsApplied: false,
@@ -324,7 +337,7 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 						logging.FromContext(ctx).Errorf("failed to parse max counter: %v", err)
 						return nil
 					}
-					_, err = m.db.NewUpdate().
+					_, err = actualDB.NewUpdate().
 						Model(&Version{}).
 						ModelTableExpr(m.getVersionsTable()).
 						Where("version_id = ?", lastVersion+1).
@@ -342,7 +355,7 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 						logging.FromContext(ctx).Errorf("failed to parse actual counter: %v", err)
 						return nil
 					}
-					_, err = m.db.NewUpdate().
+					_, err = actualDB.NewUpdate().
 						Model(&Version{}).
 						ModelTableExpr(m.getVersionsTable()).
 						Where("version_id = ?", lastVersion+1).
@@ -375,12 +388,12 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 	}
 
 	logging.FromContext(ctx).Debugf("Running migration %d: %s", lastVersion, m.migrations[lastVersion].Name)
-	if err := m.migrations[lastVersion].Up(ctx, m.db); err != nil {
+	if err := m.migrations[lastVersion].Up(ctx, actualDB); err != nil {
 		return fmt.Errorf("failed to run migration '%s': %w", m.migrations[lastVersion].Name, err)
 	}
 
 	logging.FromContext(ctx).Debugf("Migration %d done", lastVersion)
-	_, err = m.db.NewUpdate().
+	_, err = actualDB.NewUpdate().
 		Model(&Version{}).
 		Where("version_id = ? and not is_applied", lastVersion+1).
 		Set("is_applied = true").
@@ -395,12 +408,12 @@ func (m *Migrator) upByOne(ctx context.Context) error {
 }
 
 func (m *Migrator) UpByOne(ctx context.Context) error {
-	return m.upByOne(ctx)
+	return m.upByOne(ctx, m.rootDB)
 }
 
 func NewMigrator(db bun.IDB, opts ...Option) *Migrator {
 	ret := &Migrator{
-		db:        db,
+		rootDB:    db,
 		tableName: migrationTable,
 	}
 	for _, opt := range opts {

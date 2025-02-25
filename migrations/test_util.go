@@ -17,7 +17,7 @@ func TestMigrations(ctx context.Context, _fs embed.FS, migrator *Migrator) error
 			return nil, err
 		}
 		if err == nil {
-			_, err = migrator.db.ExecContext(ctx, before)
+			_, err = migrator.rootDB.ExecContext(ctx, before)
 			if err != nil {
 				return nil, fmt.Errorf("executing pre migration script: %s", entry.Name())
 			}
@@ -37,7 +37,7 @@ func TestMigrations(ctx context.Context, _fs embed.FS, migrator *Migrator) error
 			return nil, err
 		}
 		if err == nil {
-			_, err = migrator.db.ExecContext(ctx, after)
+			_, err = migrator.rootDB.ExecContext(ctx, after)
 			if err != nil {
 				return nil, fmt.Errorf("executing post migration script: %s", entry.Name())
 			}
