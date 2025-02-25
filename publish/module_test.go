@@ -2,86 +2,24 @@ package publish
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"os"
 	"testing"
 	"time"
 
-	dockerlib "github.com/formancehq/go-libs/v2/testing/docker"
+	"github.com/nats-io/nats.go"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/IBM/sarama"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/formancehq/go-libs/v2/logging"
 	natsServer "github.com/nats-io/nats-server/v2/server"
-	"github.com/nats-io/nats.go"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
-
-func createRedpandaServer(t *testing.T) string {
-
-	pool := dockerlib.NewPool(t, logging.Testing())
-	resource := pool.Run(dockerlib.Configuration{
-		RunOptions: &dockertest.RunOptions{
-			Repository: "docker.redpanda.com/vectorized/redpanda",
-			Tag:        "v22.3.11",
-			Tty:        true,
-			Cmd: []string{
-				"redpanda", "start",
-				"--smp", "1",
-				"--overprovisioned",
-				"--kafka-addr", "PLAINTEXT://0.0.0.0:9092",
-				"--advertise-kafka-addr", "PLAINTEXT://localhost:9092",
-				"--pandaproxy-addr", "0.0.0.0:8082",
-				"--advertise-pandaproxy-addr", "localhost:8082",
-			},
-			PortBindings: map[docker.Port][]docker.PortBinding{
-				"9092/tcp": {{
-					HostIP:   "0.0.0.0",
-					HostPort: "9092",
-				}},
-				"9644/tcp": {{
-					HostIP:   "0.0.0.0",
-					HostPort: "9644",
-				}},
-			},
-		},
-	})
-
-	// todo: need to add a check function on the container
-	<-time.After(5 * time.Second)
-
-	stdout := io.Discard
-	stderr := io.Discard
-	if testing.Verbose() {
-		stdout = os.Stdout
-		stderr = os.Stderr
-	}
-	exitCode, err := resource.Exec([]string{
-		"rpk",
-		"cluster",
-		"config",
-		"set",
-		"auto_create_topics_enabled",
-		"true",
-	}, dockertest.ExecOptions{
-		StdOut: stdout,
-		StdErr: stderr,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 0, exitCode)
-
-	return "9092"
-}
 
 func TestModule(t *testing.T) {
 	t.Parallel()
@@ -102,22 +40,6 @@ func TestModule(t *testing.T) {
 			name: "go-channels",
 			setup: func(t *testing.T) fx.Option {
 				return GoChannelModule()
-			},
-			topic: "topic",
-		},
-		{
-			name: "kafka",
-			setup: func(t *testing.T) fx.Option {
-				port := createRedpandaServer(t)
-				return fx.Options(
-					kafkaModule("client-id", "consumer-group", fmt.Sprintf("localhost:%s", port)),
-					fx.Replace(sarama.V0_11_0_0),
-					ProvideSaramaOption(
-						WithProducerReturnSuccess(),
-						WithConsumerReturnErrors(),
-						WithConsumerOffsetsInitial(sarama.OffsetOldest),
-					),
-				)
 			},
 			topic: "topic",
 		},

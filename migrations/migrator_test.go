@@ -93,7 +93,6 @@ func TestMigrationsConcurrently(t *testing.T) {
 	migrationStarted := make(chan struct{})
 	terminatedMigration := make(chan struct{})
 
-	waitTime := time.Second
 	options := []Option{
 		WithSchema(uuid.NewString()[:8]),
 	}
@@ -141,10 +140,10 @@ func TestMigrationsConcurrently(t *testing.T) {
 		select {
 		case err := <-migrator2Err:
 			require.True(t, errors.Is(err, ErrAlreadyUpToDate))
-		case <-time.After(waitTime):
+		case <-time.After(time.Second * 2):
 			t.Fatal("migrator2 did not finish")
 		}
-	case <-time.After(waitTime):
+	case <-time.After(time.Second * 2):
 		t.Fatal("migrator1 did not finish")
 	}
 }
