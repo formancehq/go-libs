@@ -68,7 +68,7 @@ require (
 	go.temporal.io/api v1.45.0
 	go.temporal.io/sdk v1.33.0
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
-	go.uber.org/dig v1.18.0
+	go.uber.org/dig v1.18.1
 	go.uber.org/fx v1.23.0
 	go.uber.org/mock v0.5.0
 	go.uber.org/zap v1.27.0
