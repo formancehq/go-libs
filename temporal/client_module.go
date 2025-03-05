@@ -29,6 +29,8 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 	certStr, _ := cmd.Flags().GetString(TemporalSSLClientCertFlag)
 	key, _ := cmd.Flags().GetString(TemporalSSLClientKeyFlag)
 	initSearchAttributes, _ := cmd.Flags().GetBool(TemporalInitSearchAttributesFlag)
+	encryptionEnabled, _ := cmd.Flags().GetBool(TemporalEncryptionEnabledFlag)
+	encryptionKey, _ := cmd.Flags().GetString(TemporalEncryptionAESKeyFlag)
 
 	return fx.Options(
 		fx.Provide(func(logger logging.Logger, meterProvider metric.MeterProvider) (client.Options, error) {
@@ -55,6 +57,11 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 				Interceptors: []interceptor.ClientInterceptor{tracingInterceptor},
 				Logger:       newLogger(logger),
 			}
+
+			if encryptionEnabled {
+				options.DataConverter = NewEncryptionDataConverter([]byte(encryptionKey))
+			}
+
 			if cert != nil {
 				options.ConnectionOptions = client.ConnectionOptions{
 					TLS: &tls.Config{Certificates: []tls.Certificate{*cert}},
