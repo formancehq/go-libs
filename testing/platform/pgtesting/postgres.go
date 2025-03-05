@@ -170,6 +170,7 @@ type Config struct {
 	StatusCheckInterval time.Duration
 	MaximumWaitingTime  time.Duration
 	Extensions          []string
+	Version             string
 }
 
 func (c Config) validate() error {
@@ -221,6 +222,18 @@ func WithExtension(extensions ...string) Option {
 	}
 }
 
+func WithVersion(version string) Option {
+	return func(opts *Config) {
+		opts.Version = version
+	}
+}
+
+func WithVersionFromEnv() Option {
+	return func(opts *Config) {
+		opts.Version = os.Getenv("POSTGRES_VERSION")
+	}
+}
+
 func WithPGStatsExtension() Option {
 	return WithExtension("pg_stat_statements")
 }
@@ -229,12 +242,16 @@ func WithPGCrypto() Option {
 	return WithExtension("pgcrypto")
 }
 
-var defaultOptions = []Option{
-	WithStatusCheckInterval(200 * time.Millisecond),
-	WithInitialUser("root", "root"),
-	WithMaximumWaitingTime(time.Minute),
-	WithInitialDatabaseName("formance"),
-}
+var (
+	defaultVersion = "15"
+	defaultOptions = []Option{
+		WithStatusCheckInterval(200 * time.Millisecond),
+		WithInitialUser("root", "root"),
+		WithMaximumWaitingTime(time.Minute),
+		WithInitialDatabaseName("formance"),
+		WithVersionFromEnv(),
+	}
+)
 
 func CreatePostgresServer(t T, pool *docker.Pool, opts ...Option) *PostgresServer {
 	cfg := Config{}
@@ -244,10 +261,14 @@ func CreatePostgresServer(t T, pool *docker.Pool, opts ...Option) *PostgresServe
 
 	require.NoError(t, cfg.validate())
 
+	if cfg.Version == "" {
+		cfg.Version = defaultVersion
+	}
+
 	resource := pool.Run(docker.Configuration{
 		RunOptions: &dockertest.RunOptions{
 			Repository: "postgres",
-			Tag:        "15-alpine",
+			Tag:        cfg.Version + "-alpine",
 			Env: []string{
 				fmt.Sprintf("POSTGRES_USER=%s", cfg.InitialUsername),
 				fmt.Sprintf("POSTGRES_PASSWORD=%s", cfg.InitialUserPassword),
