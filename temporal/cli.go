@@ -12,6 +12,8 @@ const (
 	TemporalTaskQueueFlag             = "temporal-task-queue"
 	TemporalInitSearchAttributesFlag  = "temporal-init-search-attributes"
 	TemporalMaxParallelActivitiesFlag = "temporal-max-parallel-activities"
+	TemporalEncryptionEnabledFlag     = "temporal-encryption-enabled"
+	TemporalEncryptionAESKeyFlag      = "temporal-encryption-key"
 )
 
 func AddFlags(flags *pflag.FlagSet) {
@@ -22,4 +24,6 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.String(TemporalTaskQueueFlag, "default", "Temporal task queue name")
 	flags.Bool(TemporalInitSearchAttributesFlag, false, "Init temporal search attributes")
 	flags.Float64(TemporalMaxParallelActivitiesFlag, 10, "Maximum number of parallel activities")
+	flags.Bool(TemporalEncryptionEnabledFlag, false, "Enable encryption")
+	flags.String(TemporalEncryptionAESKeyFlag, "", "Encryption key")
 }
