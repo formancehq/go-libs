@@ -20,6 +20,7 @@ import (
 type MockMigrationFileSystem struct {
 	ctrl     *gomock.Controller
 	recorder *MockMigrationFileSystemMockRecorder
+	isgomock struct{}
 }
 
 // MockMigrationFileSystemMockRecorder is the mock recorder for MockMigrationFileSystem.

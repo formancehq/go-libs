@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -35,7 +36,8 @@ type CircuitBreaker struct {
 	publisher message.Publisher
 	store     storage.Store
 
-	state State
+	stateMu sync.RWMutex
+	state   State
 
 	// openInterval is the time interval for the "open" state, before switching
 	// to the "half-open" state.
@@ -76,8 +78,20 @@ func newCircuitBreaker(
 	}
 }
 
+func (cb *CircuitBreaker) GetState() State {
+	cb.stateMu.RLock()
+	defer cb.stateMu.RUnlock()
+	return cb.state
+}
+
+func (cb *CircuitBreaker) setState(state State) {
+	cb.stateMu.Lock()
+	cb.state = state
+	cb.stateMu.Unlock()
+}
+
 func (cb *CircuitBreaker) OpenState() {
-	cb.state = StateOpen
+	cb.setState(StateOpen)
 	cb.openIntervalTimer.Reset(cb.openInterval)
 
 	cb.logger.Info("Circuit breaker switched to the open state")
@@ -89,7 +103,7 @@ func (cb *CircuitBreaker) HalfOpenState() {
 }
 
 func (cb *CircuitBreaker) CloseState() {
-	cb.state = StateClose
+	cb.setState(StateClose)
 	cb.openIntervalTimer.Stop()
 
 	cb.logger.Info("Circuit breaker switched to the close state")
