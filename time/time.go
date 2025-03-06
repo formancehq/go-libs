@@ -45,8 +45,15 @@ func New(t time.Time) Time {
 func (t *Time) Scan(src interface{}) (err error) {
 	switch src := src.(type) {
 	case time.Time:
+		// Create a new time in UTC with the same year, month, day, hour, minute, second, nanosecond
+		// This preserves the wall clock time when converting to UTC
+		utcTime := time.Date(
+			src.Year(), src.Month(), src.Day(),
+			src.Hour(), src.Minute(), src.Second(), src.Nanosecond(),
+			time.UTC,
+		)
 		*t = Time{
-			Time: src.UTC(),
+			Time: utcTime,
 		}
 		return nil
 	case string:
