@@ -1,6 +1,7 @@
 package otlpmetrics
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ const (
 	OtelMetricsExporterOTLPModeFlag                   = "otel-metrics-exporter-otlp-mode"
 	OtelMetricsExporterOTLPEndpointFlag               = "otel-metrics-exporter-otlp-endpoint"
 	OtelMetricsExporterOTLPInsecureFlag               = "otel-metrics-exporter-otlp-insecure"
+	OtelMetricsExporterOTLPHeadersFlag                = "otel-metrics-exporter-otlp-headers"
 )
 
 func AddFlags(flags *flag.FlagSet) {
@@ -31,6 +33,7 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.String(OtelMetricsExporterOTLPModeFlag, "grpc", "OpenTelemetry metrics OTLP exporter mode (grpc|http)")
 	flags.String(OtelMetricsExporterOTLPEndpointFlag, "", "OpenTelemetry metrics grpc endpoint")
 	flags.Bool(OtelMetricsExporterOTLPInsecureFlag, false, "OpenTelemetry metrics grpc insecure")
+	flags.StringSlice(OtelMetricsExporterOTLPHeadersFlag, nil, "OpenTelemetry metrics grpc headers")
 
 	// notes(gfyrag): apps are in charge of exposing in memory metrics using whatever protocol it wants to
 	flags.Bool(OtelMetricsKeepInMemoryFlag, false, "Allow to keep metrics in memory")
@@ -45,12 +48,19 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 	otelMetricsRuntimeMinimumReadMemStatsInterval, _ := cmd.Flags().GetDuration(OtelMetricsRuntimeMinimumReadMemStatsIntervalFlag)
 	otelMetricsExporterPushInterval, _ := cmd.Flags().GetDuration(OtelMetricsExporterPushIntervalFlag)
 	otelMetricsKeepInMemory, _ := cmd.Flags().GetBool(OtelMetricsKeepInMemoryFlag)
+	otelMetricsExporterOTLPHeaders, _ := cmd.Flags().GetStringSlice(OtelMetricsExporterOTLPHeadersFlag)
+	headersMap := make(map[string]string)
+	for _, header := range otelMetricsExporterOTLPHeaders {
+		parts := strings.SplitN(header, "=", 2)
+		headersMap[parts[0]] = parts[1]
+	}
 
 	return MetricsModule(ModuleConfig{
 		OTLPConfig: &OTLPConfig{
 			Mode:     otelMetricsExporterOTLPMode,
 			Endpoint: otelMetricsExporterOTLPEndpoint,
 			Insecure: otelMetricsExporterOTLPInsecure,
+			Headers:  headersMap,
 		},
 		Exporter:                    otelMetricsExporter,
 		RuntimeMetrics:              otelMetricsRuntime,

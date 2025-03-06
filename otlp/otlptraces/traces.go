@@ -33,6 +33,7 @@ type OTLPConfig struct {
 	Mode     string
 	Endpoint string
 	Insecure bool
+	Headers  map[string]string
 }
 
 type ModuleConfig struct {
@@ -109,6 +110,11 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 						return otlptracegrpc.WithInsecure()
 					}))
 				}
+				if cfg.OTLPConfig.Headers != nil {
+					options = append(options, ProvideOTLPTracerGRPCClientOption(func() otlptracegrpc.Option {
+						return otlptracegrpc.WithHeaders(cfg.OTLPConfig.Headers)
+					}))
+				}
 			case otlp.ModeHTTP:
 				if cfg.OTLPConfig.Endpoint != "" {
 					options = append(options, ProvideOTLPTracerHTTPClientOption(func() otlptracehttp.Option {
@@ -118,6 +124,11 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 				if cfg.OTLPConfig.Insecure {
 					options = append(options, ProvideOTLPTracerHTTPClientOption(func() otlptracehttp.Option {
 						return otlptracehttp.WithInsecure()
+					}))
+				}
+				if cfg.OTLPConfig.Headers != nil {
+					options = append(options, ProvideOTLPTracerHTTPClientOption(func() otlptracehttp.Option {
+						return otlptracehttp.WithHeaders(cfg.OTLPConfig.Headers)
 					}))
 				}
 			}

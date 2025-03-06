@@ -1,6 +1,8 @@
 package otlptraces
 
 import (
+	"strings"
+
 	"github.com/formancehq/go-libs/v2/otlp"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
@@ -16,6 +18,7 @@ const (
 	OtelTracesExporterOTLPModeFlag       = "otel-traces-exporter-otlp-mode"
 	OtelTracesExporterOTLPEndpointFlag   = "otel-traces-exporter-otlp-endpoint"
 	OtelTracesExporterOTLPInsecureFlag   = "otel-traces-exporter-otlp-insecure"
+	OtelTracesExporterOTLPHeadersFlag    = "otel-traces-exporter-otlp-headers"
 )
 
 func AddFlags(flags *flag.FlagSet) {
@@ -29,6 +32,7 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.String(OtelTracesExporterOTLPModeFlag, "grpc", "OpenTelemetry traces OTLP exporter mode (grpc|http)")
 	flags.String(OtelTracesExporterOTLPEndpointFlag, "", "OpenTelemetry traces grpc endpoint")
 	flags.Bool(OtelTracesExporterOTLPInsecureFlag, false, "OpenTelemetry traces grpc insecure")
+	flags.StringSlice(OtelTracesExporterOTLPHeadersFlag, nil, "OpenTelemetry traces grpc headers")
 }
 
 func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
@@ -47,11 +51,21 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 			mode, _ := cmd.Flags().GetString(OtelTracesExporterOTLPModeFlag)
 			endpoint, _ := cmd.Flags().GetString(OtelTracesExporterOTLPEndpointFlag)
 			insecure, _ := cmd.Flags().GetBool(OtelTracesExporterOTLPInsecureFlag)
+			headers, _ := cmd.Flags().GetStringSlice(OtelTracesExporterOTLPHeadersFlag)
+
+			headersMap := make(map[string]string)
+			for _, header := range headers {
+				parts := strings.SplitN(header, "=", 2)
+				if len(parts) == 2 {
+					headersMap[parts[0]] = parts[1]
+				}
+			}
 
 			return &OTLPConfig{
 				Mode:     mode,
 				Endpoint: endpoint,
 				Insecure: insecure,
+				Headers:  headersMap,
 			}
 		}(),
 		ServiceName:        serviceName,

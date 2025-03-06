@@ -42,6 +42,7 @@ type OTLPConfig struct {
 	Mode     string
 	Endpoint string
 	Insecure bool
+	Headers  map[string]string
 }
 
 func ProvideMetricsProviderOption(v any, annotations ...fx.Annotation) fx.Option {
@@ -132,6 +133,11 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 						return otlpmetricgrpc.WithInsecure()
 					}))
 				}
+				if cfg.OTLPConfig.Headers != nil {
+					options = append(options, ProvideOTLPMetricsGRPCOption(func() otlpmetricgrpc.Option {
+						return otlpmetricgrpc.WithHeaders(cfg.OTLPConfig.Headers)
+					}))
+				}
 			}
 
 			options = append(options, ProvideOTLPMetricsGRPCExporter())
@@ -145,6 +151,11 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 				if cfg.OTLPConfig.Insecure {
 					options = append(options, ProvideOTLPMetricsHTTPOption(func() otlpmetrichttp.Option {
 						return otlpmetrichttp.WithInsecure()
+					}))
+				}
+				if cfg.OTLPConfig.Headers != nil {
+					options = append(options, ProvideOTLPMetricsHTTPOption(func() otlpmetrichttp.Option {
+						return otlpmetrichttp.WithHeaders(cfg.OTLPConfig.Headers)
 					}))
 				}
 			}
