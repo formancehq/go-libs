@@ -35,17 +35,17 @@ func TestCircuitBreaker(t *testing.T) {
 		expectedP1, _ := json.Marshal(&payload{Result: 1})
 		err := publisher.Publish("test", message.NewMessage("1", expectedP1))
 		require.NoError(t, err)
-		require.Equal(t, StateClose, publisher.state)
+		require.Equal(t, StateClose, publisher.GetState())
 
 		expectedP2, _ := json.Marshal(&payload{Result: 2})
 		err = publisher.Publish("test", message.NewMessage("2", expectedP2))
 		require.NoError(t, err)
-		require.Equal(t, StateClose, publisher.state)
+		require.Equal(t, StateClose, publisher.GetState())
 
 		expectedP3, _ := json.Marshal(&payload{Result: 3})
 		err = publisher.Publish("test", message.NewMessage("3", expectedP3))
 		require.NoError(t, err)
-		require.Equal(t, StateClose, publisher.state)
+		require.Equal(t, StateClose, publisher.GetState())
 
 		require.Len(t, messages, 3)
 		msg1 := <-messages
@@ -94,7 +94,7 @@ func TestCircuitBreaker(t *testing.T) {
 		m1.Metadata.Set("foo", "bar")
 		err := publisher.Publish("test", m1)
 		require.NoError(t, err)
-		require.Equal(t, StateClose, publisher.state)
+		require.Equal(t, StateClose, publisher.GetState())
 
 		underlyingPublisher.WithPublishError(errTest)
 
@@ -103,14 +103,14 @@ func TestCircuitBreaker(t *testing.T) {
 		m2.Metadata.Set("foo", "bar")
 		err = publisher.Publish("test", m2)
 		require.NoError(t, err)
-		require.Equal(t, StateOpen, publisher.state)
+		require.Equal(t, StateOpen, publisher.GetState())
 
 		expectedP3, _ := json.Marshal(&payload{Result: 3})
 		m3 := message.NewMessage("3", expectedP3)
 		m3.Metadata.Set("foo2", "bar2")
 		err = publisher.Publish("test", m3)
 		require.NoError(t, err)
-		require.Equal(t, StateOpen, publisher.state)
+		require.Equal(t, StateOpen, publisher.GetState())
 
 		require.Len(t, messages, 1)
 		msg1 := <-messages
@@ -162,7 +162,7 @@ func TestCircuitBreaker(t *testing.T) {
 		m1.Metadata.Set("foo", "bar")
 		err := publisher.Publish("test", m1)
 		require.NoError(t, err)
-		require.Equal(t, StateClose, publisher.state)
+		require.Equal(t, StateClose, publisher.GetState())
 
 		underlyingPublisher.WithPublishError(errTest)
 
@@ -171,14 +171,14 @@ func TestCircuitBreaker(t *testing.T) {
 		m2.Metadata.Set("foo", "bar")
 		err = publisher.Publish("test", m2)
 		require.ErrorIs(t, err, errTest)
-		require.Equal(t, StateOpen, publisher.state)
+		require.Equal(t, StateOpen, publisher.GetState())
 
 		expectedP3, _ := json.Marshal(&payload{Result: 3})
 		m3 := message.NewMessage("3", expectedP3)
 		m3.Metadata.Set("foo2", "bar2")
 		err = publisher.Publish("test", m3)
 		require.ErrorIs(t, err, errTest)
-		require.Equal(t, StateOpen, publisher.state)
+		require.Equal(t, StateOpen, publisher.GetState())
 
 		require.Len(t, messages, 1)
 		msg1 := <-messages
@@ -218,7 +218,7 @@ func TestCircuitBreaker(t *testing.T) {
 		m1.Metadata.Set("foo", "bar")
 		err := publisher.Publish("test", m1)
 		require.NoError(t, err)
-		require.Equal(t, StateClose, publisher.state)
+		require.Equal(t, StateClose, publisher.GetState())
 
 		underlyingPublisher.WithPublishError(errTest)
 
@@ -227,14 +227,14 @@ func TestCircuitBreaker(t *testing.T) {
 		m2.Metadata.Set("foo", "bar")
 		err = publisher.Publish("test", m2)
 		require.NoError(t, err)
-		require.Equal(t, StateOpen, publisher.state)
+		require.Equal(t, StateOpen, publisher.GetState())
 
 		expectedP3, _ := json.Marshal(&payload{Result: 3})
 		m3 := message.NewMessage("3", expectedP3)
 		m3.Metadata.Set("foo2", "bar2")
 		err = publisher.Publish("test", m3)
 		require.NoError(t, err)
-		require.Equal(t, StateOpen, publisher.state)
+		require.Equal(t, StateOpen, publisher.GetState())
 
 		require.Len(t, messages, 1)
 		msg1 := <-messages
@@ -264,7 +264,7 @@ func TestCircuitBreaker(t *testing.T) {
 		underlyingPublisher.WithPublishError(nil)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			if !assert.Equal(c, StateClose, publisher.state) {
+			if !assert.Equal(c, StateClose, publisher.GetState()) {
 				return
 			}
 

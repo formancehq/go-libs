@@ -2,6 +2,7 @@ package circuitbreaker
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -56,6 +57,7 @@ func (p *mockPublisher) Close() error {
 type MockStore struct {
 	insertErr error
 
+	mu             sync.RWMutex
 	messagesToSend []*storage.CircuitBreakerModel
 }
 
@@ -75,6 +77,9 @@ func (s *MockStore) Insert(ctx context.Context, topic string, data []byte, metad
 		return s.insertErr
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.messagesToSend = append(s.messagesToSend, &storage.CircuitBreakerModel{
 		CreatedAt: time.Now().UTC(),
 		Topic:     topic,
@@ -86,10 +91,18 @@ func (s *MockStore) Insert(ctx context.Context, topic string, data []byte, metad
 }
 
 func (s *MockStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, error) {
-	return s.messagesToSend, nil
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]*storage.CircuitBreakerModel, len(s.messagesToSend))
+	copy(result, s.messagesToSend)
+	return result, nil
 }
 
 func (s *MockStore) Delete(ctx context.Context, ids []uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	for _, id := range ids {
 		for i, msg := range s.messagesToSend {
 			if msg.ID == id {
