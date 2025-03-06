@@ -18,25 +18,16 @@ concurrency:
 
 jobs:
   Ci:
-    runs-on: "ubuntu-latest"
+    runs-on: "formance-runner"
     steps:
       - uses: 'actions/checkout@v4'
         with:
           fetch-depth: 0
-      - uses: earthly/actions-setup@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          version: "latest" # or pin to an specific version, e.g. "0.8.1"
       - name: Setup Env
         uses: ./.github/actions/env
       - run: >
-          earthly
-          --allow-privileged 
-          --secret SPEAKEASY_API_KEY=$SPEAKEASY_API_KEY
-          ${{ contains(github.event.pull_request.labels.*.name, 'no-cache') && '--no-cache' || '' }}
-          +ci
-        env:
-          SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
+          /nix/var/nix/profiles/default/bin/nix --extra-experimental-features "nix-command" --extra-experimental-features "flakes"
+          develop --impure --command just pre-commit
       - name: Get changed files
         id: changed-files
         shell: bash
@@ -47,6 +38,13 @@ jobs:
             echo "There are changes in the repository"
             exit 1
           fi
+      - run: >
+          /nix/var/nix/profiles/default/bin/nix --extra-experimental-features "nix-command" --extra-experimental-features "flakes"
+          develop --impure --command just tests
+      - name: Upload coverage reports to Codecov with GitHub Action
+        uses: codecov/codecov-action@v5.1.2
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Validate Dependabot PR
         if: github.event.pull_request.user.login == 'dependabot[bot]'
         run: gh pr review $PR_URL --approve -b "Auto approve dependencies bump PR"
