@@ -114,9 +114,11 @@ func (cb *CircuitBreaker) loop() {
 	cb.HalfOpenState()
 	if err := cb.catchUpDatabase(); err != nil {
 		cb.OpenState()
+		// Don't switch to closed state if there was an error
+	} else {
+		// Only switch to closed state if catchup was successful
+		cb.CloseState()
 	}
-	// we successfully published the messages, let's switch to the closed state
-	cb.CloseState()
 
 	for {
 		select {

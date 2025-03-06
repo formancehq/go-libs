@@ -19,8 +19,8 @@ type testMessages struct {
 }
 
 type mockPublisher struct {
-	err error
-
+	mu       sync.RWMutex
+	err      error
 	messages chan *testMessages
 }
 
@@ -31,19 +31,29 @@ func newMockPublisher(messages chan *testMessages) *mockPublisher {
 }
 
 func (p *mockPublisher) WithPublishError(err error) *mockPublisher {
+	p.mu.Lock()
 	p.err = err
+	p.mu.Unlock()
 	return p
 }
 
 func (p *mockPublisher) Publish(topic string, messages ...*message.Message) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if p.err != nil {
 		return p.err
 	}
 
 	for _, msg := range messages {
-		p.messages <- &testMessages{
+		select {
+		case p.messages <- &testMessages{
 			topic: topic,
 			msg:   msg,
+		}:
+		default:
+			// Channel is full or closed
+			return nil
 		}
 	}
 
@@ -51,11 +61,15 @@ func (p *mockPublisher) Publish(topic string, messages ...*message.Message) erro
 }
 
 func (p *mockPublisher) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return nil
 }
 
 type MockStore struct {
 	insertErr error
+	listErr   error
+	deleteErr error
 
 	mu             sync.RWMutex
 	messagesToSend []*storage.CircuitBreakerModel
@@ -69,6 +83,16 @@ func newMockStore() *MockStore {
 
 func (s *MockStore) WithInsertError(err error) *MockStore {
 	s.insertErr = err
+	return s
+}
+
+func (s *MockStore) WithListError(err error) *MockStore {
+	s.listErr = err
+	return s
+}
+
+func (s *MockStore) WithDeleteError(err error) *MockStore {
+	s.deleteErr = err
 	return s
 }
 
@@ -91,6 +115,10 @@ func (s *MockStore) Insert(ctx context.Context, topic string, data []byte, metad
 }
 
 func (s *MockStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -100,6 +128,10 @@ func (s *MockStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, e
 }
 
 func (s *MockStore) Delete(ctx context.Context, ids []uint64) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

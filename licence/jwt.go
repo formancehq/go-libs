@@ -2,6 +2,7 @@ package licence
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -53,11 +54,14 @@ func (l *Licence) validate() error {
 		return l.getKey(issuer, kid)
 	})
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return fmt.Errorf("token has invalid claims: token is expired")
+		}
 		return err
 	}
 
 	if !token.Valid {
-		return errors.New("token is not valid")
+		return fmt.Errorf("token is not valid")
 	}
 
 	return nil

@@ -41,7 +41,6 @@ func NewLicence(
 }
 
 func (l *Licence) run(licenceError chan error) {
-	l.licenceValidateTick = 2 * time.Minute
 	ticker := time.NewTicker(l.licenceValidateTick)
 
 	for {

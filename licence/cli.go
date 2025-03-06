@@ -33,7 +33,9 @@ func FXModuleFromFlags(
 	serviceName string,
 ) fx.Option {
 	if !licenceEnabled {
-		return fx.Options()
+		return fx.Options(
+			fx.Supply(&Licence{}),
+		)
 	}
 
 	licenceChanError := make(chan error, 1)
