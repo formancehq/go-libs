@@ -11,7 +11,6 @@ import (
 	"github.com/formancehq/go-libs/v2/api"
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
