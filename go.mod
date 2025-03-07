@@ -6,7 +6,7 @@ toolchain go1.22.7
 
 require (
 	dario.cat/mergo v1.0.1
-	github.com/ClickHouse/clickhouse-go/v2 v2.32.2
+	github.com/ClickHouse/clickhouse-go/v2 v2.33.0
 	github.com/IBM/sarama v1.45.1
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1
@@ -104,7 +104,7 @@ require (
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dnwe/otelsarama v0.0.0-20240308230250-9388d9d40bc0 // indirect
 	github.com/docker/cli v27.3.1+incompatible // indirect
-	github.com/docker/docker v27.5.1+incompatible // indirect
+	github.com/docker/docker v28.0.1+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
