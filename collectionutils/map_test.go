@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/formancehq/go-libs/v2/collectionutils"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
