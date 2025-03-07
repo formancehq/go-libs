@@ -10,6 +10,7 @@ import (
 )
 
 func TestLink(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		link     api.Link
@@ -51,16 +52,17 @@ func TestLink(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Marshal the link to JSON
 			data, err := json.Marshal(tc.link)
 			require.NoError(t, err)
-			assert.Equal(t, tc.expected, string(data))
+			require.Equal(t, tc.expected, string(data))
 
 			// Unmarshal back to verify
 			var link api.Link
 			err = json.Unmarshal(data, &link)
 			require.NoError(t, err)
-			assert.Equal(t, tc.link, link)
+			require.Equal(t, tc.link, link)
 		})
 	}
 }

@@ -5,9 +5,11 @@ import (
 
 	"github.com/formancehq/go-libs/v2/collectionutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestKeys(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    map[string]int
@@ -37,19 +39,21 @@ func TestKeys(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.Keys(tc.input)
 
 			// Since map iteration order is not guaranteed, we need to check that all keys are present
 			// rather than checking the exact order
-			assert.Equal(t, len(tc.expected), len(result))
+			require.Equal(t, len(tc.expected), len(result))
 			for _, key := range tc.expected {
-				assert.Contains(t, result, key)
+				require.Contains(t, result, key)
 			}
 		})
 	}
 }
 
 func TestConvertMap(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    map[string]int
@@ -84,13 +88,15 @@ func TestConvertMap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.ConvertMap(tc.input, tc.mapper)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestMergeMaps(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		map1     map[string]int
@@ -149,13 +155,15 @@ func TestMergeMaps(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.MergeMaps(tc.map1, tc.map2)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestToAny(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    interface{}
@@ -190,13 +198,15 @@ func TestToAny(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.ToAny(tc.input)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestToPointer(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name  string
 		input interface{}
@@ -221,14 +231,16 @@ func TestToPointer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.ToPointer(tc.input)
-			assert.NotNil(t, result)
-			assert.Equal(t, tc.input, *result)
+			require.NotNil(t, result)
+			require.Equal(t, tc.input, *result)
 		})
 	}
 }
 
 func TestToFmtString(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    interface{}
@@ -263,8 +275,9 @@ func TestToFmtString(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.ToFmtString(tc.input)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }

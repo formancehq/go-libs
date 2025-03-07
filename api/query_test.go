@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/formancehq/go-libs/v2/api"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestQueryParamBool(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		queryParams    map[string]string
@@ -82,6 +83,7 @@ func TestQueryParamBool(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a URL with query parameters
 			u, _ := url.Parse("http://example.com")
 			q := u.Query()
@@ -97,7 +99,7 @@ func TestQueryParamBool(t *testing.T) {
 			result := api.QueryParamBool(req, tc.key)
 
 			// Check the result
-			assert.Equal(t, tc.expectedResult, result)
+			require.Equal(t, tc.expectedResult, result)
 		})
 	}
 }

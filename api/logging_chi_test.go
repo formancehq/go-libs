@@ -16,22 +16,26 @@ import (
 )
 
 func TestChiLogFormatter(t *testing.T) {
+	t.Parallel()
 	t.Run("NewLogFormatter", func(t *testing.T) {
+		t.Parallel()
 		formatter := api.NewLogFormatter()
-		assert.NotNil(t, formatter)
+		require.NotNil(t, formatter)
 	})
 
 	t.Run("NewLogEntry", func(t *testing.T) {
+		t.Parallel()
 		formatter := api.NewLogFormatter()
 		req, err := http.NewRequest("GET", "/test", nil)
 		require.NoError(t, err)
 
 		entry := formatter.NewLogEntry(req)
-		assert.NotNil(t, entry)
-		assert.Implements(t, (*middleware.LogEntry)(nil), entry)
+		require.NotNil(t, entry)
+		require.Implements(t, (*middleware.LogEntry)(nil), entry)
 	})
 
 	t.Run("Write", func(t *testing.T) {
+		t.Parallel()
 		// Create a buffer to capture log output
 		var buf bytes.Buffer
 		logger := logging.NewDefaultLogger(&buf, true, false, false)
@@ -54,20 +58,21 @@ func TestChiLogFormatter(t *testing.T) {
 
 		// Verify log output contains expected fields
 		logOutput := buf.String()
-		assert.Contains(t, logOutput, "GET /test")
-		assert.Contains(t, logOutput, "status")
-		assert.Contains(t, logOutput, "bytes")
-		assert.Contains(t, logOutput, "elapsed")
+		require.Contains(t, logOutput, "GET /test")
+		require.Contains(t, logOutput, "status")
+		require.Contains(t, logOutput, "bytes")
+		require.Contains(t, logOutput, "elapsed")
 
 		// Test with extra data
 		buf.Reset()
 		extra := map[string]string{"key": "value"}
 		entry.Write(status, bytesWritten, nil, elapsed, extra)
 		logOutput = buf.String()
-		assert.Contains(t, logOutput, "extra")
+		require.Contains(t, logOutput, "extra")
 	})
 
 	t.Run("Panic", func(t *testing.T) {
+		t.Parallel()
 		formatter := api.NewLogFormatter()
 		req, err := http.NewRequest("GET", "/test", nil)
 		require.NoError(t, err)
@@ -75,12 +80,13 @@ func TestChiLogFormatter(t *testing.T) {
 		entry := formatter.NewLogEntry(req)
 
 		// Test that Panic method panics
-		assert.Panics(t, func() {
+		require.Panics(t, func() {
 			entry.Panic("test panic", []byte("stack trace"))
 		})
 	})
 
 	t.Run("Integration with Chi middleware", func(t *testing.T) {
+		t.Parallel()
 		// Create a buffer to capture log output
 		var buf bytes.Buffer
 		logger := logging.NewDefaultLogger(&buf, true, false, false)
@@ -108,12 +114,12 @@ func TestChiLogFormatter(t *testing.T) {
 		wrappedHandler.ServeHTTP(rr, req)
 
 		// Verify response
-		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.Equal(t, "OK", rr.Body.String())
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "OK", rr.Body.String())
 
 		// Verify log output
 		logOutput := buf.String()
-		assert.Contains(t, logOutput, "GET /test")
-		assert.Contains(t, logOutput, "status")
+		require.Contains(t, logOutput, "GET /test")
+		require.Contains(t, logOutput, "status")
 	})
 }

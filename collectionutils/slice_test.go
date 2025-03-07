@@ -5,9 +5,11 @@ import (
 
 	"github.com/formancehq/go-libs/v2/collectionutils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMap(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    []int
@@ -42,13 +44,15 @@ func TestMap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.Map(tc.input, tc.mapper)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestCopyMap(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name  string
 		input map[string]int
@@ -69,10 +73,11 @@ func TestCopyMap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.CopyMap(tc.input)
 
 			// Verify the copy is equal to the original
-			assert.Equal(t, tc.input, result)
+			require.Equal(t, tc.input, result)
 
 			// Verify that modifying the copy doesn't affect the original
 			if len(result) > 0 {
@@ -92,7 +97,7 @@ func TestCopyMap(t *testing.T) {
 
 				// Verify the original is unchanged
 				if modifiedKey != "" {
-					assert.NotEqual(t, 999, tc.input[modifiedKey])
+					require.NotEqual(t, 999, tc.input[modifiedKey])
 				}
 			}
 		})
@@ -100,6 +105,7 @@ func TestCopyMap(t *testing.T) {
 }
 
 func TestFilter(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    []int
@@ -134,13 +140,15 @@ func TestFilter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.Filter(tc.input, tc.filter)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestReduce(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    []int
@@ -186,13 +194,15 @@ func TestReduce(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.Reduce(tc.input, tc.reducer, tc.initial)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestFlatten(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    [][]int
@@ -227,13 +237,15 @@ func TestFlatten(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.Flatten(tc.input)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestFirst(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		input    []int
@@ -268,13 +280,15 @@ func TestFirst(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.First(tc.input, tc.filter)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestFilterEq(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		value    interface{}
@@ -321,14 +335,16 @@ func TestFilterEq(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			filter := collectionutils.FilterEq(tc.value)
 			result := filter(tc.testVal)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestFilterNot(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		filter   func(int) bool
@@ -351,14 +367,16 @@ func TestFilterNot(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			notFilter := collectionutils.FilterNot(tc.filter)
 			result := notFilter(tc.testVal)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestContains(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		slice    []interface{}
@@ -393,75 +411,83 @@ func TestContains(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.Contains(tc.slice, tc.value)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }
 
 func TestSet(t *testing.T) {
+	t.Parallel()
 	t.Run("NewSet", func(t *testing.T) {
+		t.Parallel()
 		set := collectionutils.NewSet[string]()
-		assert.NotNil(t, set)
-		assert.Equal(t, 0, len(set))
+		require.NotNil(t, set)
+		require.Equal(t, 0, len(set))
 	})
 
 	t.Run("Put", func(t *testing.T) {
+		t.Parallel()
 		set := collectionutils.NewSet[string]()
 
 		// Add single element
 		set.Put("one")
-		assert.Equal(t, 1, len(set))
-		assert.True(t, set.Contains("one"))
+		require.Equal(t, 1, len(set))
+		require.True(t, set.Contains("one"))
 
 		// Add multiple elements
 		set.Put("two", "three")
-		assert.Equal(t, 3, len(set))
-		assert.True(t, set.Contains("two"))
-		assert.True(t, set.Contains("three"))
+		require.Equal(t, 3, len(set))
+		require.True(t, set.Contains("two"))
+		require.True(t, set.Contains("three"))
 
 		// Add duplicate element
 		set.Put("one")
-		assert.Equal(t, 3, len(set))
+		require.Equal(t, 3, len(set))
 	})
 
 	t.Run("Contains", func(t *testing.T) {
+		t.Parallel()
 		set := collectionutils.NewSet[string]()
 		set.Put("one", "two")
 
-		assert.True(t, set.Contains("one"))
-		assert.True(t, set.Contains("two"))
-		assert.False(t, set.Contains("three"))
+		require.True(t, set.Contains("one"))
+		require.True(t, set.Contains("two"))
+		require.False(t, set.Contains("three"))
 	})
 
 	t.Run("ToSlice", func(t *testing.T) {
+		t.Parallel()
 		set := collectionutils.NewSet[string]()
 		set.Put("one", "two", "three")
 
 		slice := set.ToSlice()
-		assert.Equal(t, 3, len(slice))
-		assert.Contains(t, slice, "one")
-		assert.Contains(t, slice, "two")
-		assert.Contains(t, slice, "three")
+		require.Equal(t, 3, len(slice))
+		require.Contains(t, slice, "one")
+		require.Contains(t, slice, "two")
+		require.Contains(t, slice, "three")
 	})
 
 	t.Run("Remove", func(t *testing.T) {
+		t.Parallel()
 		set := collectionutils.NewSet[string]()
 		set.Put("one", "two", "three")
 
 		set.Remove("two")
-		assert.Equal(t, 2, len(set))
-		assert.True(t, set.Contains("one"))
-		assert.False(t, set.Contains("two"))
-		assert.True(t, set.Contains("three"))
+		require.Equal(t, 2, len(set))
+		require.True(t, set.Contains("one"))
+		require.False(t, set.Contains("two"))
+		require.True(t, set.Contains("three"))
 
 		// Remove non-existent element
 		set.Remove("four")
-		assert.Equal(t, 2, len(set))
+		require.Equal(t, 2, len(set))
 	})
 }
 
 func TestPrepend(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		slice    []int
@@ -484,8 +510,9 @@ func TestPrepend(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := collectionutils.Prepend(tc.slice, tc.value)
-			assert.Equal(t, tc.expected, result)
+			require.Equal(t, tc.expected, result)
 		})
 	}
 }

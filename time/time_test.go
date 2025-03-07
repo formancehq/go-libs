@@ -11,13 +11,15 @@ import (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	libNow := libtime.New(now)
 
-	assert.Equal(t, now.UTC().Round(libtime.DatePrecision), libNow.Time)
+	require.Equal(t, now.UTC().Round(libtime.DatePrecision), libNow.Time)
 }
 
 func TestScan(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		input       interface{}
@@ -57,87 +59,96 @@ func TestScan(t *testing.T) {
 			err := lt.Scan(tc.input)
 
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, lt.Time)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, lt.Time)
 			}
 		})
 	}
 }
 
 func TestValue(t *testing.T) {
+	t.Parallel()
 	lt := libtime.New(time.Date(2023, 1, 2, 3, 4, 5, 6000, time.UTC))
 
 	value, err := lt.Value()
 	require.NoError(t, err)
 
-	assert.Equal(t, "2023-01-02T03:04:05.000006Z", value)
-	assert.IsType(t, "", value)
+	require.Equal(t, "2023-01-02T03:04:05.000006Z", value)
+	require.IsType(t, "", value)
 }
 
 func TestBeforeAfter(t *testing.T) {
+	t.Parallel()
 	t1 := libtime.New(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 	t2 := libtime.New(time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC))
 
-	assert.True(t, t1.Before(t2))
-	assert.False(t, t2.Before(t1))
+	require.True(t, t1.Before(t2))
+	require.False(t, t2.Before(t1))
 
-	assert.True(t, t2.After(t1))
-	assert.False(t, t1.After(t2))
+	require.True(t, t2.After(t1))
+	require.False(t, t1.After(t2))
 }
 
 func TestSub(t *testing.T) {
+	t.Parallel()
 	t1 := libtime.New(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 	t2 := libtime.New(time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC))
 
-	assert.Equal(t, 24*time.Hour, t2.Sub(t1))
-	assert.Equal(t, -24*time.Hour, t1.Sub(t2))
+	require.Equal(t, 24*time.Hour, t2.Sub(t1))
+	require.Equal(t, -24*time.Hour, t1.Sub(t2))
 }
 
 func TestAdd(t *testing.T) {
+	t.Parallel()
 	t1 := libtime.New(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 	t2 := t1.Add(24 * time.Hour)
 
 	expected := libtime.New(time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC))
-	assert.Equal(t, expected, t2)
+	require.Equal(t, expected, t2)
 }
 
 func TestUTC(t *testing.T) {
+	t.Parallel()
 	lt := libtime.New(time.Date(2023, 1, 2, 3, 4, 5, 6000, time.Local))
 	utc := lt.UTC()
 
-	assert.Equal(t, time.UTC, utc.Location())
+	require.Equal(t, time.UTC, utc.Location())
 }
 
 func TestRound(t *testing.T) {
+	t.Parallel()
 	lt := libtime.New(time.Date(2023, 1, 2, 3, 4, 5, 6789000, time.UTC))
 	rounded := lt.Round(time.Millisecond)
 
 	expected := libtime.New(time.Date(2023, 1, 2, 3, 4, 5, 7000000, time.UTC))
-	assert.Equal(t, expected, rounded)
+	require.Equal(t, expected, rounded)
 }
 
 func TestEqual(t *testing.T) {
+	t.Parallel()
 	t1 := libtime.New(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 	t2 := libtime.New(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 	t3 := libtime.New(time.Date(2023, 1, 2, 0, 0, 0, 0, time.UTC))
 
-	assert.True(t, t1.Equal(t2))
-	assert.True(t, t2.Equal(t1))
-	assert.False(t, t1.Equal(t3))
+	require.True(t, t1.Equal(t2))
+	require.True(t, t2.Equal(t1))
+	require.False(t, t1.Equal(t3))
 }
 
 func TestMarshalJSON(t *testing.T) {
+	t.Parallel()
 	lt := libtime.New(time.Date(2023, 1, 2, 3, 4, 5, 6000, time.UTC))
 
 	data, err := json.Marshal(lt)
 	require.NoError(t, err)
 
-	assert.Equal(t, `"2023-01-02T03:04:05.000006Z"`, string(data))
+	require.Equal(t, `"2023-01-02T03:04:05.000006Z"`, string(data))
 }
 
 func TestUnmarshalJSON(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		input       string
@@ -169,25 +180,27 @@ func TestUnmarshalJSON(t *testing.T) {
 			err := json.Unmarshal([]byte(tc.input), &lt)
 
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, lt.Time)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, lt.Time)
 			}
 		})
 	}
 }
 
 func TestNow(t *testing.T) {
+	t.Parallel()
 	before := time.Now().UTC()
 	now := libtime.Now()
 	after := time.Now().UTC()
 
-	assert.True(t, now.After(libtime.New(before)) || now.Equal(libtime.New(before)))
-	assert.True(t, now.Before(libtime.New(after)) || now.Equal(libtime.New(after)))
+	require.True(t, now.After(libtime.New(before)) || now.Equal(libtime.New(before)))
+	require.True(t, now.Before(libtime.New(after)) || now.Equal(libtime.New(after)))
 }
 
 func TestParseTime(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		input       string
@@ -211,24 +224,26 @@ func TestParseTime(t *testing.T) {
 			lt, err := libtime.ParseTime(tc.input)
 
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, lt.Time)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, lt.Time)
 			}
 		})
 	}
 }
 
 func TestSince(t *testing.T) {
+	t.Parallel()
 	past := libtime.New(time.Now().Add(-time.Second))
 	duration := libtime.Since(past)
 
 	// Just verify that the duration is positive, as the exact value will vary
-	assert.True(t, duration > 0)
+	require.True(t, duration > 0)
 }
 
 func TestParseDuration(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		input       string
@@ -257,29 +272,31 @@ func TestParseDuration(t *testing.T) {
 			duration, err := libtime.ParseDuration(tc.input)
 
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, duration)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, duration)
 			}
 		})
 	}
 }
 
 func TestUntil(t *testing.T) {
+	t.Parallel()
 	future := libtime.New(time.Now().Add(time.Hour))
 	duration := libtime.Until(future)
 
-	assert.True(t, duration <= time.Hour)
-	assert.True(t, duration > time.Hour-time.Minute) // Allow for some execution time
+	require.True(t, duration <= time.Hour)
+	require.True(t, duration > time.Hour-time.Minute) // Allow for some execution time
 }
 
 func TestAfter(t *testing.T) {
+	t.Parallel()
 	start := time.Now()
 	ch := libtime.After(50 * time.Millisecond)
 	result := <-ch
 	elapsed := time.Since(start)
 
-	assert.True(t, elapsed >= 50*time.Millisecond)
-	assert.True(t, result.After(libtime.New(start)))
+	require.True(t, elapsed >= 50*time.Millisecond)
+	require.True(t, result.After(libtime.New(start)))
 }

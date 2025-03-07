@@ -18,6 +18,7 @@ import (
 )
 
 func TestWriteErrorResponse(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name       string
 		statusCode int
@@ -59,6 +60,7 @@ func TestWriteErrorResponse(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a response recorder
 			rr := httptest.NewRecorder()
 
@@ -66,21 +68,22 @@ func TestWriteErrorResponse(t *testing.T) {
 			api.WriteErrorResponse(rr, tc.statusCode, tc.errorCode, tc.err)
 
 			// Check the status code
-			assert.Equal(t, tc.statusCode, rr.Code)
+			require.Equal(t, tc.statusCode, rr.Code)
 
 			// Check the content type
-			assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+			require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 			// Check the response body
 			var response api.ErrorResponse
 			err := json.NewDecoder(rr.Body).Decode(&response)
 			require.NoError(t, err)
-			assert.Equal(t, tc.expected, response)
+			require.Equal(t, tc.expected, response)
 		})
 	}
 }
 
 func TestNotFound(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	err := errors.New("resource not found")
@@ -89,20 +92,21 @@ func TestNotFound(t *testing.T) {
 	api.NotFound(rr, err)
 
 	// Check the status code
-	assert.Equal(t, http.StatusNotFound, rr.Code)
+	require.Equal(t, http.StatusNotFound, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.ErrorResponse
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.Equal(t, api.ErrorCodeNotFound, response.ErrorCode)
-	assert.Equal(t, err.Error(), response.ErrorMessage)
+	require.Equal(t, api.ErrorCodeNotFound, response.ErrorCode)
+	require.Equal(t, err.Error(), response.ErrorMessage)
 }
 
 func TestNoContent(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 
@@ -110,13 +114,14 @@ func TestNoContent(t *testing.T) {
 	api.NoContent(rr)
 
 	// Check the status code
-	assert.Equal(t, http.StatusNoContent, rr.Code)
+	require.Equal(t, http.StatusNoContent, rr.Code)
 
 	// Check that the body is empty
-	assert.Empty(t, rr.Body.String())
+	require.Empty(t, rr.Body.String())
 }
 
 func TestForbidden(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	err := errors.New("access denied")
@@ -126,20 +131,21 @@ func TestForbidden(t *testing.T) {
 	api.Forbidden(rr, code, err)
 
 	// Check the status code
-	assert.Equal(t, http.StatusForbidden, rr.Code)
+	require.Equal(t, http.StatusForbidden, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.ErrorResponse
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.Equal(t, code, response.ErrorCode)
-	assert.Equal(t, err.Error(), response.ErrorMessage)
+	require.Equal(t, code, response.ErrorCode)
+	require.Equal(t, err.Error(), response.ErrorMessage)
 }
 
 func TestBadRequest(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	err := errors.New("invalid request")
@@ -149,20 +155,21 @@ func TestBadRequest(t *testing.T) {
 	api.BadRequest(rr, code, err)
 
 	// Check the status code
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.ErrorResponse
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.Equal(t, code, response.ErrorCode)
-	assert.Equal(t, err.Error(), response.ErrorMessage)
+	require.Equal(t, code, response.ErrorCode)
+	require.Equal(t, err.Error(), response.ErrorMessage)
 }
 
 func TestBadRequestWithDetails(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	err := errors.New("invalid request")
@@ -173,21 +180,22 @@ func TestBadRequestWithDetails(t *testing.T) {
 	api.BadRequestWithDetails(rr, code, err, details)
 
 	// Check the status code
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.ErrorResponse
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.Equal(t, code, response.ErrorCode)
-	assert.Equal(t, err.Error(), response.ErrorMessage)
-	assert.Equal(t, details, response.Details)
+	require.Equal(t, code, response.ErrorCode)
+	require.Equal(t, err.Error(), response.ErrorMessage)
+	require.Equal(t, details, response.Details)
 }
 
 func TestInternalServerError(t *testing.T) {
+	t.Parallel()
 	// Create a buffer to capture log output
 	var buf bytes.Buffer
 	logger := logging.NewDefaultLogger(&buf, true, false, false)
@@ -206,24 +214,25 @@ func TestInternalServerError(t *testing.T) {
 	api.InternalServerError(rr, req, testErr)
 
 	// Check the status code
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.ErrorResponse
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.Equal(t, api.ErrorInternal, response.ErrorCode)
-	assert.Equal(t, testErr.Error(), response.ErrorMessage)
+	require.Equal(t, api.ErrorInternal, response.ErrorCode)
+	require.Equal(t, testErr.Error(), response.ErrorMessage)
 
 	// Verify that the error was logged
 	logOutput := buf.String()
-	assert.Contains(t, logOutput, testErr.Error())
+	require.Contains(t, logOutput, testErr.Error())
 }
 
 func TestAccepted(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	data := map[string]string{"message": "accepted"}
@@ -232,24 +241,25 @@ func TestAccepted(t *testing.T) {
 	api.Accepted(rr, data)
 
 	// Check the status code
-	assert.Equal(t, http.StatusAccepted, rr.Code)
+	require.Equal(t, http.StatusAccepted, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.BaseResponse[any]
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.NotNil(t, response.Data)
+	require.NotNil(t, response.Data)
 
 	// Convert the data to a map
 	dataMap, ok := (*response.Data).(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, "accepted", dataMap["message"])
+	require.True(t, ok)
+	require.Equal(t, "accepted", dataMap["message"])
 }
 
 func TestCreated(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	data := map[string]string{"id": "123", "name": "test"}
@@ -258,25 +268,26 @@ func TestCreated(t *testing.T) {
 	api.Created(rr, data)
 
 	// Check the status code
-	assert.Equal(t, http.StatusCreated, rr.Code)
+	require.Equal(t, http.StatusCreated, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.BaseResponse[any]
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.NotNil(t, response.Data)
+	require.NotNil(t, response.Data)
 
 	// Convert the data to a map
 	dataMap, ok := (*response.Data).(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, "123", dataMap["id"])
-	assert.Equal(t, "test", dataMap["name"])
+	require.True(t, ok)
+	require.Equal(t, "123", dataMap["id"])
+	require.Equal(t, "test", dataMap["name"])
 }
 
 func TestRawOk(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	data := map[string]string{"message": "success"}
@@ -285,19 +296,20 @@ func TestRawOk(t *testing.T) {
 	api.RawOk(rr, data)
 
 	// Check the status code
-	assert.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response map[string]string
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.Equal(t, "success", response["message"])
+	require.Equal(t, "success", response["message"])
 }
 
 func TestOk(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	data := map[string]string{"message": "success"}
@@ -306,24 +318,25 @@ func TestOk(t *testing.T) {
 	api.Ok(rr, data)
 
 	// Check the status code
-	assert.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.BaseResponse[any]
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.NotNil(t, response.Data)
+	require.NotNil(t, response.Data)
 
 	// Convert the data to a map
 	dataMap, ok := (*response.Data).(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, "success", dataMap["message"])
+	require.True(t, ok)
+	require.Equal(t, "success", dataMap["message"])
 }
 
 func TestRenderCursor(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	cursor := bunpaginate.Cursor[string]{
@@ -338,25 +351,26 @@ func TestRenderCursor(t *testing.T) {
 	api.RenderCursor(rr, cursor)
 
 	// Check the status code
-	assert.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var response api.BaseResponse[string]
 	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, decodeErr)
-	assert.Nil(t, response.Data)
-	assert.NotNil(t, response.Cursor)
-	assert.Equal(t, cursor.PageSize, response.Cursor.PageSize)
-	assert.Equal(t, cursor.HasMore, response.Cursor.HasMore)
-	assert.Equal(t, cursor.Next, response.Cursor.Next)
-	assert.Equal(t, cursor.Previous, response.Cursor.Previous)
-	assert.Equal(t, cursor.Data, response.Cursor.Data)
+	require.Nil(t, response.Data)
+	require.NotNil(t, response.Cursor)
+	require.Equal(t, cursor.PageSize, response.Cursor.PageSize)
+	require.Equal(t, cursor.HasMore, response.Cursor.HasMore)
+	require.Equal(t, cursor.Next, response.Cursor.Next)
+	require.Equal(t, cursor.Previous, response.Cursor.Previous)
+	require.Equal(t, cursor.Data, response.Cursor.Data)
 }
 
 func TestWriteResponse(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 	body := []byte(`{"message":"test"}`)
@@ -365,13 +379,14 @@ func TestWriteResponse(t *testing.T) {
 	api.WriteResponse(rr, http.StatusOK, body)
 
 	// Check the status code
-	assert.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
 
 	// Check the response body
-	assert.Equal(t, string(body), rr.Body.String())
+	require.Equal(t, string(body), rr.Body.String())
 }
 
 func TestCursorFromListResponse(t *testing.T) {
+	t.Parallel()
 	// Create a response recorder
 	rr := httptest.NewRecorder()
 
@@ -396,25 +411,26 @@ func TestCursorFromListResponse(t *testing.T) {
 	api.CursorFromListResponse(rr, query, response)
 
 	// Check the status code
-	assert.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
 
 	// Check the content type
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
 	var apiResponse api.BaseResponse[string]
 	decodeErr := json.NewDecoder(rr.Body).Decode(&apiResponse)
 	require.NoError(t, decodeErr)
-	assert.Nil(t, apiResponse.Data)
-	assert.NotNil(t, apiResponse.Cursor)
-	assert.Equal(t, query.Limit, apiResponse.Cursor.PageSize)
-	assert.Equal(t, response.HasMore, apiResponse.Cursor.HasMore)
-	assert.Equal(t, response.Next, apiResponse.Cursor.Next)
-	assert.Equal(t, response.Previous, apiResponse.Cursor.Previous)
-	assert.Equal(t, response.Data, apiResponse.Cursor.Data)
+	require.Nil(t, apiResponse.Data)
+	require.NotNil(t, apiResponse.Cursor)
+	require.Equal(t, query.Limit, apiResponse.Cursor.PageSize)
+	require.Equal(t, response.HasMore, apiResponse.Cursor.HasMore)
+	require.Equal(t, response.Next, apiResponse.Cursor.Next)
+	require.Equal(t, response.Previous, apiResponse.Cursor.Previous)
+	require.Equal(t, response.Data, apiResponse.Cursor.Data)
 }
 
 func TestParsePaginationToken(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		queryParams    map[string]string
@@ -443,6 +459,7 @@ func TestParsePaginationToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a URL with query parameters
 			u, _ := url.Parse("http://example.com")
 			q := u.Query()
@@ -458,12 +475,13 @@ func TestParsePaginationToken(t *testing.T) {
 			result := api.ParsePaginationToken(req)
 
 			// Check the result
-			assert.Equal(t, tc.expectedResult, result)
+			require.Equal(t, tc.expectedResult, result)
 		})
 	}
 }
 
 func TestParsePageSize(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		queryParams    map[string]string
@@ -492,6 +510,7 @@ func TestParsePageSize(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a URL with query parameters
 			u, _ := url.Parse("http://example.com")
 			q := u.Query()
@@ -507,7 +526,7 @@ func TestParsePageSize(t *testing.T) {
 			result := api.ParsePageSize(req)
 
 			// Check the result
-			assert.Equal(t, tc.expectedResult, result)
+			require.Equal(t, tc.expectedResult, result)
 		})
 	}
 
@@ -523,13 +542,14 @@ func TestParsePageSize(t *testing.T) {
 		req, _ := http.NewRequest("GET", u.String(), nil)
 
 		// Call the function and expect panic
-		assert.Panics(t, func() {
+		require.Panics(t, func() {
 			api.ParsePageSize(req)
 		})
 	})
 }
 
 func TestReadPaginatedRequest(t *testing.T) {
+	t.Parallel()
 	// Create a URL with query parameters
 	u, _ := url.Parse("http://example.com")
 	q := u.Query()
@@ -554,18 +574,19 @@ func TestReadPaginatedRequest(t *testing.T) {
 	result := api.ReadPaginatedRequest(req, payloadExtractor)
 
 	// Check the result
-	assert.Equal(t, 20, result.Limit)
-	assert.Equal(t, "test-token", result.PaginationToken)
-	assert.Equal(t, TestPayload{Filter: ""}, result.Payload)
+	require.Equal(t, 20, result.Limit)
+	require.Equal(t, "test-token", result.PaginationToken)
+	require.Equal(t, TestPayload{Filter: ""}, result.Payload)
 
 	// Test with nil payload extractor
 	result = api.ReadPaginatedRequest[TestPayload](req, nil)
-	assert.Equal(t, 20, result.Limit)
-	assert.Equal(t, "test-token", result.PaginationToken)
-	assert.Equal(t, TestPayload{}, result.Payload)
+	require.Equal(t, 20, result.Limit)
+	require.Equal(t, "test-token", result.PaginationToken)
+	require.Equal(t, TestPayload{}, result.Payload)
 }
 
 func TestGetQueryMap(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		queryParams    map[string][]string
@@ -607,16 +628,18 @@ func TestGetQueryMap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Call the function
 			result := api.GetQueryMap(tc.queryParams, tc.key)
 
 			// Check the result
-			assert.Equal(t, tc.expectedResult, result)
+			require.Equal(t, tc.expectedResult, result)
 		})
 	}
 }
 
 func TestFetchAllPaginated(t *testing.T) {
+	t.Parallel()
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cursor := r.URL.Query().Get("cursor")
@@ -666,7 +689,7 @@ func TestFetchAllPaginated(t *testing.T) {
 
 	// Check the result
 	require.NoError(t, err)
-	assert.Equal(t, []string{"item1", "item2", "item3", "item4"}, result)
+	require.Equal(t, []string{"item1", "item2", "item3", "item4"}, result)
 
 	// Test with error response
 	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -675,7 +698,7 @@ func TestFetchAllPaginated(t *testing.T) {
 	defer errorServer.Close()
 
 	_, err = api.FetchAllPaginated[string](ctx, errorServer.Client(), errorServer.URL, queryParams)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Test with invalid JSON response
 	invalidServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -685,52 +708,58 @@ func TestFetchAllPaginated(t *testing.T) {
 	defer invalidServer.Close()
 
 	_, err = api.FetchAllPaginated[string](ctx, invalidServer.Client(), invalidServer.URL, queryParams)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestErrorResponse(t *testing.T) {
+	t.Parallel()
 	// Test Error method
 	errorResponse := api.ErrorResponse{
 		ErrorCode:    "TEST_ERROR",
 		ErrorMessage: "test error message",
 	}
 
-	assert.Equal(t, "[TEST_ERROR] test error message", errorResponse.Error())
+	require.Equal(t, "[TEST_ERROR] test error message", errorResponse.Error())
 }
 
 func TestResponseUtils(t *testing.T) {
 	t.Run("Encode", func(t *testing.T) {
+		t.Parallel()
 		data := map[string]string{"key": "value"}
 		encoded := api.Encode(t, data)
-		assert.Equal(t, `{"key":"value"}`, string(encoded))
+		require.Equal(t, `{"key":"value"}`, string(encoded))
 	})
 
 	t.Run("Buffer", func(t *testing.T) {
+		t.Parallel()
 		data := map[string]string{"key": "value"}
 		buffer := api.Buffer(t, data)
-		assert.Equal(t, `{"key":"value"}`, buffer.String())
+		require.Equal(t, `{"key":"value"}`, buffer.String())
 	})
 
 	t.Run("Decode", func(t *testing.T) {
+		t.Parallel()
 		data := map[string]string{"key": "value"}
 		buffer := bytes.NewBufferString(`{"key":"value"}`)
 		var result map[string]string
 		api.Decode(t, buffer, &result)
-		assert.Equal(t, data, result)
+		require.Equal(t, data, result)
 	})
 
 	t.Run("DecodeSingleResponse", func(t *testing.T) {
+		t.Parallel()
 		buffer := bytes.NewBufferString(`{"data":{"key":"value"}}`)
 		result, ok := api.DecodeSingleResponse[map[string]string](t, buffer)
-		assert.True(t, ok)
-		assert.Equal(t, map[string]string{"key": "value"}, result)
+		require.True(t, ok)
+		require.Equal(t, map[string]string{"key": "value"}, result)
 	})
 
 	t.Run("DecodeCursorResponse", func(t *testing.T) {
+		t.Parallel()
 		buffer := bytes.NewBufferString(`{"cursor":{"hasMore":true,"data":["item1","item2"]}}`)
 		cursor := api.DecodeCursorResponse[string](t, buffer)
-		assert.NotNil(t, cursor)
-		assert.True(t, cursor.HasMore)
-		assert.Equal(t, []string{"item1", "item2"}, cursor.Data)
+		require.NotNil(t, cursor)
+		require.True(t, cursor.HasMore)
+		require.Equal(t, []string{"item1", "item2"}, cursor.Data)
 	})
 }

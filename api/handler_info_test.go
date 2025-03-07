@@ -12,6 +12,7 @@ import (
 )
 
 func TestInfoHandler(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		info        api.ServiceInfo
@@ -54,6 +55,7 @@ func TestInfoHandler(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a request to pass to our handler
 			req, err := http.NewRequest("GET", "/info", nil)
 			require.NoError(t, err)
@@ -66,13 +68,13 @@ func TestInfoHandler(t *testing.T) {
 			handler.ServeHTTP(rr, req)
 
 			// Check the status code
-			assert.Equal(t, http.StatusOK, rr.Code)
+			require.Equal(t, http.StatusOK, rr.Code)
 
 			// Check the response body
 			var response api.ServiceInfo
 			err = json.NewDecoder(rr.Body).Decode(&response)
 			require.NoError(t, err)
-			assert.Equal(t, tc.expectedRes, response)
+			require.Equal(t, tc.expectedRes, response)
 		})
 	}
 }

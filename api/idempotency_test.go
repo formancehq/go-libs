@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/formancehq/go-libs/v2/api"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIdempotencyKeyFromRequest(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		headers        map[string]string
@@ -44,6 +45,7 @@ func TestIdempotencyKeyFromRequest(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a request with the specified headers
 			req, _ := http.NewRequest("GET", "/test", nil)
 			for key, value := range tc.headers {
@@ -54,7 +56,7 @@ func TestIdempotencyKeyFromRequest(t *testing.T) {
 			result := api.IdempotencyKeyFromRequest(req)
 
 			// Check the result
-			assert.Equal(t, tc.expectedResult, result)
+			require.Equal(t, tc.expectedResult, result)
 		})
 	}
 }
