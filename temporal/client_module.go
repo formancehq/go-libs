@@ -31,6 +31,8 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 	initSearchAttributes, _ := cmd.Flags().GetBool(TemporalInitSearchAttributesFlag)
 	encryptionEnabled, _ := cmd.Flags().GetBool(TemporalEncryptionEnabledFlag)
 	encryptionKey, _ := cmd.Flags().GetString(TemporalEncryptionAESKeyFlag)
+	fmt.Println("encryptionEnabled", encryptionEnabled)
+	fmt.Println("encryptionKey", encryptionKey)
 
 	return fx.Options(
 		fx.Provide(func(logger logging.Logger, meterProvider metric.MeterProvider) (client.Options, error) {
