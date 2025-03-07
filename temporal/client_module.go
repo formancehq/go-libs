@@ -59,7 +59,11 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 			}
 
 			if encryptionEnabled {
-				options.DataConverter = NewEncryptionDataConverter([]byte(encryptionKey))
+				converter, err := NewEncryptionDataConverter([]byte(encryptionKey))
+				if err != nil {
+					return client.Options{}, err
+				}
+				options.DataConverter = converter
 			}
 
 			if cert != nil {

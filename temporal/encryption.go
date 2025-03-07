@@ -17,11 +17,16 @@ type EncryptionDataConverter struct {
 	key []byte
 }
 
-func NewEncryptionDataConverter(key []byte) *EncryptionDataConverter {
+func NewEncryptionDataConverter(key []byte) (*EncryptionDataConverter, error) {
+	_, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
 	return &EncryptionDataConverter{
 		DataConverter: converter.GetDefaultDataConverter(),
 		key:           key,
-	}
+	}, nil
 }
 
 func (c *EncryptionDataConverter) ToPayload(value interface{}) (*common.Payload, error) {
