@@ -154,12 +154,12 @@ func TestIterate(t *testing.T) {
 					Page:     q.Page + 1,
 					PageSize: tc.pageSize,
 				}
-				nextQueryJSON, err := json.Marshal(nextQuery)
+				nextQueryBytes, err := json.Marshal(nextQuery)
 				if err != nil {
 					return nil, err
 				}
 				// Base64 encode the cursor as expected by the UnmarshalCursor function
-				cursor.Next = bunpaginate.MarshalCursor(nextQuery)
+				cursor.Next = string(nextQueryBytes)
 			}
 
 				return cursor, nil

@@ -1,7 +1,6 @@
 package bunmigrate_test
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/formancehq/go-libs/v2/bun/bunmigrate"
