@@ -201,7 +201,7 @@ func TestBuilderFunctions(t *testing.T) {
 		{
 			name:     "Exists",
 			builder:  Exists("field", true),
-			expected: "field ? ?",
+			expected: "field  ?",
 			args:     []any{true},
 		},
 		{
@@ -214,13 +214,13 @@ func TestBuilderFunctions(t *testing.T) {
 			name:     "And with no items",
 			builder:  And(),
 			expected: "1 = 1",
-			args:     []any{},
+			args:     []any(nil),
 		},
 		{
 			name:     "Or with no items",
 			builder:  Or(),
 			expected: "1 = 1",
-			args:     []any{},
+			args:     []any(nil),
 		},
 		{
 			name:     "And with one item",

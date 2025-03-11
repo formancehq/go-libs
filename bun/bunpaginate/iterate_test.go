@@ -148,24 +148,25 @@ func TestIterate(t *testing.T) {
 					Data:     items,
 				}
 
-				// Set next token if there are more pages
-				if hasMore {
-					nextQuery := TestQuery{
-						Page:     q.Page + 1,
-						PageSize: tc.pageSize,
-					}
-					nextQueryJSON, err := json.Marshal(nextQuery)
-					if err != nil {
-						return nil, err
-					}
-					cursor.Next = string(nextQueryJSON)
+			// Set next token if there are more pages
+			if hasMore {
+				nextQuery := TestQuery{
+					Page:     q.Page + 1,
+					PageSize: tc.pageSize,
 				}
+				nextQueryJSON, err := json.Marshal(nextQuery)
+				if err != nil {
+					return nil, err
+				}
+				// Base64 encode the cursor as expected by the UnmarshalCursor function
+				cursor.Next = bunpaginate.MarshalCursor(nextQuery)
+			}
 
 				return cursor, nil
 			}
 
 			// Collect results
-			var result []TestData
+			result := []TestData{}
 
 			// Create callback function
 			callback := func(cursor *bunpaginate.Cursor[TestData]) error {

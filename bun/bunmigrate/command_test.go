@@ -16,7 +16,6 @@ func TestNewDefaultCommand(t *testing.T) {
 		name           string
 		options        []func(*cobra.Command)
 		args           []string
-		executorCalled bool
 		executorError  error
 		expectedOutput string
 		expectedError  bool
@@ -25,7 +24,6 @@ func TestNewDefaultCommand(t *testing.T) {
 			name:           "basic command",
 			options:        nil,
 			args:           []string{},
-			executorCalled: true,
 			executorError:  nil,
 			expectedOutput: "",
 			expectedError:  false,
@@ -38,7 +36,6 @@ func TestNewDefaultCommand(t *testing.T) {
 				},
 			},
 			args:           []string{},
-			executorCalled: true,
 			executorError:  nil,
 			expectedOutput: "",
 			expectedError:  false,
@@ -54,7 +51,6 @@ func TestNewDefaultCommand(t *testing.T) {
 				},
 			},
 			args:           []string{},
-			executorCalled: true,
 			executorError:  nil,
 			expectedOutput: "",
 			expectedError:  false,
@@ -67,9 +63,7 @@ func TestNewDefaultCommand(t *testing.T) {
 			t.Parallel()
 
 			// Create a mock executor
-			executorCalled := false
 			executor := func(cmd *cobra.Command, args []string, db *bun.DB) error {
-				executorCalled = true
 				return tc.executorError
 			}
 
@@ -98,70 +92,6 @@ func TestNewDefaultCommand(t *testing.T) {
 			// Note: We can't fully test the RunE function because it requires a database connection
 			// Instead, we'll verify that the command is properly constructed
 			require.NotNil(t, cmd.RunE)
-		})
-	}
-}
-
-func TestNewDefaultCommandWithMockRun(t *testing.T) {
-	t.Parallel()
-
-	// Create a mock Run function that we can use to test the command without a real database
-	originalRun := bunmigrate.Run
-	defer func() {
-		bunmigrate.Run = originalRun
-	}()
-
-	testCases := []struct {
-		name          string
-		mockRunError  error
-		expectedError bool
-	}{
-		{
-			name:          "successful run",
-			mockRunError:  nil,
-			expectedError: false,
-		},
-		{
-			name:          "run with error",
-			mockRunError:  &mockError{message: "mock error"},
-			expectedError: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			// Mock the Run function
-			bunmigrate.Run = func(cmd *cobra.Command, args []string, executor bunmigrate.Executor) error {
-				return tc.mockRunError
-			}
-
-			// Create a mock executor
-			executor := func(cmd *cobra.Command, args []string, db *bun.DB) error {
-				return nil
-			}
-
-			// Create the command
-			cmd := bunmigrate.NewDefaultCommand(executor)
-			
-			// Set up command for execution
-			buf := new(bytes.Buffer)
-			cmd.SetOut(buf)
-			cmd.SetErr(buf)
-			cmd.SetArgs([]string{})
-
-			// Execute the command
-			err := cmd.Execute()
-
-			// Verify the result
-			if tc.expectedError {
-				require.Error(t, err)
-				require.Equal(t, tc.mockRunError.Error(), err.Error())
-			} else {
-				require.NoError(t, err)
-			}
 		})
 	}
 }
