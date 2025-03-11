@@ -154,12 +154,8 @@ func TestIterate(t *testing.T) {
 					Page:     q.Page + 1,
 					PageSize: tc.pageSize,
 				}
-				nextQueryBytes, err := json.Marshal(nextQuery)
-				if err != nil {
-					return nil, err
-				}
-				// Base64 encode the cursor as expected by the UnmarshalCursor function
-				cursor.Next = string(nextQueryBytes)
+				// Use EncodeCursor to properly encode the cursor
+				cursor.Next = bunpaginate.EncodeCursor(nextQuery)
 			}
 
 				return cursor, nil
@@ -195,13 +191,13 @@ func TestIterate(t *testing.T) {
 func TestIterateWithInvalidCursor(t *testing.T) {
 	t.Parallel()
 
-	// Create a test case where the cursor contains invalid JSON
+	// Create a test case where the cursor contains invalid base64 data
 	iterator := func(ctx context.Context, q TestQuery) (*bunpaginate.Cursor[TestData], error) {
 		cursor := &bunpaginate.Cursor[TestData]{
 			PageSize: 10,
 			HasMore:  true,
 			Data:     []TestData{{ID: 1, Name: "Item 1"}},
-			Next:     "invalid json", // This will cause an error when trying to unmarshal
+			Next:     "invalid base64 data", // This will cause an error when trying to decode
 		}
 		return cursor, nil
 	}

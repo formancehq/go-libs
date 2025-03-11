@@ -82,11 +82,11 @@ func TestNewDefaultCommand(t *testing.T) {
 			}
 
 			// Verify flags
-			require.NotNil(t, cmd.Flags().Lookup("database-source-name"))
-			require.NotNil(t, cmd.Flags().Lookup("database-max-open-connections"))
-			require.NotNil(t, cmd.Flags().Lookup("database-max-idle-connections"))
-			require.NotNil(t, cmd.Flags().Lookup("database-connection-max-lifetime"))
-			require.NotNil(t, cmd.Flags().Lookup("database-connection-max-idle-time"))
+			require.NotNil(t, cmd.Flags().Lookup("postgres-uri"))
+			require.NotNil(t, cmd.Flags().Lookup("postgres-max-open-conns"))
+			require.NotNil(t, cmd.Flags().Lookup("postgres-max-idle-conns"))
+			require.NotNil(t, cmd.Flags().Lookup("postgres-conn-max-idle-time"))
+			require.NotNil(t, cmd.Flags().Lookup("postgres-aws-enable-iam"))
 
 			// Note: We can't fully test the RunE function because it requires a database connection
 			// Instead, we'll verify that the command is properly constructed
