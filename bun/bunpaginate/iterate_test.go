@@ -2,7 +2,6 @@ package bunpaginate_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 
