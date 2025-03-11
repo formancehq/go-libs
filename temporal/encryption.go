@@ -12,6 +12,11 @@ import (
 	"go.temporal.io/sdk/converter"
 )
 
+var (
+	MetadataFormanceEncodingEncryptedKey = "formance_encoding"
+	MetadataFormanceEncodingEncrypted    = "binary/encrypted"
+)
+
 type EncryptionDataConverter struct {
 	converter.DataConverter
 	key []byte
@@ -52,11 +57,19 @@ func (c *EncryptionDataConverter) ToPayload(value interface{}) (*common.Payload,
 
 	ciphertext := gcm.Seal(nonce, nonce, payload.Data, nil)
 	payload.Data = []byte(base64.StdEncoding.EncodeToString(ciphertext))
+	if payload.Metadata == nil {
+		payload.Metadata = make(map[string][]byte)
+	}
+	payload.Metadata[MetadataFormanceEncodingEncryptedKey] = []byte(MetadataFormanceEncodingEncrypted)
 
 	return payload, nil
 }
 
 func (c *EncryptionDataConverter) FromPayload(payload *common.Payload, valuePtr interface{}) error {
+	if string(payload.Metadata[MetadataFormanceEncodingEncryptedKey]) != MetadataFormanceEncodingEncrypted {
+		return c.DataConverter.FromPayload(payload, valuePtr)
+	}
+
 	block, err := aes.NewCipher(c.key)
 	if err != nil {
 		return err
