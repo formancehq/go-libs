@@ -28,7 +28,7 @@ func TestScan(t *testing.T) {
 		{
 			name:     "time.Time",
 			input:    time.Date(2023, 1, 2, 3, 4, 5, 6, time.Local),
-			expected: time.Date(2023, 1, 2, 3, 4, 5, 6, time.UTC),
+			expected: time.Date(2023, 1, 2, 3, 4, 5, 6, time.Local).UTC(),
 		},
 		{
 			name:     "string",
