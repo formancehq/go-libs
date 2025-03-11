@@ -47,14 +47,14 @@ func TestDebugHTTPTransport(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			// Create a logger that doesn't output to avoid test noise
 			logger := logging.NewDefaultLogger(io.Discard, true, false, false)
 			ctx := logging.ContextWithLogger(context.Background(), logger)
-			
+
 			// Add logger to request context
 			tc.request = tc.request.WithContext(ctx)
-			
+
 			// Create a debug transport with a custom RoundTripper
 			transport := httpclient.NewDebugHTTPTransport(
 				&mockRoundTripper{

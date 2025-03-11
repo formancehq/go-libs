@@ -36,7 +36,7 @@ func TestAllocate(t *testing.T) {
 			runtime.ReadMemStats(&memStatsBefore)
 
 			ballast.Allocate(tc.size)
-			
+
 			var memStatsAfter runtime.MemStats
 			runtime.ReadMemStats(&memStatsAfter)
 
@@ -44,7 +44,7 @@ func TestAllocate(t *testing.T) {
 				// Verify memory usage increased
 				require.Greater(t, memStatsAfter.Alloc, memStatsBefore.Alloc)
 			}
-			
+
 			// Clean up
 			ballast.ReleaseForGC()
 		})
@@ -53,13 +53,13 @@ func TestAllocate(t *testing.T) {
 
 func TestReleaseForGC(t *testing.T) {
 	t.Parallel()
-	
+
 	// Allocate some memory
 	ballast.Allocate(1024 * 1024) // 1MB
-	
+
 	// Release it
 	ballast.ReleaseForGC()
-	
+
 	// No way to verify directly, but at least ensure it doesn't panic
 	require.True(t, true)
 }
@@ -86,7 +86,7 @@ func TestBallastModule(t *testing.T) {
 			t.Parallel()
 			var options []fx.Option
 			options = append(options, ballast.Module(tc.size))
-			
+
 			app := fx.New(options...)
 			require.NoError(t, app.Err())
 		})
