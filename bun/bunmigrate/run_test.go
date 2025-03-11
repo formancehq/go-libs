@@ -15,6 +15,7 @@ import (
 )
 
 func TestRunMigrate(t *testing.T) {
+	t.Parallel()
 	dockerPool := docker.NewPool(t, logging.Testing())
 	srv := pgtesting.CreatePostgresServer(t, dockerPool)
 
