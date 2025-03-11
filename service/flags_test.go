@@ -9,6 +9,7 @@ import (
 )
 
 func TestFlags(t *testing.T) {
+	t.Parallel()
 
 	os.Setenv("ROOT1", "changed")
 

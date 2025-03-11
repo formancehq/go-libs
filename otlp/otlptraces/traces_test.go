@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/formancehq/go-libs/v2/otlp"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 )
 
 func TestTracesModule(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name   string
 		config ModuleConfig
@@ -54,6 +55,7 @@ func TestTracesModule(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
 			options := []fx.Option{otlp.NewFxModule(otlp.Config{}), TracesModule(test.config)}
 			if !testing.Verbose() {
@@ -62,10 +64,10 @@ func TestTracesModule(t *testing.T) {
 			options = append(options, fx.Provide(func() *testing.T {
 				return t
 			}))
-			assert.NoError(t, fx.ValidateApp(options...))
+			require.NoError(t, fx.ValidateApp(options...))
 
 			app := fx.New(options...)
-			assert.NoError(t, app.Start(context.Background()))
+			require.NoError(t, app.Start(context.Background()))
 			defer func(app *fx.App, ctx context.Context) {
 				err := app.Stop(ctx)
 				if err != nil {

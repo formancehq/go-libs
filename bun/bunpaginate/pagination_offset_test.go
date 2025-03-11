@@ -146,6 +146,7 @@ func TestOffsetPagination(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
 			query := db.NewSelect().Model(&models).Column("id")
 			if tc.query.Options {

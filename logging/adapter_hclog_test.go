@@ -8,10 +8,11 @@ import (
 
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/hashicorp/go-hclog"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHcLogAdapterHook(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 
 	hookKey := "hookKey"
@@ -24,5 +25,5 @@ func TestHcLogAdapterHook(t *testing.T) {
 	logger = logger.WithContext(ctx)
 
 	logger.Error("this is the message")
-	assert.Regexp(t, fmt.Sprintf("%s=%s", hookKey, hookVal), buf.String())
+	require.Regexp(t, fmt.Sprintf("%s=%s", hookKey, hookVal), buf.String())
 }

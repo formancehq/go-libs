@@ -9,12 +9,12 @@ import (
 	"testing"
 
 	"github.com/formancehq/go-libs/v2/health"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 )
 
 func TestHealthController(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name                 string
 		healthChecksProvider []any
@@ -75,11 +75,11 @@ func TestHealthController(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/_health", nil)
 			ctrl.Check(rec, req)
-			assert.Equal(t, tc.expectedStatus, rec.Result().StatusCode)
+			require.Equal(t, tc.expectedStatus, rec.Result().StatusCode)
 
 			ret := make(map[string]string)
-			assert.NoError(t, json.NewDecoder(rec.Result().Body).Decode(&ret))
-			assert.Equal(t, tc.expectedResult, ret)
+			require.NoError(t, json.NewDecoder(rec.Result().Body).Decode(&ret))
+			require.Equal(t, tc.expectedResult, ret)
 		}))
 		app := fx.New(options...)
 		require.NoError(t, app.Err())

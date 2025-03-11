@@ -18,6 +18,7 @@ import (
 )
 
 func TestOTLPTracesModule(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name                 string
 		args                 []string
@@ -34,6 +35,7 @@ func TestOTLPTracesModule(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 			cmd := &cobra.Command{
 				RunE: func(cmd *cobra.Command, args []string) error {
 					app := fx.New(

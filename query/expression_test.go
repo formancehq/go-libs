@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseExpression(t *testing.T) {
+	t.Parallel()
 	json := `{
 	"$not": {
 		"$and": [
