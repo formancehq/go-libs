@@ -11,6 +11,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type Configuration struct {
+	Timeout time.Duration
+}
+
+type Option func(*Configuration)
+
+func WithTimeout(timeout time.Duration) Option {
+	return func(c *Configuration) {
+		c.Timeout = timeout
+	}
+}
+
+var defaultOptions = []Option{
+	WithTimeout(30 * time.Second),
+}
+
 type Server struct {
 	elasticsearchEndpoint string
 	t                     docker.T
@@ -26,7 +42,12 @@ func (s *Server) NewClient() *elastic.Client {
 	return ret
 }
 
-func CreateServer(pool *docker.Pool) *Server {
+func CreateServer(pool *docker.Pool, options ...Option) *Server {
+
+	cfg := Configuration{}
+	for _, opt := range append(defaultOptions, options...) {
+		opt(&cfg)
+	}
 
 	resource := pool.Run(docker.Configuration{
 		RunOptions: &dockertest.RunOptions{
@@ -46,7 +67,7 @@ func CreateServer(pool *docker.Pool) *Server {
 			client.Stop()
 			return nil
 		},
-		Timeout: 30 * time.Second,
+		Timeout: cfg.Timeout,
 	})
 
 	return &Server{
