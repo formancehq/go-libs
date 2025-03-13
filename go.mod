@@ -11,7 +11,7 @@ require (
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1
 	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.6
-	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2
+	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.3
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.1
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.9
