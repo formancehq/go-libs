@@ -64,6 +64,7 @@ func (m *Migrator) getVersionsTable() string {
 }
 
 func (m *Migrator) initSchema(ctx context.Context, db bun.IDB) error {
+	// https://stackoverflow.com/questions/29900845/create-schema-if-not-exists-raises-duplicate-key-error
 	query := ""
 	if m.schema != "" {
 		query += `
@@ -94,24 +95,18 @@ func (m *Migrator) initSchema(ctx context.Context, db bun.IDB) error {
 		return postgres.ResolveError(err)
 	}
 
-	lastVersion, err := m.getLastVersion(ctx, db)
+	// Insert a first noop row to keep compatibility with goose
+	_, err = db.NewInsert().
+		Model(&Version{
+			VersionID: 0,
+			IsApplied: true,
+			Timestamp: time.Now(),
+		}).
+		ModelTableExpr(m.getVersionsTable()).
+		On("conflict (version_id) do nothing").
+		Exec(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get last version: %w", err)
-	}
-
-	if lastVersion == -1 {
-		// Insert a first noop row to keep compatibility with goose
-		_, err := db.NewInsert().
-			Model(&Version{
-				VersionID: 0,
-				IsApplied: true,
-				Timestamp: time.Now(),
-			}).
-			ModelTableExpr(m.getVersionsTable()).
-			Exec(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
-		}
+		return fmt.Errorf("failed to insert version: %w", postgres.ResolveError(err))
 	}
 
 	return err
@@ -276,7 +271,7 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 		return fmt.Errorf("failed to create version table: %w", err)
 	}
 
-	lastVersion, err := m.GetLastVersion(ctx)
+	lastVersion, err := m.getLastVersion(ctx, actualDB)
 	if err != nil {
 		return fmt.Errorf("failed to get last version: %w", err)
 	}
@@ -289,7 +284,7 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 		return ErrAlreadyUpToDate
 	}
 
-	_, err = db.NewInsert().
+	_, err = actualDB.NewInsert().
 		Model(&Version{
 			VersionID: lastVersion + 1,
 			IsApplied: false,
