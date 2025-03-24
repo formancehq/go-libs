@@ -1,8 +1,7 @@
 module github.com/formancehq/go-libs/v2
 
 go 1.22.0
-
-toolchain go1.22.7
+toolchain go1.24.1
 
 require (
 	dario.cat/mergo v1.0.1
@@ -31,7 +30,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.10.25
 	github.com/nats-io/nats.go v1.39.1
 	github.com/olivere/elastic/v7 v7.0.32
-	github.com/onsi/ginkgo/v2 v2.22.1
+	github.com/onsi/ginkgo/v2 v2.23.3
 	github.com/onsi/gomega v1.36.2
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/pkg/errors v0.9.1
