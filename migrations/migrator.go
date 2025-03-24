@@ -332,13 +332,12 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 						logging.FromContext(ctx).Errorf("failed to parse max counter: %v", err)
 						return nil
 					}
-					_, err = actualDB.NewUpdate().
-						Model(&Version{}).
-						ModelTableExpr(m.getVersionsTable()).
-						Where("version_id = ?", lastVersion+1).
-						Set("max_counter = ?", maxCounter).
-						Where("max_counter is null").
-						Exec(ctx)
+
+					_, err = conn.Exec(ctx, `
+						update `+m.getVersionsTable()+`
+						set max_counter = $1
+						where version_id = $2 and max_counter is null
+					`, maxCounter, lastVersion+1)
 					if err != nil {
 						logging.FromContext(ctx).Debugf("failed to update max counter: %v", err)
 						return nil
@@ -350,12 +349,15 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 						logging.FromContext(ctx).Errorf("failed to parse actual counter: %v", err)
 						return nil
 					}
-					_, err = actualDB.NewUpdate().
-						Model(&Version{}).
-						ModelTableExpr(m.getVersionsTable()).
-						Where("version_id = ?", lastVersion+1).
-						Set("actual_counter = coalesce(actual_counter, 0) + ?", increment).
-						Exec(ctx)
+
+					_, err = conn.Exec(ctx, `
+						update `+m.getVersionsTable()+`
+						set actual_counter = coalesce(actual_counter, 0) + $1
+						where version_id = $2
+					`, increment, lastVersion+1)
+					if err != nil {
+						return err
+					}
 					if err != nil {
 						logging.FromContext(ctx).Debugf("failed to update actual counter: %v", err)
 						return nil
