@@ -68,7 +68,7 @@ func CreateServer(pool *docker.Pool) *Server {
 	resource := pool.Run(docker.Configuration{
 		RunOptions: &dockertest.RunOptions{
 			Repository: "clickhouse/clickhouse-server",
-			Tag:        "head",
+			Tag:        "25.2-alpine",
 			Env:        []string{"CLICKHOUSE_PASSWORD=password"},
 		},
 		CheckFn: func(ctx context.Context, resource *dockertest.Resource) error {
