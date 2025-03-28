@@ -130,6 +130,14 @@ func Match(key string, value any) keyValue {
 	}
 }
 
+func Like(key string, value any) keyValue {
+	return keyValue{
+		operator: "$like",
+		key:      key,
+		value:    value,
+	}
+}
+
 func Or(items ...Builder) set {
 	return set{
 		operator: "or",
@@ -270,7 +278,7 @@ func mapMapToExpression(m map[string]any) (Builder, error) {
 			return nil, errors.Wrap(err, "parsing $and")
 		}
 		return and, nil
-	case "$match", "$gte", "$lte", "$gt", "$lt", "$exists":
+	case "$match", "$gte", "$lte", "$gt", "$lt", "$exists", "$like":
 		match, err := parseKeyValue(operator, value)
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing %s", operator)
