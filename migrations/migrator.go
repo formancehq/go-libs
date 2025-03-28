@@ -113,31 +113,40 @@ func (m *Migrator) initSchema(ctx context.Context, db bun.IDB) error {
 }
 
 func (m *Migrator) getLastVersion(ctx context.Context, db bun.IDB) (int, error) {
-	// run in dedicated to avoid aborting the current transaction (if any) if the table does not exist yer
-	version := &Version{}
-	if err := db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		if err := tx.NewSelect().
-			Model(version).
-			ModelTableExpr(m.getVersionsTable()).
-			Order("version_id DESC").
-			Limit(1).
-			Where("is_applied").
-			ColumnExpr("*").
-			Scan(ctx); err != nil {
-			err = postgres.ResolveError(err)
-			switch {
-			case errors.Is(err, postgres.ErrMissingTable):
-				return ErrMissingVersionTable
-			case errors.Is(err, postgres.ErrNotFound):
-				return nil
-			default:
-				return err
-			}
-		}
 
-		return nil
-	}); err != nil {
-		return -1, err
+	actualDB := db
+	switch db := actualDB.(type) {
+	case bun.Tx:
+		// If we are in a tx, create a SAVEPOINT in case the table does not exist yet
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return 0, err
+		}
+		defer func() {
+			// Don't need to commit the tx, we just want to return to the savepoint
+			_ = tx.Rollback()
+		}()
+		actualDB = tx
+	}
+
+	version := &Version{}
+	if err := actualDB.NewSelect().
+		Model(version).
+		ModelTableExpr(m.getVersionsTable()).
+		Order("version_id DESC").
+		Limit(1).
+		Where("is_applied").
+		ColumnExpr("*").
+		Scan(ctx); err != nil {
+		err = postgres.ResolveError(err)
+		switch {
+		case errors.Is(err, postgres.ErrMissingTable):
+			return -1, ErrMissingVersionTable
+		case errors.Is(err, postgres.ErrNotFound):
+			return -1, nil
+		default:
+			return -1, err
+		}
 	}
 	if !version.IsApplied {
 		return -1, nil
