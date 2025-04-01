@@ -8,6 +8,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/formancehq/go-libs/v2/otlp"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/formancehq/go-libs/v2/platform/postgres"
 	"github.com/formancehq/go-libs/v2/time"
@@ -42,6 +48,7 @@ type Migrator struct {
 	schema     string
 	tableName  string
 	rootDB     bun.IDB
+	tracer     trace.Tracer
 }
 
 func (m *Migrator) GetSchema() string {
@@ -160,6 +167,11 @@ func (m *Migrator) GetLastVersion(ctx context.Context) (int, error) {
 }
 
 func (m *Migrator) Up(ctx context.Context) error {
+	ctx, span := m.tracer.Start(ctx, "migrations.Up")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("schema", m.GetSchema()))
+
 	for {
 		err := m.UpByOne(ctx)
 		if err != nil {
@@ -414,7 +426,18 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 }
 
 func (m *Migrator) UpByOne(ctx context.Context) error {
-	return m.upByOne(ctx, m.rootDB)
+	ctx, span := m.tracer.Start(ctx, "migrations.UpByOne")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("schema", m.GetSchema()))
+
+	err := m.upByOne(ctx, m.rootDB)
+	if err != nil && !errors.Is(err, ErrAlreadyUpToDate) {
+		otlp.RecordError(ctx, err)
+		return err
+	}
+
+	return err
 }
 
 func NewMigrator(db bun.IDB, opts ...Option) *Migrator {
@@ -422,7 +445,7 @@ func NewMigrator(db bun.IDB, opts ...Option) *Migrator {
 		rootDB:    db,
 		tableName: migrationTable,
 	}
-	for _, opt := range opts {
+	for _, opt := range append(defaultOptions, opts...) {
 		opt(ret)
 	}
 	return ret
@@ -440,4 +463,14 @@ func WithTableName(name string) Option {
 	return func(m *Migrator) {
 		m.tableName = name
 	}
+}
+
+func WithTracer(tracer trace.Tracer) Option {
+	return func(m *Migrator) {
+		m.tracer = tracer
+	}
+}
+
+var defaultOptions = []Option{
+	WithTracer(noop.Tracer{}),
 }
