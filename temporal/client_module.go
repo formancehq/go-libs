@@ -86,7 +86,7 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 			lifecycle.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
 					if initSearchAttributes {
-						return createSearchAttributes(ctx, c, namespace, searchAttributes.SearchAttributes)
+						return CreateSearchAttributes(ctx, c, namespace, searchAttributes.SearchAttributes)
 					}
 					return nil
 				},
@@ -99,7 +99,7 @@ func FXModuleFromFlags(cmd *cobra.Command, tracer trace.Tracer, searchAttributes
 	)
 }
 
-func createSearchAttributes(ctx context.Context, c client.Client, namespace string, searchAttributes map[string]enums.IndexedValueType) error {
+func CreateSearchAttributes(ctx context.Context, c client.Client, namespace string, searchAttributes map[string]enums.IndexedValueType) error {
 	_, err := c.OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: searchAttributes,
 		Namespace:        namespace,
