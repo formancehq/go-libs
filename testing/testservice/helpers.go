@@ -10,20 +10,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func DeferNew[Cfg SpecializedConfiguration](
+func DeferNew(
 	commandFactory func() *cobra.Command,
-	configurationProvider func() Configuration[Cfg],
 	options ...Option,
-) *Deferred[*Service[Cfg]] {
-	d := NewDeferred[*Service[Cfg]]()
+) *Deferred[*Service] {
+	d := NewDeferred[*Service]()
 	BeforeEach(func() {
 		d.Reset()
 
-		service := New[Cfg](
-			commandFactory,
-			configurationProvider(),
-			options...,
-		)
+		service := New(commandFactory, options...)
 		Expect(service.Start(context.Background())).To(Succeed())
 
 		DeferCleanup(func() {

@@ -7,8 +7,10 @@ import (
 )
 
 func HTTPServerInstrumentation() Instrumentation {
-	return InstrumentationFunc(func(ctx context.Context) context.Context {
-		return httpserver.ContextWithServerInfo(ctx)
+	return InstrumentationFunc(func(cfg *RunConfiguration) {
+		cfg.WrapContext(func(ctx context.Context) context.Context {
+			return httpserver.ContextWithServerInfo(ctx)
+		})
 	})
 }
 
