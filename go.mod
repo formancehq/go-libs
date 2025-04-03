@@ -2,7 +2,7 @@ module github.com/formancehq/go-libs/v2
 
 go 1.22.0
 
-toolchain go1.22.7
+toolchain go1.24.1
 
 require (
 	dario.cat/mergo v1.0.1
@@ -65,7 +65,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.35.0
 	go.opentelemetry.io/otel/trace v1.35.0
 	go.temporal.io/api v1.45.0
-	go.temporal.io/sdk v1.33.0
+	go.temporal.io/sdk v1.33.1
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	go.uber.org/dig v1.18.1
 	go.uber.org/fx v1.23.0
