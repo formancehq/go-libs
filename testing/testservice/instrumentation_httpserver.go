@@ -4,8 +4,6 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/formancehq/go-libs/v2/testing/deferred"
-
 	"github.com/formancehq/go-libs/v2/httpserver"
 )
 
@@ -30,8 +28,4 @@ func GetServerURL(service *Service) *url.URL {
 	}
 
 	return url
-}
-
-func DeferGetServerURL(service *deferred.Deferred[*Service]) *deferred.Deferred[*url.URL] {
-	return deferred.Map(service, GetServerURL)
 }

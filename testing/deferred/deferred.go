@@ -3,9 +3,6 @@ package deferred
 import (
 	"context"
 	"errors"
-	"fmt"
-
-	. "github.com/onsi/ginkgo/v2"
 )
 
 var recoverHandlers []func()
@@ -64,15 +61,17 @@ func (d *Deferred[V]) Done() chan struct{} {
 	return d.done
 }
 
-func (d *Deferred[V]) Wait(ctx context.Context) (*V, error) {
+func (d *Deferred[V]) Wait(ctx context.Context) (V, error) {
 	select {
 	case <-d.done:
+		var zero V
 		if d.value == nil {
-			return nil, errors.New("closed with no value")
+			return zero, errors.New("closed with no value")
 		}
-		return d.value, nil
+		return *d.value, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		var zero V
+		return zero, ctx.Err()
 	}
 }
 
@@ -112,10 +111,6 @@ func WaitContext(ctx context.Context, d ...interface {
 	Done() chan struct{}
 	Err() error
 }) error {
-	fmt.Println("wait context")
-	defer func() {
-		fmt.Println("wait context done")
-	}()
 	for _, d := range d {
 		select {
 		case <-d.Done():
@@ -129,29 +124,18 @@ func WaitContext(ctx context.Context, d ...interface {
 	return nil
 }
 
-func waitAndMapDeferred[FROM, TO any](deferred *Deferred[FROM], mapper func(FROM) TO) (TO, error) {
+func WaitAndMap[FROM, TO any](deferred *Deferred[FROM], mapper func(FROM) TO) (TO, error) {
 	v, err := deferred.Wait(context.Background())
 	if err != nil {
 		var zero TO
 		return zero, err
 	}
 
-	return mapper(*v), nil
+	return mapper(v), nil
 }
 
 func Map[FROM, TO any](deferred *Deferred[FROM], mapper func(FROM) TO) *Deferred[TO] {
 	return LoadAsync(func() (TO, error) {
-		return waitAndMapDeferred(deferred, mapper)
+		return WaitAndMap(deferred, mapper)
 	})
-}
-
-func DeferMap[From, To any](deferred *Deferred[From], mapper func(From) To) *Deferred[To] {
-	ret := New[To]()
-	BeforeEach(func(specContext SpecContext) {
-		ret.Reset()
-		ret.LoadAsync(func() (To, error) {
-			return waitAndMapDeferred(deferred, mapper)
-		})
-	})
-	return ret
 }
