@@ -1,11 +1,16 @@
 package testservice
 
-import "github.com/formancehq/go-libs/v2/service"
+import (
+	"context"
+
+	"github.com/formancehq/go-libs/v2/service"
+)
 
 func DebugInstrumentation(debug bool) Instrumentation {
-	return InstrumentationFunc(func(cfg *RunConfiguration) {
+	return InstrumentationFunc(func(ctx context.Context, cfg *RunConfiguration) error {
 		if debug {
 			cfg.AppendArgs("--" + service.DebugFlag)
 		}
+		return nil
 	})
 }

@@ -1,15 +1,20 @@
 package testservice
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/formancehq/go-libs/v2/testing/deferred"
+
 	"github.com/formancehq/go-libs/v2/bun/bunconnect"
-	"github.com/formancehq/go-libs/v2/testing/utils"
 )
 
-func PostgresInstrumentation(postgresConfiguration *utils.Deferred[bunconnect.ConnectionOptions]) Instrumentation {
-	return InstrumentationFunc(func(cfg *RunConfiguration) {
-		postgresConfiguration := postgresConfiguration.Wait()
+func PostgresInstrumentation(postgresConfiguration *deferred.Deferred[bunconnect.ConnectionOptions]) Instrumentation {
+	return InstrumentationFunc(func(ctx context.Context, cfg *RunConfiguration) error {
+		postgresConfiguration, err := postgresConfiguration.Wait(ctx)
+		if err != nil {
+			return err
+		}
 
 		cfg.AppendArgs("--"+bunconnect.PostgresURIFlag, postgresConfiguration.DatabaseSourceName)
 		if postgresConfiguration.MaxIdleConns != 0 {
@@ -21,5 +26,7 @@ func PostgresInstrumentation(postgresConfiguration *utils.Deferred[bunconnect.Co
 		if postgresConfiguration.ConnMaxIdleTime != 0 {
 			cfg.AppendArgs("--"+bunconnect.PostgresConnMaxIdleTimeFlag, fmt.Sprint(postgresConfiguration.ConnMaxIdleTime))
 		}
+
+		return nil
 	})
 }

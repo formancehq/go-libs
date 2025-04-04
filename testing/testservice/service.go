@@ -36,7 +36,11 @@ func (s *Service) Start(ctx context.Context) error {
 		serviceID: s.id,
 	}
 	for _, instrument := range s.Instruments {
-		instrument.Instrument(runConfiguration)
+		err := instrument.Instrument(ctx, runConfiguration)
+		if err != nil {
+			cancel()
+			return err
+		}
 	}
 
 	s.Logger.Logf("Starting application with flags: %s", strings.Join(runConfiguration.args, " "))

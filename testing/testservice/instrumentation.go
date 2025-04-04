@@ -33,16 +33,17 @@ func (cfg *RunConfiguration) WrapContext(fn func(context.Context) context.Contex
 }
 
 type Instrumentation interface {
-	Instrument(cfg *RunConfiguration)
+	Instrument(ctx context.Context, cfg *RunConfiguration) error
 }
-type InstrumentationFunc func(cfg *RunConfiguration)
+type InstrumentationFunc func(ctx context.Context, cfg *RunConfiguration) error
 
-func (f InstrumentationFunc) Instrument(cfg *RunConfiguration) {
-	f(cfg)
+func (f InstrumentationFunc) Instrument(ctx context.Context, cfg *RunConfiguration) error {
+	return f(ctx, cfg)
 }
 
 func AppendArgsInstrumentation(args ...string) Instrumentation {
-	return InstrumentationFunc(func(cfg *RunConfiguration) {
+	return InstrumentationFunc(func(ctx context.Context, cfg *RunConfiguration) error {
 		cfg.AppendArgs(args...)
+		return nil
 	})
 }
