@@ -4,7 +4,8 @@ import (
 	"context"
 	"time"
 
-	. "github.com/formancehq/go-libs/v2/testing/utils"
+	"github.com/formancehq/go-libs/v2/testing/deferred"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
@@ -13,8 +14,8 @@ import (
 func DeferNew(
 	commandFactory func() *cobra.Command,
 	options ...Option,
-) *Deferred[*Service] {
-	d := NewDeferred[*Service]()
+) *deferred.Deferred[*Service] {
+	d := deferred.New[*Service]()
 	BeforeEach(func() {
 		d.Reset()
 

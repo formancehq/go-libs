@@ -2,17 +2,19 @@ package testservice
 
 import (
 	"context"
-	. "github.com/formancehq/go-libs/v2/testing/utils"
 	"net/url"
+
+	"github.com/formancehq/go-libs/v2/testing/deferred"
 
 	"github.com/formancehq/go-libs/v2/httpserver"
 )
 
 func HTTPServerInstrumentation() Instrumentation {
-	return InstrumentationFunc(func(cfg *RunConfiguration) {
+	return InstrumentationFunc(func(ctx context.Context, cfg *RunConfiguration) error {
 		cfg.WrapContext(func(ctx context.Context) context.Context {
 			return httpserver.ContextWithServerInfo(ctx)
 		})
+		return nil
 	})
 }
 
@@ -30,6 +32,6 @@ func GetServerURL(service *Service) *url.URL {
 	return url
 }
 
-func DeferGetServerURL(service *Deferred[*Service]) *Deferred[*url.URL] {
-	return MapDeferred(service, GetServerURL)
+func DeferGetServerURL(service *deferred.Deferred[*Service]) *deferred.Deferred[*url.URL] {
+	return deferred.Map(service, GetServerURL)
 }

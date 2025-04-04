@@ -1,15 +1,17 @@
 package testservice
 
 import (
+	"context"
 	"strings"
+
+	"github.com/formancehq/go-libs/v2/testing/deferred"
 
 	"github.com/formancehq/go-libs/v2/otlp"
 	"github.com/formancehq/go-libs/v2/otlp/otlpmetrics"
-	"github.com/formancehq/go-libs/v2/testing/utils"
 )
 
-func OTLPInstrumentation(otlpConfiguration *utils.Deferred[OTLPConfig]) Instrumentation {
-	return InstrumentationFunc(func(cfg *RunConfiguration) {
+func OTLPInstrumentation(otlpConfiguration *deferred.Deferred[OTLPConfig]) Instrumentation {
+	return InstrumentationFunc(func(ctx context.Context, cfg *RunConfiguration) error {
 		if otlpConfiguration.GetValue().Metrics != nil {
 			cfg.AppendArgs("--"+otlpmetrics.OtelMetricsExporterFlag, otlpConfiguration.GetValue().Metrics.Exporter)
 			if otlpConfiguration.GetValue().Metrics.KeepInMemory {
@@ -49,6 +51,8 @@ func OTLPInstrumentation(otlpConfiguration *utils.Deferred[OTLPConfig]) Instrume
 		if otlpConfiguration.GetValue().BaseConfig.ServiceName != "" {
 			cfg.AppendArgs("--"+otlp.OtelServiceNameFlag, otlpConfiguration.GetValue().BaseConfig.ServiceName)
 		}
+
+		return nil
 	})
 }
 
