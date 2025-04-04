@@ -2,6 +2,8 @@ package testservice
 
 import (
 	"context"
+	. "github.com/formancehq/go-libs/v2/testing/utils"
+	"net/url"
 
 	"github.com/formancehq/go-libs/v2/httpserver"
 )
@@ -14,8 +16,20 @@ func HTTPServerInstrumentation() Instrumentation {
 	})
 }
 
-func GetServerURL(srv interface {
-	GetContext() context.Context
-}) string {
-	return httpserver.URL(srv.GetContext())
+func GetServerURL(service *Service) *url.URL {
+	rawUrl := httpserver.URL(service.GetContext())
+	if rawUrl == "" {
+		return nil
+	}
+
+	url, err := url.Parse(rawUrl)
+	if err != nil {
+		panic(err)
+	}
+
+	return url
+}
+
+func DeferGetServerURL(service *Deferred[*Service]) *Deferred[*url.URL] {
+	return MapDeferred(service, GetServerURL)
 }
