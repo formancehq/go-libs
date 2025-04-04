@@ -17,7 +17,7 @@ func NatsInstrumentation(url *deferred.Deferred[string]) Instrumentation {
 		}
 		runConfiguration.AppendArgs(
 			"--"+publish.PublisherNatsEnabledFlag,
-			"--"+publish.PublisherNatsURLFlag, *url,
+			"--"+publish.PublisherNatsURLFlag, url,
 			"--"+publish.PublisherTopicMappingFlag, fmt.Sprintf("*:%s", runConfiguration.GetID()),
 		)
 

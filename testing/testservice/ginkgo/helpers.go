@@ -1,8 +1,10 @@
-package testservice
+package ginkgo
 
 import (
 	"context"
 	"time"
+
+	"github.com/formancehq/go-libs/v2/testing/testservice"
 
 	"github.com/formancehq/go-libs/v2/testing/deferred"
 
@@ -13,14 +15,19 @@ import (
 
 func DeferNew(
 	commandFactory func() *cobra.Command,
-	options ...Option,
-) *deferred.Deferred[*Service] {
-	d := deferred.New[*Service]()
+	options ...testservice.Option,
+) *deferred.Deferred[*testservice.Service] {
+	d := deferred.New[*testservice.Service]()
 	BeforeEach(func() {
 		d.Reset()
 
-		service := New(commandFactory, options...)
-		Expect(service.Start(context.Background())).To(Succeed())
+		service := testservice.New(commandFactory, options...)
+		go func() {
+			defer GinkgoRecover()
+
+			Expect(service.Start(context.Background())).To(Succeed())
+			d.SetValue(service)
+		}()
 
 		DeferCleanup(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -28,8 +35,6 @@ func DeferNew(
 
 			Expect(service.Stop(ctx)).To(Succeed())
 		})
-
-		d.SetValue(service)
 	})
 	return d
 }
