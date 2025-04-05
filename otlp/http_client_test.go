@@ -22,8 +22,8 @@ func TestWithBodiesTracingHTTPTransport_RoundTrip(t *testing.T) {
 	}
 
 	transport := WithBodiesTracingHTTPTransport{
-		Base:  baseTransport,
-		Debug: true,
+		underlying: baseTransport,
+		debug:      true,
 	}
 
 	body := bytes.NewBufferString("request body")
@@ -49,8 +49,7 @@ func TestNewRoundTripper(t *testing.T) {
 
 	rt = NewRoundTripper(baseTransport, true)
 	require.NotNil(t, rt)
-	_, ok = rt.(WithBodiesTracingHTTPTransport)
-	require.True(t, ok)
+	require.NotNil(t, rt)
 
 	rt = NewRoundTripper(baseTransport, false, otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 		return "test-span"

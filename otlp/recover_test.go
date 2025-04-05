@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -14,29 +13,42 @@ func TestRecordErrorOnRecover(t *testing.T) {
 	ctx, span := tracer.Start(context.Background(), "test-span")
 	defer span.End()
 
-	func() {
-		defer RecordErrorOnRecover(ctx, false)()
-	}()
-
-	func() {
-		defer func() {
-			r := recover()
-			require.NotNil(t, r)
-			require.Equal(t, "test panic", r)
+	t.Run("without panic", func(t *testing.T) {
+		func() {
+			defer RecordErrorOnRecover(ctx, false)()
 		}()
-		
-		defer RecordErrorOnRecover(ctx, false)()
-		panic("test panic")
-	}()
+	})
 
-	func() {
-		defer func() {
-			r := recover()
-			require.NotNil(t, r)
-			require.Equal(t, "test panic", r)
+	t.Run("with panic but no forward", func(t *testing.T) {
+		panicked := false
+		func() {
+			defer func() {
+				r := recover()
+				if r != nil {
+					panicked = true
+				}
+			}()
+			
+			defer RecordErrorOnRecover(ctx, false)()
+			panic("test panic")
 		}()
-		
-		defer RecordErrorOnRecover(ctx, true)()
-		panic("test panic")
-	}()
+		require.False(t, panicked, "La panique ne devrait pas être transmise")
+	})
+
+	t.Run("with panic and forward", func(t *testing.T) {
+		panicked := false
+		func() {
+			defer func() {
+				r := recover()
+				if r != nil {
+					panicked = true
+					require.Equal(t, "test panic", r)
+				}
+			}()
+			
+			defer RecordErrorOnRecover(ctx, true)()
+			panic("test panic")
+		}()
+		require.True(t, panicked, "La panique devrait être transmise")
+	})
 }
