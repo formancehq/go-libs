@@ -52,7 +52,9 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 	headersMap := make(map[string]string)
 	for _, header := range otelMetricsExporterOTLPHeaders {
 		parts := strings.SplitN(header, "=", 2)
-		headersMap[parts[0]] = parts[1]
+		if len(parts) == 2 {
+			headersMap[parts[0]] = parts[1]
+		}
 	}
 
 	return MetricsModule(ModuleConfig{
