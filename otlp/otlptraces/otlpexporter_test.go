@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
 func TestLoadOTLPTracerGRPCClient(t *testing.T) {
@@ -63,7 +64,7 @@ func (m *mockClient) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockClient) UploadTraces(ctx context.Context, protoSpans any) error {
+func (m *mockClient) UploadTraces(ctx context.Context, protoSpans []*tracepb.ResourceSpans) error {
 	return nil
 }
 
