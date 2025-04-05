@@ -1,14 +1,14 @@
 package pgtesting
 
 import (
+	"github.com/formancehq/go-libs/v2/testing/deferred"
 	. "github.com/formancehq/go-libs/v2/testing/docker/ginkgo"
-	. "github.com/formancehq/go-libs/v2/testing/utils"
 	. "github.com/onsi/ginkgo/v2"
 )
 
-func WithNewPostgresServer(fn func(p *Deferred[*PostgresServer])) bool {
+func WithNewPostgresServer(fn func(p *deferred.Deferred[*PostgresServer])) bool {
 	return Context("With new postgres server", func() {
-		ret := NewDeferred[*PostgresServer]()
+		ret := deferred.New[*PostgresServer]()
 		BeforeEach(func() {
 			ret.Reset()
 			ret.SetValue(CreatePostgresServer(
@@ -20,8 +20,8 @@ func WithNewPostgresServer(fn func(p *Deferred[*PostgresServer])) bool {
 	})
 }
 
-func UsePostgresDatabase(server *Deferred[*PostgresServer], options ...CreateDatabaseOption) *Deferred[*Database] {
-	ret := &Deferred[*Database]{}
+func UsePostgresDatabase(server *deferred.Deferred[*PostgresServer], options ...CreateDatabaseOption) *deferred.Deferred[*Database] {
+	ret := &deferred.Deferred[*Database]{}
 	BeforeEach(func() {
 		ret.Reset()
 		ret.SetValue(server.GetValue().NewDatabase(GinkgoT(), options...))
@@ -29,7 +29,7 @@ func UsePostgresDatabase(server *Deferred[*PostgresServer], options ...CreateDat
 	return ret
 }
 
-func WithNewPostgresDatabase(server *Deferred[*PostgresServer], fn func(p *Deferred[*Database])) {
+func WithNewPostgresDatabase(server *deferred.Deferred[*PostgresServer], fn func(p *deferred.Deferred[*Database])) {
 	Context("With new postgres database", func() {
 		fn(UsePostgresDatabase(server))
 	})
