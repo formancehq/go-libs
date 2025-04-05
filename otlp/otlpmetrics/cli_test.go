@@ -29,7 +29,7 @@ func TestHeadersParsing(t *testing.T) {
 	assert.NoError(t, err)
 
 	headers, _ = cmd2.Flags().GetStringSlice(OtelMetricsExporterOTLPHeadersFlag)
-	
+
 	cmd3 := &cobra.Command{}
 	AddFlags(cmd3.Flags())
 	cmd3.SetArgs([]string{
@@ -38,6 +38,6 @@ func TestHeadersParsing(t *testing.T) {
 	})
 	err = cmd3.Execute()
 	assert.NoError(t, err)
-	
+
 	_ = FXModuleFromFlags(cmd3)
 }
