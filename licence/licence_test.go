@@ -26,11 +26,6 @@ type mockLogger struct {
 	lastError   error
 }
 
-func (m *mockLogger) getMessages() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]string{}, m.messages...)
-}
 
 func (m *mockLogger) Info(args ...any) {
 	m.mu.Lock()
