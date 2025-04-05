@@ -1,6 +1,7 @@
 package otlptraces
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -54,7 +55,7 @@ func TestOTLPTracerHTTPClientModule(t *testing.T) {
 
 type mockClient struct{}
 
-func (m *mockClient) Start() error {
+func (m *mockClient) Start(ctx context.Context) error {
 	return nil
 }
 
