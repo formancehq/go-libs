@@ -59,11 +59,11 @@ func (m *mockClient) Start(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockClient) Stop() error {
+func (m *mockClient) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockClient) UploadTraces(ctx otlptrace.TracesClientContext) error {
+func (m *mockClient) UploadTraces(ctx context.Context, protoSpans any) error {
 	return nil
 }
 
