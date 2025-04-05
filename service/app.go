@@ -23,6 +23,8 @@ const (
 	GracePeriodFlag = "grace-period"
 )
 
+var appOsExit = os.Exit
+
 func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(DebugFlag, false, "Debug mode")
 	flags.Bool(logging.JsonFormattingLoggerFlag, false, "Format logs as json")
@@ -57,7 +59,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 		case errorsutils.IsErrorWithExitCode(err):
 			a.logger.Errorf("Error: %v", err)
 			// We want to have a specific exit code for the error
-			os.Exit(err.(*errorsutils.ErrorWithExitCode).ExitCode)
+			appOsExit(err.(*errorsutils.ErrorWithExitCode).ExitCode)
 		default:
 			// Return complete error if we are debugging
 			// While polluting the output most of the time, it sometimes gives some precious information
@@ -90,7 +92,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 	}
 
 	if exitCode != 0 {
-		os.Exit(exitCode)
+		appOsExit(exitCode)
 	}
 
 	return nil
