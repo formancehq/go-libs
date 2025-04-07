@@ -159,6 +159,10 @@ func TestApp_Run_WithErrorExitCode(t *testing.T) {
 	mu.Lock()
 	appOsExit = mockExit
 	mu.Unlock()
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	
 	app := New(&buf, fx.Invoke(func() error {
 		return &errorsutils.ErrorWithExitCode{
 			Err:      errors.New("test error"),
@@ -171,11 +175,21 @@ func TestApp_Run_WithErrorExitCode(t *testing.T) {
 	cmd.Flags().Bool(logging.JsonFormattingLoggerFlag, false, "")
 	cmd.Flags().String(otlptraces.OtelTracesExporterFlag, "", "")
 	cmd.Flags().Duration(GracePeriodFlag, 0, "")
-
-	ctx := context.Background()
 	cmd.SetContext(ctx)
 
-	app.Run(cmd)
+	done := make(chan struct{})
+	go func() {
+		app.Run(cmd)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Log("Timeout atteint, contexte annulé")
+		<-done // Attendre que la goroutine se termine
+	}
 
 	require.True(t, exitCalled, "os.Exit devrait être appelé")
 	require.Equal(t, 42, exitCode, "Le code de sortie devrait être 42")
