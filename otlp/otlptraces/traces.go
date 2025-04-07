@@ -110,7 +110,7 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 						return otlptracegrpc.WithInsecure()
 					}))
 				}
-				if cfg.OTLPConfig.Headers != nil {
+				if len(cfg.OTLPConfig.Headers) > 0 {
 					options = append(options, ProvideOTLPTracerGRPCClientOption(func() otlptracegrpc.Option {
 						return otlptracegrpc.WithHeaders(cfg.OTLPConfig.Headers)
 					}))
@@ -126,7 +126,7 @@ func TracesModule(cfg ModuleConfig) fx.Option {
 						return otlptracehttp.WithInsecure()
 					}))
 				}
-				if cfg.OTLPConfig.Headers != nil {
+				if len(cfg.OTLPConfig.Headers) > 0 {
 					options = append(options, ProvideOTLPTracerHTTPClientOption(func() otlptracehttp.Option {
 						return otlptracehttp.WithHeaders(cfg.OTLPConfig.Headers)
 					}))
