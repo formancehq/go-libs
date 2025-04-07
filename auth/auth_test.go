@@ -123,11 +123,11 @@ type mockAccessTokenVerifier struct {
 	claims     *oidc.AccessTokenClaims
 }
 
-func (m *mockAccessTokenVerifier) Verify(ctx context.Context, token string) (op.TokenType, error) {
+func (m *mockAccessTokenVerifier) Verify(ctx context.Context, token string) (string, error) {
 	if m.shouldFail {
 		return "", fmt.Errorf("token verification failed")
 	}
-	return op.BearerToken, nil
+	return "bearer", nil
 }
 
 func (m *mockAccessTokenVerifier) Claims(ctx context.Context, token string, claims interface{}) error {
@@ -141,4 +141,8 @@ func (m *mockAccessTokenVerifier) Claims(ctx context.Context, token string, clai
 	}
 	
 	return fmt.Errorf("unsupported claims type")
+}
+
+func (m *mockAccessTokenVerifier) Issuer() string {
+	return "https://issuer.example.com"
 }
