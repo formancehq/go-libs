@@ -1,6 +1,7 @@
 package otlpmetrics
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -55,7 +56,8 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 		if len(parts) == 2 {
 			headersMap[parts[0]] = parts[1]
 		} else if len(parts) == 1 && parts[0] != "" {
-			panic("malformed header: " + header + " (missing value)")
+			cmd.PrintErrf("Error: malformed header: %s (missing value)\n", header)
+			return fx.Error(fmt.Errorf("malformed header: %s (missing value)", header))
 		}
 	}
 
