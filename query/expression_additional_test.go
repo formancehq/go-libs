@@ -80,7 +80,11 @@ func TestSetBuild_EmptyItems(t *testing.T) {
 		items:    []Builder{},
 	}
 
-	query, args, err := s.Build(DefaultMappingContext())
+	ctx := ContextFn(func(key, operator string, value any) (string, []any, error) {
+		return "1 = 1", nil, nil
+	})
+
+	query, args, err := s.Build(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "1 = 1", query)
 	require.Empty(t, args)
