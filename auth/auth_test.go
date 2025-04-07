@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/stretchr/testify/require"
+	"github.com/zitadel/oidc/v2/pkg/oidc"
+	"github.com/zitadel/oidc/v2/pkg/op"
 )
 
 func TestNewNoAuth(t *testing.T) {
@@ -102,9 +105,40 @@ func TestJWTAuth_GetAccessTokenVerifier(t *testing.T) {
 	logger := logging.Testing()
 	auth := newJWTAuth(logger, 3, "https://issuer.example.com", "test-service", true)
 
-	t.Skip("Ce test nécessite un serveur d'authentification")
+	auth.accessTokenVerifier = &mockAccessTokenVerifier{
+		shouldFail: false,
+		claims: &oidc.AccessTokenClaims{
+			Scopes: []string{"test-service:read"},
+		},
+	}
 
 	verifier, err := auth.getAccessTokenVerifier(context.Background())
 	require.NoError(t, err, "Aucune erreur ne devrait être retournée")
 	require.NotNil(t, verifier, "Le vérificateur de token d'accès ne devrait pas être nil")
+	require.Same(t, auth.accessTokenVerifier, verifier, "Le vérificateur devrait être mis en cache")
+}
+
+type mockAccessTokenVerifier struct {
+	shouldFail bool
+	claims     *oidc.AccessTokenClaims
+}
+
+func (m *mockAccessTokenVerifier) Verify(ctx context.Context, token string) (op.TokenType, error) {
+	if m.shouldFail {
+		return "", fmt.Errorf("token verification failed")
+	}
+	return op.BearerToken, nil
+}
+
+func (m *mockAccessTokenVerifier) Claims(ctx context.Context, token string, claims interface{}) error {
+	if m.shouldFail {
+		return fmt.Errorf("claims extraction failed")
+	}
+	
+	if accessTokenClaims, ok := claims.(**oidc.AccessTokenClaims); ok {
+		*accessTokenClaims = m.claims
+		return nil
+	}
+	
+	return fmt.Errorf("unsupported claims type")
 }
