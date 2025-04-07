@@ -26,7 +26,6 @@ type mockLogger struct {
 	lastError   error
 }
 
-
 func (m *mockLogger) Info(args ...any) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

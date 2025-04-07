@@ -24,10 +24,10 @@ func TestResolveError_ConstraintsFailed(t *testing.T) {
 		Code:           "23505",
 		ConstraintName: "test_constraint",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.IsType(t, ErrConstraintsFailed{}, err, "L'erreur devrait être de type ErrConstraintsFailed")
-	
+
 	constraintErr, ok := err.(ErrConstraintsFailed)
 	require.True(t, ok, "L'erreur devrait pouvoir être convertie en ErrConstraintsFailed")
 	require.Equal(t, "test_constraint", constraintErr.GetConstraint(), "Le nom de la contrainte devrait être correct")
@@ -37,7 +37,7 @@ func TestResolveError_TooManyClient(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "53300",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.IsType(t, ErrTooManyClient{}, err, "L'erreur devrait être de type ErrTooManyClient")
 }
@@ -46,7 +46,7 @@ func TestResolveError_DeadlockDetected(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "40P01",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.ErrorIs(t, err, ErrDeadlockDetected, "L'erreur devrait être ErrDeadlockDetected")
 }
@@ -55,7 +55,7 @@ func TestResolveError_Serialization(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "40001",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.ErrorIs(t, err, ErrSerialization, "L'erreur devrait être ErrSerialization")
 }
@@ -64,7 +64,7 @@ func TestResolveError_MissingTable(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "42P01",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.ErrorIs(t, err, ErrMissingTable, "L'erreur devrait être ErrMissingTable")
 }
@@ -73,7 +73,7 @@ func TestResolveError_MissingSchema(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "3F000",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.ErrorIs(t, err, ErrMissingSchema, "L'erreur devrait être ErrMissingSchema")
 }
@@ -83,10 +83,10 @@ func TestResolveError_RaisedException(t *testing.T) {
 		Code:    "P0001",
 		Message: "test message",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.IsType(t, ErrRaisedException{}, err, "L'erreur devrait être de type ErrRaisedException")
-	
+
 	raisedErr, ok := err.(ErrRaisedException)
 	require.True(t, ok, "L'erreur devrait pouvoir être convertie en ErrRaisedException")
 	require.Equal(t, "test message", raisedErr.GetMessage(), "Le message d'erreur devrait être correct")
@@ -96,7 +96,7 @@ func TestResolveError_UnknownPgError(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "UNKNOWN",
 	}
-	
+
 	err := ResolveError(pgErr)
 	require.Same(t, pgErr, err, "Une erreur postgres inconnue devrait être retournée telle quelle")
 }
@@ -118,7 +118,7 @@ func TestErrConstraintsFailed_Error(t *testing.T) {
 		Message:        "test message",
 		ConstraintName: "test_constraint",
 	}
-	
+
 	err := newErrConstraintsFailed(pgErr)
 	require.Equal(t, pgErr.Error(), err.Error(), "Le message d'erreur devrait être celui de l'erreur postgres")
 }
@@ -127,12 +127,12 @@ func TestErrConstraintsFailed_Is(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "23505",
 	}
-	
+
 	err := newErrConstraintsFailed(pgErr)
-	
+
 	otherErr := ErrConstraintsFailed{}
 	require.True(t, err.Is(otherErr), "Is devrait retourner true pour une erreur du même type")
-	
+
 	otherTypeErr := errors.New("autre erreur")
 	require.False(t, err.Is(otherTypeErr), "Is devrait retourner false pour une erreur d'un autre type")
 }
@@ -141,17 +141,17 @@ func TestErrConstraintsFailed_Unwrap(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "23505",
 	}
-	
+
 	err := newErrConstraintsFailed(pgErr)
 	unwrappedErr := err.Unwrap()
-	
+
 	require.Same(t, pgErr, unwrappedErr, "Unwrap devrait retourner l'erreur postgres originale")
 }
 
 func TestErrTooManyClient_Error(t *testing.T) {
 	originalErr := errors.New("trop de clients")
 	err := newErrTooManyClient(originalErr)
-	
+
 	require.Equal(t, originalErr.Error(), err.Error(), "Le message d'erreur devrait être celui de l'erreur originale")
 }
 
@@ -160,7 +160,7 @@ func TestErrRaisedException_Error(t *testing.T) {
 		Code:    "P0001",
 		Message: "test message",
 	}
-	
+
 	err := newErrRaisedException(pgErr)
 	require.Equal(t, pgErr.Error(), err.Error(), "Le message d'erreur devrait être celui de l'erreur postgres")
 }
@@ -169,12 +169,12 @@ func TestErrRaisedException_Is(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "P0001",
 	}
-	
+
 	err := newErrRaisedException(pgErr)
-	
+
 	otherErr := ErrRaisedException{}
 	require.True(t, err.Is(otherErr), "Is devrait retourner true pour une erreur du même type")
-	
+
 	otherTypeErr := errors.New("autre erreur")
 	require.False(t, err.Is(otherTypeErr), "Is devrait retourner false pour une erreur d'un autre type")
 }
@@ -183,9 +183,9 @@ func TestErrRaisedException_Unwrap(t *testing.T) {
 	pgErr := &pgconn.PgError{
 		Code: "P0001",
 	}
-	
+
 	err := newErrRaisedException(pgErr)
 	unwrappedErr := err.Unwrap()
-	
+
 	require.Same(t, pgErr, unwrappedErr, "Unwrap devrait retourner l'erreur postgres originale")
 }

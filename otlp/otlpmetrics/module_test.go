@@ -13,7 +13,7 @@ func TestProvideMetricsProviderOption(t *testing.T) {
 	provider := func() sdkmetric.Option {
 		return sdkmetric.WithView()
 	}
-	
+
 	option := ProvideMetricsProviderOption(provider)
 	require.NotNil(t, option, "L'option ne devrait pas être nil")
 }
@@ -22,7 +22,7 @@ func TestProvideRuntimeMetricsOption(t *testing.T) {
 	provider := func() any {
 		return "test"
 	}
-	
+
 	option := ProvideRuntimeMetricsOption(provider)
 	require.NotNil(t, option, "L'option ne devrait pas être nil")
 }
@@ -34,11 +34,11 @@ func TestMetricsModule(t *testing.T) {
 			RuntimeMetrics:     false,
 			ResourceAttributes: []string{},
 		}
-		
+
 		module := MetricsModule(cfg)
 		require.NotNil(t, module, "Le module ne devrait pas être nil")
 	})
-	
+
 	t.Run("with stdout exporter", func(t *testing.T) {
 		cfg := ModuleConfig{
 			PushInterval:       10 * time.Second,
@@ -46,11 +46,11 @@ func TestMetricsModule(t *testing.T) {
 			ResourceAttributes: []string{},
 			Exporter:           StdoutExporter,
 		}
-		
+
 		module := MetricsModule(cfg)
 		require.NotNil(t, module, "Le module ne devrait pas être nil")
 	})
-	
+
 	t.Run("with OTLP GRPC exporter", func(t *testing.T) {
 		cfg := ModuleConfig{
 			PushInterval:       10 * time.Second,
@@ -63,11 +63,11 @@ func TestMetricsModule(t *testing.T) {
 				Insecure: true,
 			},
 		}
-		
+
 		module := MetricsModule(cfg)
 		require.NotNil(t, module, "Le module ne devrait pas être nil")
 	})
-	
+
 	t.Run("with OTLP HTTP exporter", func(t *testing.T) {
 		cfg := ModuleConfig{
 			PushInterval:       10 * time.Second,
@@ -80,11 +80,11 @@ func TestMetricsModule(t *testing.T) {
 				Insecure: true,
 			},
 		}
-		
+
 		module := MetricsModule(cfg)
 		require.NotNil(t, module, "Le module ne devrait pas être nil")
 	})
-	
+
 	t.Run("with OTLP exporter and nil config", func(t *testing.T) {
 		cfg := ModuleConfig{
 			PushInterval:       10 * time.Second,
@@ -93,11 +93,11 @@ func TestMetricsModule(t *testing.T) {
 			Exporter:           OTLPExporter,
 			OTLPConfig:         nil,
 		}
-		
+
 		module := MetricsModule(cfg)
 		require.NotNil(t, module, "Le module ne devrait pas être nil")
 	})
-	
+
 	t.Run("with in-memory exporter", func(t *testing.T) {
 		cfg := ModuleConfig{
 			PushInterval:       10 * time.Second,
@@ -105,7 +105,7 @@ func TestMetricsModule(t *testing.T) {
 			ResourceAttributes: []string{},
 			KeepInMemory:       true,
 		}
-		
+
 		module := MetricsModule(cfg)
 		require.NotNil(t, module, "Le module ne devrait pas être nil")
 	})
@@ -117,7 +117,7 @@ func TestOTLPConfig(t *testing.T) {
 		Endpoint: "localhost:4317",
 		Insecure: true,
 	}
-	
+
 	require.Equal(t, otlp.ModeGRPC, cfg.Mode, "Le mode devrait être GRPC")
 	require.Equal(t, "localhost:4317", cfg.Endpoint, "L'endpoint devrait être localhost:4317")
 	require.True(t, cfg.Insecure, "Le mode insecure devrait être activé")
@@ -137,7 +137,7 @@ func TestModuleConfig(t *testing.T) {
 		ResourceAttributes: []string{"service.name=test"},
 		KeepInMemory:       true,
 	}
-	
+
 	require.True(t, cfg.RuntimeMetrics, "Les métriques runtime devraient être activées")
 	require.Equal(t, 15*time.Second, cfg.MinimumReadMemStatsInterval, "L'intervalle de lecture des stats mémoire devrait être de 15 secondes")
 	require.Equal(t, OTLPExporter, cfg.Exporter, "L'exportateur devrait être OTLP")

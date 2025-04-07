@@ -130,7 +130,7 @@ func TestEnsureDatabaseNotExists(t *testing.T) {
 	connectionOptions := bunconnect.ConnectionOptions{
 		DatabaseSourceName: srv.GetDatabaseDSN("tempdb"),
 	}
-	
+
 	// Connect to postgres database
 	pgConnectionOptions := bunconnect.ConnectionOptions{
 		DatabaseSourceName: srv.GetDatabaseDSN("postgres"),
@@ -138,7 +138,7 @@ func TestEnsureDatabaseNotExists(t *testing.T) {
 	db, err := bunconnect.OpenSQLDB(logging.TestingContext(), pgConnectionOptions)
 	require.NoError(t, err)
 	defer db.Close()
-	
+
 	// Create the database
 	_, err = db.ExecContext(logging.TestingContext(), `CREATE DATABASE tempdb`)
 	require.NoError(t, err)
@@ -169,11 +169,11 @@ func TestRun(t *testing.T) {
 		Use: "test",
 	}
 	cmd.Flags().String(bunconnect.PostgresURIFlag, srv.GetDatabaseDSN("runtest"), "")
-	
+
 	// Set context
 	ctx := logging.TestingContext()
 	cmd.SetContext(ctx)
-	
+
 	// Test with valid executor
 	err := Run(cmd, []string{}, func(cmd *cobra.Command, args []string, db *bun.DB) error {
 		require.NotNil(t, db)

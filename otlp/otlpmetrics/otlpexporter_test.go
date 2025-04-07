@@ -24,7 +24,7 @@ func TestProvideOTLPMetricsGRPCOption(t *testing.T) {
 	provider := func() otlpmetricgrpc.Option {
 		return otlpmetricgrpc.WithEndpoint("localhost:4317")
 	}
-	
+
 	option := ProvideOTLPMetricsGRPCOption(provider)
 	require.NotNil(t, option, "L'option ne devrait pas être nil")
 }
@@ -34,7 +34,7 @@ func TestProvideOTLPMetricsHTTPOption(t *testing.T) {
 	provider := func() otlpmetrichttp.Option {
 		return otlpmetrichttp.WithEndpoint("localhost:4318")
 	}
-	
+
 	option := ProvideOTLPMetricsHTTPOption(provider)
 	require.NotNil(t, option, "L'option ne devrait pas être nil")
 }
@@ -44,7 +44,7 @@ func TestProvideOTLPMetricsPeriodicReaderOption(t *testing.T) {
 	provider := func() sdkmetric.PeriodicReaderOption {
 		return sdkmetric.WithInterval(0)
 	}
-	
+
 	option := ProvideOTLPMetricsPeriodicReaderOption(provider)
 	require.NotNil(t, option, "L'option ne devrait pas être nil")
 }

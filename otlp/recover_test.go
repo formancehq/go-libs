@@ -28,7 +28,7 @@ func TestRecordErrorOnRecover(t *testing.T) {
 					panicked = true
 				}
 			}()
-			
+
 			defer RecordErrorOnRecover(ctx, false)()
 			panic("test panic")
 		}()
@@ -45,7 +45,7 @@ func TestRecordErrorOnRecover(t *testing.T) {
 					require.Equal(t, "test panic", r)
 				}
 			}()
-			
+
 			defer RecordErrorOnRecover(ctx, true)()
 			panic("test panic")
 		}()

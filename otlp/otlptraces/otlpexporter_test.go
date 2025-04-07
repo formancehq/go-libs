@@ -29,7 +29,7 @@ func TestProvideOTLPTracerGRPCClientOption(t *testing.T) {
 	provider := func() otlptracegrpc.Option {
 		return otlptracegrpc.WithEndpoint("localhost:4317")
 	}
-	
+
 	option := ProvideOTLPTracerGRPCClientOption(provider)
 	require.NotNil(t, option, "L'option ne devrait pas être nil")
 }
@@ -43,7 +43,7 @@ func TestProvideOTLPTracerHTTPClientOption(t *testing.T) {
 	provider := func() otlptracehttp.Option {
 		return otlptracehttp.WithEndpoint("localhost:4318")
 	}
-	
+
 	option := ProvideOTLPTracerHTTPClientOption(provider)
 	require.NotNil(t, option, "L'option ne devrait pas être nil")
 }

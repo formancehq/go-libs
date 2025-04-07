@@ -14,7 +14,6 @@ func TestKeyvalsToMap(t *testing.T) {
 		"key2": 42,
 	}, result, "La conversion en map devrait fonctionner correctement")
 
-
 	result = keyvalsToMap()
 	require.Empty(t, result, "Une map vide devrait être retournée pour aucun argument")
 }

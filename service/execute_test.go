@@ -36,7 +36,7 @@ func TestExecute(t *testing.T) {
 			os.Stdout = oldStdout
 			os.Stderr = oldStderr
 		}()
-		
+
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 		os.Stderr = w
@@ -68,7 +68,7 @@ func TestExecute(t *testing.T) {
 			os.Stdout = oldStdout
 			os.Stderr = oldStderr
 		}()
-		
+
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 		os.Stderr = w

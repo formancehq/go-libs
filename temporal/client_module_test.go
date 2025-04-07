@@ -38,18 +38,17 @@ func TestFXModuleFromFlags(t *testing.T) {
 
 func TestCreateSearchAttributes(t *testing.T) {
 	t.Skip("Ce test nécessite un serveur Temporal en cours d'exécution")
-	
-	
+
 	c, err := client.Dial(client.Options{
 		HostPort: "localhost:7233",
 	})
 	require.NoError(t, err)
 	defer c.Close()
-	
+
 	searchAttributes := map[string]enums.IndexedValueType{
 		"testAttribute": enums.INDEXED_VALUE_TYPE_TEXT,
 	}
-	
+
 	err = CreateSearchAttributes(context.Background(), c, "test-namespace", searchAttributes)
 	require.NoError(t, err)
 }
@@ -57,7 +56,7 @@ func TestCreateSearchAttributes(t *testing.T) {
 func TestClientOptionsCreation(t *testing.T) {
 	logger := logging.Testing()
 	meterProvider := noop.NewMeterProvider()
-	
+
 	options, err := func(logger logging.Logger, meterProvider noop.MeterProvider) (client.Options, error) {
 		tracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
 			Tracer: trace.NewNoopTracerProvider().Tracer("test"),
@@ -72,10 +71,10 @@ func TestClientOptionsCreation(t *testing.T) {
 			Interceptors: []interceptor.ClientInterceptor{tracingInterceptor},
 			Logger:       newLogger(logger),
 		}
-		
+
 		return options, nil
 	}(logger, meterProvider)
-	
+
 	require.NoError(t, err)
 	require.Equal(t, "test-namespace", options.Namespace)
 	require.Equal(t, "localhost:7233", options.HostPort)

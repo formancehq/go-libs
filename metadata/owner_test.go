@@ -17,9 +17,9 @@ func (o *TestOwner) GetMetadata() Metadata {
 func TestOwnerInterface(t *testing.T) {
 	testMetadata := Metadata{"key1": "value1", "key2": "value2"}
 	owner := &TestOwner{metadata: testMetadata}
-	
+
 	var _ Owner = owner
-	
+
 	metadata := owner.GetMetadata()
 	require.Equal(t, testMetadata, metadata, "GetMetadata devrait retourner les métadonnées correctes")
 }

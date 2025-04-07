@@ -17,14 +17,14 @@ func TestNewDefinitionSet(t *testing.T) {
 func TestDefinitionSetAppend(t *testing.T) {
 	// Tester l'ajout d'une définition à un ensemble
 	definitionSet := NewDefinitionSet()
-	
+
 	// Créer une définition de test
 	testFunc := func() {}
 	definition := Definition{
 		Func: testFunc,
 		Name: "testFunc",
 	}
-	
+
 	// Ajouter la définition à l'ensemble
 	newSet := definitionSet.Append(definition)
 	require.Len(t, newSet, 1, "L'ensemble de définitions devrait contenir un élément")
@@ -36,7 +36,7 @@ func TestNewWorkerModule(t *testing.T) {
 	// Tester la création d'un module worker
 	taskQueue := "test-queue"
 	options := worker.Options{}
-	
+
 	// Créer le module
 	module := NewWorkerModule(nil, taskQueue, options)
 	require.NotNil(t, module, "Le module worker ne devrait pas être nil")
