@@ -11,7 +11,6 @@ import (
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/stretchr/testify/require"
 	"github.com/zitadel/oidc/v2/pkg/oidc"
-	"github.com/zitadel/oidc/v2/pkg/op"
 )
 
 func TestNewNoAuth(t *testing.T) {
@@ -145,4 +144,8 @@ func (m *mockAccessTokenVerifier) Claims(ctx context.Context, token string, clai
 
 func (m *mockAccessTokenVerifier) Issuer() string {
 	return "https://issuer.example.com"
+}
+
+func (m *mockAccessTokenVerifier) KeySet() oidc.KeySet {
+	return nil
 }
