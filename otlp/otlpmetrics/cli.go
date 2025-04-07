@@ -54,8 +54,8 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 		parts := strings.SplitN(header, "=", 2)
 		if len(parts) == 2 {
 			headersMap[parts[0]] = parts[1]
-		} else if len(parts) == 1 {
-			continue
+		} else if len(parts) == 1 && parts[0] != "" {
+			panic("malformed header: " + header + " (missing value)")
 		}
 	}
 
