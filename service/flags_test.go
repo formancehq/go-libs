@@ -11,7 +11,6 @@ import (
 )
 
 func TestFlags(t *testing.T) {
-	t.Parallel()
 
 	oldEnv := os.Environ()
 	defer func() {
@@ -50,7 +49,6 @@ func TestFlags(t *testing.T) {
 }
 
 func TestBindEnvToFlagSet(t *testing.T) {
-	t.Parallel()
 
 	oldEnv := os.Environ()
 	defer func() {
