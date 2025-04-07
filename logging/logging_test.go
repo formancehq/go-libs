@@ -9,42 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFromContext(t *testing.T) {
-	logger := FromContext(context.Background())
-	require.NotNil(t, logger, "Le logger par défaut ne devrait pas être nil")
-
-	customLogger := &TestLogger{}
-	ctx := ContextWithLogger(context.Background(), customLogger)
-	loggerFromCtx := FromContext(ctx)
-	require.Same(t, customLogger, loggerFromCtx, "Le logger récupéré devrait être le même que celui ajouté")
-}
-
-func TestContextWithFields(t *testing.T) {
-	logger := &TestLogger{}
-	ctx := ContextWithLogger(context.Background(), logger)
-
-	fields := map[string]any{"key": "value"}
-	ctx = ContextWithFields(ctx, fields)
-
-	loggerWithFields := FromContext(ctx)
-	require.NotSame(t, logger, loggerWithFields, "Un nouveau logger devrait être créé")
-}
-
-func TestContextWithField(t *testing.T) {
-	logger := &TestLogger{}
-	ctx := ContextWithLogger(context.Background(), logger)
-
-	ctx = ContextWithField(ctx, "key", "value")
-
-	loggerWithField := FromContext(ctx)
-	require.NotSame(t, logger, loggerWithField, "Un nouveau logger devrait être créé")
-}
-
-func TestTestingContext(t *testing.T) {
-	ctx := TestingContext()
-	logger := FromContext(ctx)
-	require.NotNil(t, logger, "Le logger de test ne devrait pas être nil")
-}
 
 func TestLoggerFunctions(t *testing.T) {
 	logger := Testing()

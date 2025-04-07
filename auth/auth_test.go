@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/formancehq/go-libs/v2/logging"
 	"github.com/stretchr/testify/require"
@@ -148,4 +149,16 @@ func (m *mockAccessTokenVerifier) Issuer() string {
 
 func (m *mockAccessTokenVerifier) KeySet() oidc.KeySet {
 	return nil
+}
+
+func (m *mockAccessTokenVerifier) MaxAgeIAT() time.Duration {
+	return 5 * time.Minute
+}
+
+func (m *mockAccessTokenVerifier) Offset() time.Duration {
+	return 2 * time.Minute
+}
+
+func (m *mockAccessTokenVerifier) SupportedSignAlgs() []string {
+	return []string{"RS256"}
 }
