@@ -138,31 +138,31 @@ func TestApp_Run_WithDebug(t *testing.T) {
 func TestApp_Run_WithErrorExitCode(t *testing.T) {
 	var buf bytes.Buffer
 	var mu sync.Mutex
-	
+
 	originalExit := appOsExit
-	defer func() { 
+	defer func() {
 		mu.Lock()
-		appOsExit = originalExit 
+		appOsExit = originalExit
 		mu.Unlock()
 	}()
 
 	exitCalled := false
 	exitCode := 0
-	
+
 	mockExit := func(code int) {
 		mu.Lock()
 		exitCalled = true
 		exitCode = code
 		mu.Unlock()
 	}
-	
+
 	mu.Lock()
 	appOsExit = mockExit
 	mu.Unlock()
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	app := New(&buf, fx.Invoke(func() error {
 		return &errorsutils.ErrorWithExitCode{
 			Err:      errors.New("test error"),

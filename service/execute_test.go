@@ -23,7 +23,7 @@ func TestExecute(t *testing.T) {
 	t.Run("successful execution", func(t *testing.T) {
 		exitCalled = false
 		exitCode = 0
-		
+
 		localOsExit := func(code int) {
 			exitCalled = true
 			exitCode = code
@@ -60,7 +60,7 @@ func TestExecute(t *testing.T) {
 	t.Run("failed execution", func(t *testing.T) {
 		exitCalled = false
 		exitCode = 0
-		
+
 		localOsExit := func(code int) {
 			exitCalled = true
 			exitCode = code
