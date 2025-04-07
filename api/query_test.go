@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/formancehq/go-libs/v2/api"
+	"github.com/formancehq/go-libs/v3/api"
 	"github.com/stretchr/testify/require"
 )
 

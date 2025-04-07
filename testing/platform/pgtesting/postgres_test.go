@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/formancehq/go-libs/v2/logging"
-	"github.com/formancehq/go-libs/v2/testing/docker"
-	"github.com/formancehq/go-libs/v2/testing/utils"
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/testing/docker"
+	"github.com/formancehq/go-libs/v3/testing/utils"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"

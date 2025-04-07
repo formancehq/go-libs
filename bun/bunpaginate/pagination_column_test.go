@@ -5,12 +5,12 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/formancehq/go-libs/v2/bun/bundebug"
+	"github.com/formancehq/go-libs/v3/bun/bundebug"
 	"github.com/uptrace/bun"
 
-	"github.com/formancehq/go-libs/v2/bun/bunconnect"
-	"github.com/formancehq/go-libs/v2/bun/bunpaginate"
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/bun/bunconnect"
+	"github.com/formancehq/go-libs/v3/bun/bunpaginate"
+	"github.com/formancehq/go-libs/v3/logging"
 
 	"github.com/stretchr/testify/require"
 )

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/formancehq/go-libs/v2/otlp"
+	"github.com/formancehq/go-libs/v3/otlp"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"

@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/formancehq/go-libs/v2/otlp"
+	"github.com/formancehq/go-libs/v3/otlp"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/fx"
 )

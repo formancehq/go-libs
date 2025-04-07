@@ -10,12 +10,12 @@ import (
 
 	"github.com/google/uuid"
 
-	sharedlogging "github.com/formancehq/go-libs/v2/logging"
+	sharedlogging "github.com/formancehq/go-libs/v3/logging"
 	"github.com/ory/dockertest/v3"
 
-	"github.com/formancehq/go-libs/v2/bun/bunconnect"
+	"github.com/formancehq/go-libs/v3/bun/bunconnect"
 
-	"github.com/formancehq/go-libs/v2/testing/docker"
+	"github.com/formancehq/go-libs/v3/testing/docker"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )

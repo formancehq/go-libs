@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
@@ -24,12 +24,6 @@ type mockLogger struct {
 	messages    []string
 	lastMessage string
 	lastError   error
-}
-
-func (m *mockLogger) getMessages() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]string{}, m.messages...)
 }
 
 func (m *mockLogger) Info(args ...any) {
