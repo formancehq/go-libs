@@ -16,23 +16,23 @@ import (
 
 func TestNewNoAuth(t *testing.T) {
 	auth := NewNoAuth()
-	require.NotNil(t, auth, "NoAuth ne devrait pas être nil")
+	require.NotNil(t, auth, "NoAuth should not be nil")
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/test", nil)
 
 	authenticated, err := auth.Authenticate(w, r)
-	require.NoError(t, err, "Authenticate ne devrait pas échouer")
-	require.True(t, authenticated, "L'authentification devrait toujours réussir avec NoAuth")
+	require.NoError(t, err, "Authenticate should not fail")
+	require.True(t, authenticated, "Authentication should always succeed with NoAuth")
 }
 
 func TestNewJWTAuth(t *testing.T) {
 	logger := logging.Testing()
 	auth := newJWTAuth(logger, 3, "https://issuer.example.com", "test-service", true)
-	require.NotNil(t, auth, "JWTAuth ne devrait pas être nil")
-	require.Equal(t, "https://issuer.example.com", auth.issuer, "L'issuer devrait être correctement défini")
-	require.Equal(t, "test-service", auth.service, "Le service devrait être correctement défini")
-	require.True(t, auth.checkScopes, "La vérification des scopes devrait être activée")
+	require.NotNil(t, auth, "JWTAuth should not be nil")
+	require.Equal(t, "https://issuer.example.com", auth.issuer, "The issuer should be correctly defined")
+	require.Equal(t, "test-service", auth.service, "The service should be correctly defined")
+	require.True(t, auth.checkScopes, "Scope verification should be enabled")
 }
 
 func TestJWTAuth_Authenticate_NoAuthHeader(t *testing.T) {
@@ -43,9 +43,9 @@ func TestJWTAuth_Authenticate_NoAuthHeader(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/test", nil)
 
 	authenticated, err := auth.Authenticate(w, r)
-	require.Error(t, err, "Authenticate devrait échouer sans en-tête d'autorisation")
-	require.False(t, authenticated, "L'authentification devrait échouer sans en-tête d'autorisation")
-	require.Contains(t, err.Error(), "no authorization header", "L'erreur devrait mentionner l'absence d'en-tête d'autorisation")
+	require.Error(t, err, "Authenticate should fail without authorization header")
+	require.False(t, authenticated, "Authentication should fail without authorization header")
+	require.Contains(t, err.Error(), "no authorization header", "The error should mention the missing authorization header")
 }
 
 func TestJWTAuth_Authenticate_MalformedAuthHeader(t *testing.T) {
@@ -57,14 +57,14 @@ func TestJWTAuth_Authenticate_MalformedAuthHeader(t *testing.T) {
 	r.Header.Set("authorization", "NotBearer token123")
 
 	authenticated, err := auth.Authenticate(w, r)
-	require.Error(t, err, "Authenticate devrait échouer avec un en-tête d'autorisation mal formé")
-	require.False(t, authenticated, "L'authentification devrait échouer avec un en-tête d'autorisation mal formé")
-	require.Contains(t, err.Error(), "malformed authorization header", "L'erreur devrait mentionner un en-tête d'autorisation mal formé")
+	require.Error(t, err, "Authenticate should fail with a malformed authorization header")
+	require.False(t, authenticated, "Authentication should fail with a malformed authorization header")
+	require.Contains(t, err.Error(), "malformed authorization header", "The error should mention a malformed authorization header")
 }
 
 func TestNewOtlpHttpClient(t *testing.T) {
 	client := newOtlpHttpClient(5)
-	require.NotNil(t, client, "Le client HTTP ne devrait pas être nil")
+	require.NotNil(t, client, "The HTTP client should not be nil")
 }
 
 func TestJWTAuth_Authenticate_ValidBearerPrefix(t *testing.T) {
@@ -113,9 +113,9 @@ func TestJWTAuth_GetAccessTokenVerifier(t *testing.T) {
 	}
 
 	verifier, err := auth.getAccessTokenVerifier(context.Background())
-	require.NoError(t, err, "Aucune erreur ne devrait être retournée")
-	require.NotNil(t, verifier, "Le vérificateur de token d'accès ne devrait pas être nil")
-	require.Same(t, auth.accessTokenVerifier, verifier, "Le vérificateur devrait être mis en cache")
+	require.NoError(t, err, "No error should be returned")
+	require.NotNil(t, verifier, "The access token verifier should not be nil")
+	require.Same(t, auth.accessTokenVerifier, verifier, "The verifier should be cached")
 }
 
 type mockAccessTokenVerifier struct {
