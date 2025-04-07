@@ -30,13 +30,12 @@ func TestModule(t *testing.T) {
 
 		option := Module(1024)
 		app := fxtest.New(t, option)
-		
+
 		require.NoError(t, app.Start(context.Background()), "L'application devrait démarrer sans erreur")
 		require.NotNil(t, ballast, "Le ballast devrait être alloué après le démarrage")
-		
+
 		require.NoError(t, app.Stop(context.Background()), "L'application devrait s'arrêter sans erreur")
 		require.Nil(t, ballast, "Le ballast devrait être libéré après l'arrêt")
 	})
-
 
 }

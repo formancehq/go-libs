@@ -134,12 +134,12 @@ func (m *mockAccessTokenVerifier) Claims(ctx context.Context, token string, clai
 	if m.shouldFail {
 		return fmt.Errorf("claims extraction failed")
 	}
-	
+
 	if accessTokenClaims, ok := claims.(**oidc.AccessTokenClaims); ok {
 		*accessTokenClaims = m.claims
 		return nil
 	}
-	
+
 	return fmt.Errorf("unsupported claims type")
 }
 

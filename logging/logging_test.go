@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 func TestLoggerFunctions(t *testing.T) {
 	logger := Testing()
 
