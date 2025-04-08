@@ -10,7 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/logging"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 	"github.com/xo/dburl"

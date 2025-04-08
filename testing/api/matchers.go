@@ -1,9 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 
-	"github.com/formancehq/go-libs/v2/api"
+	"github.com/formancehq/go-libs/v3/api"
 	"github.com/onsi/gomega/types"
 	"github.com/pkg/errors"
 )
@@ -15,19 +17,30 @@ type HaveErrorCodeMatcher struct {
 }
 
 func (s *HaveErrorCodeMatcher) Match(actual interface{}) (success bool, err error) {
-	err, ok := actual.(error)
-	if !ok {
-		return false, fmt.Errorf("expected input type error, was %T", actual)
-	}
 
 	errorResponse := api.ErrorResponse{}
-	if !errors.As(err, &errorResponse) {
-		return false, nil
+	switch {
+	case errors.Is(err, errorResponse):
+		if !errors.As(err, &errorResponse) {
+			return false, nil
+		}
+	default:
+		data, err := json.Marshal(actual)
+		if err != nil {
+			return false, err
+		}
+		if err = json.Unmarshal(data, &errorResponse); err != nil {
+			return false, err
+		}
+		if errorResponse.ErrorCode == "" {
+			return false, nil
+		}
 	}
+
 	s.lastSeen = errorResponse.ErrorCode
 	s.lastSeenMessage = errorResponse.ErrorMessage
 
-	return errorResponse.ErrorCode == s.expected, nil
+	return reflect.DeepEqual(errorResponse.ErrorCode, s.expected), nil
 }
 
 func (s *HaveErrorCodeMatcher) FailureMessage(actual interface{}) (message string) {

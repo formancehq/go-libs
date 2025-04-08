@@ -1,7 +1,7 @@
 package temporal
 
 import (
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/logging"
 	"go.temporal.io/sdk/log"
 )
 

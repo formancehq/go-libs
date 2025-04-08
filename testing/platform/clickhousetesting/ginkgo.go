@@ -1,14 +1,14 @@
 package clickhousetesting
 
 import (
-	. "github.com/formancehq/go-libs/v2/testing/docker/ginkgo"
-	. "github.com/formancehq/go-libs/v2/testing/utils"
+	"github.com/formancehq/go-libs/v3/testing/deferred"
+	. "github.com/formancehq/go-libs/v3/testing/docker/ginkgo"
 	. "github.com/onsi/ginkgo/v2"
 )
 
-func WithClickhouse(fn func(d *Deferred[*Server])) {
+func WithClickhouse(fn func(d *deferred.Deferred[*Server])) {
 	Context("with clickhouse", func() {
-		ret := NewDeferred[*Server]()
+		ret := deferred.New[*Server]()
 		BeforeEach(func() {
 			ret.Reset()
 			ret.SetValue(CreateServer(ActualDockerPool()))
@@ -17,9 +17,9 @@ func WithClickhouse(fn func(d *Deferred[*Server])) {
 	})
 }
 
-func WithNewDatabase(srv *Deferred[*Server], fn func(d *Deferred[*Database])) {
+func WithNewDatabase(srv *deferred.Deferred[*Server], fn func(d *deferred.Deferred[*Database])) {
 	Context("with new database", func() {
-		ret := NewDeferred[*Database]()
+		ret := deferred.New[*Database]()
 		BeforeEach(func() {
 			ret.Reset()
 			ret.SetValue(srv.GetValue().NewDatabase(GinkgoT()))

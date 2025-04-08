@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/formancehq/go-libs/v2/testing/docker"
+	"github.com/formancehq/go-libs/v3/testing/docker"
 	"github.com/olivere/elastic/v7"
 	"github.com/ory/dockertest/v3"
 	"github.com/pkg/errors"

@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/logging"
 	natsServer "github.com/nats-io/nats-server/v2/server"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"

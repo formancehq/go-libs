@@ -7,7 +7,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	wNats "github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"go.uber.org/fx"

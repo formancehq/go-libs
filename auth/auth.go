@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/formancehq/go-libs/v2/collectionutils"
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/collectionutils"
+	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/zitadel/oidc/v2/pkg/client/rp"
 	"github.com/zitadel/oidc/v2/pkg/oidc"

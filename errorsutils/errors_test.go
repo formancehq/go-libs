@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/formancehq/go-libs/v2/errorsutils"
+	"github.com/formancehq/go-libs/v3/errorsutils"
 	"github.com/stretchr/testify/require"
 )
 

@@ -1,14 +1,14 @@
 package natstesting
 
 import (
-	"github.com/formancehq/go-libs/v2/logging"
-	. "github.com/formancehq/go-libs/v2/testing/utils"
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/testing/deferred"
 	. "github.com/onsi/ginkgo/v2"
 )
 
-func WithNewNatsServer(logger logging.Logger, fn func(p *Deferred[*NatsServer])) bool {
+func WithNewNatsServer(logger logging.Logger, fn func(p *deferred.Deferred[*NatsServer])) bool {
 	return Context("With new nats server", func() {
-		ret := NewDeferred[*NatsServer]()
+		ret := deferred.New[*NatsServer]()
 		BeforeEach(func() {
 			ret.Reset()
 			ret.SetValue(CreateServer(
