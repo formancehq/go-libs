@@ -26,7 +26,7 @@ func TestCircuitBreaker(t *testing.T) {
 			store,
 			5*time.Second,
 		)
-		go cb.loop()
+		go cb.loop(logging.TestingContext())
 
 		payload, err := json.Marshal("test")
 		require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestCircuitBreaker(t *testing.T) {
 		)
 		defer publisher.Close()
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 
 		expectedP1, _ := json.Marshal(&payload{Result: 1})
 		m1 := message.NewMessage("1", expectedP1)
@@ -127,7 +127,7 @@ func TestCircuitBreaker(t *testing.T) {
 		)
 		defer publisher.Close()
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 
 		expectedP1, _ := json.Marshal(&payload{Result: 1})
 		m1 := message.NewMessage("1", expectedP1)
@@ -181,7 +181,7 @@ func TestCircuitBreaker(t *testing.T) {
 		)
 		defer publisher.Close()
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 
 		expectedP1, _ := json.Marshal(&payload{Result: 1})
 		m1 := message.NewMessage("1", expectedP1)
@@ -263,31 +263,6 @@ func TestCircuitBreaker(t *testing.T) {
 		}, 10*time.Second, 1*time.Second)
 	})
 
-	t.Run("context cancelled", func(t *testing.T) {
-		messages := make(chan *testMessages, 100)
-		defer close(messages)
-
-		publisher := newCircuitBreaker(
-			logging.Testing(),
-			newMockPublisher(messages),
-			newMockStore(),
-			5*time.Second,
-		)
-
-		// Cancel the context before starting the loop
-		publisher.cancel()
-
-		expectedP1, _ := json.Marshal(&payload{Result: 1})
-		m1 := message.NewMessage("1", expectedP1)
-		err := publisher.Publish("test", m1)
-		require.Error(t, err)
-		require.Equal(t, "circuit breaker closed", err.Error())
-
-		// Try to close an already cancelled publisher
-		err = publisher.Close()
-		require.NoError(t, err)
-	})
-
 	t.Run("otel context propagation", func(t *testing.T) {
 		messages := make(chan *testMessages, 100)
 		defer close(messages)
@@ -300,7 +275,7 @@ func TestCircuitBreaker(t *testing.T) {
 		)
 		defer publisher.Close()
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 
 		// Test with valid otel context
 		metadata := map[string]string{
@@ -332,7 +307,7 @@ func TestCircuitBreaker(t *testing.T) {
 		)
 		defer publisher.Close()
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 
 		err = publisher.Publish("test", msg)
 		require.NoError(t, err)
@@ -356,7 +331,7 @@ func TestCircuitBreaker(t *testing.T) {
 		)
 		defer publisher.Close()
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 
 		// Create multiple messages
 		msg1 := message.NewMessage("1", []byte("test1"))
@@ -395,7 +370,7 @@ func TestCircuitBreaker(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 		defer publisher.Close()
 
 		// Wait for the catchup to happen and verify the state changes
@@ -418,7 +393,7 @@ func TestCircuitBreaker(t *testing.T) {
 			1*time.Millisecond,
 		)
 
-		go publisher.loop()
+		go publisher.loop(logging.TestingContext())
 		defer publisher.Close()
 
 		// Wait for the catchup to happen and verify the state changes
@@ -438,19 +413,19 @@ func TestCircuitBreaker(t *testing.T) {
 		err := store.Insert(context.Background(), "test", []byte(`{"test":"data"}`), nil)
 		require.NoError(t, err)
 
-		publisher := newCircuitBreaker(
+		circuitBreaker := newCircuitBreaker(
 			logging.Testing(),
 			newMockPublisher(messages),
 			store,
 			1*time.Millisecond,
 		)
 
-		go publisher.loop()
-		defer publisher.Close()
+		go circuitBreaker.loop(logging.TestingContext())
+		defer circuitBreaker.Close()
 
 		// Wait for the catchup to happen and verify the state changes
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(c, StateOpen, publisher.GetState())
+			assert.Equal(c, StateOpen, circuitBreaker.GetState())
 		}, 2*time.Second, 100*time.Millisecond)
 	})
 }
