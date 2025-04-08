@@ -19,5 +19,3 @@ tests:
   @go test -race -covermode=atomic \
     -coverprofile coverage.txt \
     ./...
-  @cat coverage.txt | grep -v debug.go | grep -v "/machine/" > coverage2.txt
-  @mv coverage2.txt coverage.txt

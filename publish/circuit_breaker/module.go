@@ -24,7 +24,7 @@ func Module(schema string, openIntervalDuration time.Duration, storageLimit int,
 
 			lc.Append(fx.Hook{
 				OnStart: func(ctx context.Context) error {
-					go cb.loop()
+					go cb.loop(context.WithoutCancel(ctx))
 					return nil
 				},
 				OnStop: func(ctx context.Context) error {

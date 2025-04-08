@@ -28,9 +28,6 @@ const (
 )
 
 type CircuitBreaker struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-
 	logger logging.Logger
 
 	publisher message.Publisher
@@ -44,7 +41,9 @@ type CircuitBreaker struct {
 	openInterval      time.Duration
 	openIntervalTimer *time.Timer
 
-	sendChan chan *internalMessage
+	sendChan    chan *internalMessage
+	stopChannel chan chan struct{}
+	stopped chan struct{}
 }
 
 type internalMessage struct {
@@ -60,13 +59,12 @@ func newCircuitBreaker(
 	store storage.Store,
 	openIntervalDuration time.Duration,
 ) *CircuitBreaker {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &CircuitBreaker{
-		ctx:       ctx,
-		cancel:    cancel,
-		logger:    logger,
-		publisher: publisher,
-		store:     store,
+		stopChannel: make(chan chan struct{}),
+		stopped:     make(chan struct{}),
+		logger:      logger,
+		publisher:   publisher,
+		store:       store,
 
 		state: StateClose,
 
@@ -109,10 +107,11 @@ func (cb *CircuitBreaker) CloseState() {
 	cb.logger.Info("Circuit breaker switched to the close state")
 }
 
-func (cb *CircuitBreaker) loop() {
+func (cb *CircuitBreaker) loop(ctx context.Context) {
+	defer close(cb.stopped)
 	// Start in the half open state to fetch the messages from the database
 	cb.HalfOpenState()
-	if err := cb.catchUpDatabase(); err != nil {
+	if err := cb.catchUpDatabase(ctx); err != nil {
 		cb.OpenState()
 		// Don't switch to closed state if there was an error
 	} else {
@@ -122,7 +121,8 @@ func (cb *CircuitBreaker) loop() {
 
 	for {
 		select {
-		case <-cb.ctx.Done():
+		case ch := <-cb.stopChannel:
+			close(ch)
 			// context cancelled
 			return
 
@@ -131,7 +131,7 @@ func (cb *CircuitBreaker) loop() {
 
 			cb.HalfOpenState()
 
-			if err := cb.catchUpDatabase(); err != nil {
+			if err := cb.catchUpDatabase(ctx); err != nil {
 				cb.OpenState()
 				continue
 			}
@@ -157,11 +157,12 @@ func (cb *CircuitBreaker) loop() {
 
 					cb.logger.Info("Failed to publish the message, switching to the open state")
 					// write the message in the database
-					err = cb.store.Insert(cb.ctx, msg.topic, msg.msg.Payload, msg.msg.Metadata)
+					err = cb.store.Insert(ctx, msg.topic, msg.msg.Payload, msg.msg.Metadata)
 					if err != nil {
 						select {
 						case msg.errChan <- err:
-						case <-cb.ctx.Done():
+						case ch := <-cb.stopChannel:
+							close(ch)
 							return
 						}
 						continue
@@ -171,11 +172,12 @@ func (cb *CircuitBreaker) loop() {
 				// We are in the open state, write the message in the database
 				cb.logger.Info("Circuit breaker is in the open state, writing the message in the database")
 
-				err := cb.store.Insert(cb.ctx, msg.topic, msg.msg.Payload, msg.msg.Metadata)
+				err := cb.store.Insert(ctx, msg.topic, msg.msg.Payload, msg.msg.Metadata)
 				if err != nil {
 					select {
 					case msg.errChan <- err:
-					case <-cb.ctx.Done():
+					case ch := <-cb.stopChannel:
+						close(ch)
 						return
 					}
 					continue
@@ -184,17 +186,18 @@ func (cb *CircuitBreaker) loop() {
 
 			select {
 			case msg.errChan <- nil:
-			case <-cb.ctx.Done():
+			case ch := <-cb.stopChannel:
+				close(ch)
 				return
 			}
 		}
 	}
 }
 
-func (cb *CircuitBreaker) catchUpDatabase() error {
+func (cb *CircuitBreaker) catchUpDatabase(ctx context.Context) error {
 	for {
 		// fetch the oldest messages from the database
-		messages, err := cb.store.List(cb.ctx)
+		messages, err := cb.store.List(ctx)
 		if err != nil {
 			// error fetching messages, let's switch back to the open state
 			return err
@@ -210,7 +213,7 @@ func (cb *CircuitBreaker) catchUpDatabase() error {
 			// We need to publish the messages one by one in order to know
 			// which one failed.
 
-			message, err := newMessage(cb.ctx, msg.Data, msg.Metadata)
+			message, err := newMessage(ctx, msg.Data, msg.Metadata)
 			if err != nil {
 				publishError = err
 				break
@@ -225,7 +228,7 @@ func (cb *CircuitBreaker) catchUpDatabase() error {
 			messagesToDelete = append(messagesToDelete, msg.ID)
 		}
 
-		err = cb.store.Delete(cb.ctx, messagesToDelete)
+		err = cb.store.Delete(ctx, messagesToDelete)
 		if err != nil {
 			// error deleting messages, let's switch back to the open state
 			return err
@@ -250,7 +253,7 @@ func (cb *CircuitBreaker) Publish(topic string, messages ...*message.Message) er
 
 		select {
 		case cb.sendChan <- internalMessage:
-		case <-cb.ctx.Done():
+		case <-cb.stopped:
 			return errors.New("circuit breaker closed")
 		}
 
@@ -259,7 +262,7 @@ func (cb *CircuitBreaker) Publish(topic string, messages ...*message.Message) er
 			if err != nil {
 				return err
 			}
-		case <-cb.ctx.Done():
+		case <-cb.stopped:
 			return errors.New("circuit breaker closed")
 		}
 	}
@@ -268,7 +271,9 @@ func (cb *CircuitBreaker) Publish(topic string, messages ...*message.Message) er
 }
 
 func (cb *CircuitBreaker) Close() error {
-	cb.cancel()
+	ch := make(chan struct{})
+	cb.stopChannel <- ch
+	<-ch
 
 	return cb.publisher.Close()
 }
