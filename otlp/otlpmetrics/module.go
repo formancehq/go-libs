@@ -9,13 +9,14 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/formancehq/go-libs/v3/otlp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/fx"
 )
 
@@ -56,7 +57,20 @@ func ProvideRuntimeMetricsOption(v any, annotations ...fx.Annotation) fx.Option 
 }
 
 func MetricsModule(cfg ModuleConfig) fx.Option {
+	if cfg.Exporter == "" && !cfg.KeepInMemory {
+		return fx.Provide(fx.Annotate(noop.NewMeterProvider, fx.As(new(sdkmetric.MeterProvider))))
+	}
+
 	options := make([]fx.Option, 0)
+	if cfg.KeepInMemory {
+		options = append(options,
+			fx.Provide(NewInMemoryExporterDecorator),
+			fx.Decorate(func(exporter *InMemoryExporter) sdkmetric.Exporter {
+				return exporter
+			}),
+		)
+	}
+
 	options = append(options,
 		fx.Supply(cfg),
 		fx.Provide(func(mp *sdkmetric.MeterProvider) metric.MeterProvider { return mp }),
@@ -153,15 +167,6 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 		}
 	default:
 		options = append(options, fx.Provide(fx.Annotate(NewNoOpExporter, fx.As(new(sdkmetric.Exporter)))))
-	}
-
-	if cfg.KeepInMemory {
-		options = append(options,
-			fx.Provide(NewInMemoryExporterDecorator),
-			fx.Decorate(func(exporter *InMemoryExporter) sdkmetric.Exporter {
-				return exporter
-			}),
-		)
 	}
 
 	return fx.Options(options...)
