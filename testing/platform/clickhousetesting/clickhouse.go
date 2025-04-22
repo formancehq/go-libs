@@ -64,11 +64,17 @@ func (s *Server) NewDatabase(t TestingT) *Database {
 	}
 }
 
-func CreateServer(pool *docker.Pool) *Server {
+func CreateServer(pool *docker.Pool, opts ...ServerOption) *Server {
+
+	serverOptions := ServerOptions{}
+	for _, opt := range append(defaultOptions, opts...) {
+		opt(&serverOptions)
+	}
+
 	resource := pool.Run(docker.Configuration{
 		RunOptions: &dockertest.RunOptions{
 			Repository: "clickhouse/clickhouse-server",
-			Tag:        "25.2-alpine",
+			Tag:        serverOptions.Version,
 			Env:        []string{"CLICKHOUSE_PASSWORD=password"},
 		},
 		CheckFn: func(ctx context.Context, resource *dockertest.Resource) error {
@@ -102,4 +108,20 @@ type Database struct {
 
 func (d *Database) ConnString() string {
 	return d.url
+}
+
+type ServerOptions struct {
+	Version string
+}
+
+type ServerOption func(options *ServerOptions)
+
+func WithVersion(version string) ServerOption {
+	return func(options *ServerOptions) {
+		options.Version = version
+	}
+}
+
+var defaultOptions = []ServerOption{
+	WithVersion("25.2-alpine"),
 }
