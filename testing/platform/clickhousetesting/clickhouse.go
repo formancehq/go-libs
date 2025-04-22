@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/ClickHouse/ch-go/proto"
 	"github.com/google/uuid"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -54,8 +56,24 @@ func (s *Server) NewDatabase(t TestingT) *Database {
 
 	if os.Getenv("NO_CLEANUP") != "true" {
 		t.Cleanup(func() {
-			err = db.Exec(context.Background(), fmt.Sprintf(`DROP DATABASE "%s"`, databaseName))
-			require.NoError(t, err)
+			const maxTry = 10
+			nbTry := 0
+		l:
+			for {
+				err = db.Exec(context.Background(), fmt.Sprintf(`DROP DATABASE "%s"`, databaseName))
+				if exception, ok := err.(*clickhouse.Exception); nbTry < maxTry && ok {
+					// Due to async operation, the driver can respond with a database not empty error while we are not writing
+					// So retry a few times before leverage an error
+					if exception.Code == int32(proto.ErrDatabaseNotEmpty) {
+						<-time.After(100 * time.Millisecond)
+						nbTry++
+						continue l
+					}
+				}
+				require.NoError(t, err)
+				break
+			}
+
 		})
 	}
 

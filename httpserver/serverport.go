@@ -2,85 +2,33 @@ package httpserver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/formancehq/go-libs/v3/serverport"
 
 	"github.com/formancehq/go-libs/v3/logging"
 
 	"go.uber.org/fx"
 )
 
-type serverInfo struct {
-	started chan struct{}
-	address string
-}
-
-type serverInfoContextKey string
-
-var serverInfoKey serverInfoContextKey = "_serverInfo"
-
-func GetActualServerInfo(ctx context.Context) *serverInfo {
-	siAsAny := ctx.Value(serverInfoKey)
-	if siAsAny == nil {
-		return nil
-	}
-	return siAsAny.(*serverInfo)
-}
-
 func ContextWithServerInfo(ctx context.Context) context.Context {
-	return context.WithValue(ctx, serverInfoKey, &serverInfo{
-		started: make(chan struct{}),
-	})
+	return serverport.ContextWithServerInfo(ctx, serverPortDiscr)
 }
 
-func Started(ctx context.Context) chan struct{} {
-	si := GetActualServerInfo(ctx)
-	if si == nil {
-		return nil
-	}
-	return si.started
-}
-
-func Address(ctx context.Context) string {
-	si := GetActualServerInfo(ctx)
-	if si == nil {
-		return ""
-	}
-	return si.address
-}
+const serverPortDiscr = "http"
 
 func URL(ctx context.Context) string {
-	return fmt.Sprintf("http://%s", Address(ctx))
+	return fmt.Sprintf("http://%s", serverport.Address(ctx, serverPortDiscr))
 }
 
-func StartedServer(ctx context.Context, listener net.Listener) {
-	si := GetActualServerInfo(ctx)
-	if si == nil {
-		return
+func startServer(ctx context.Context, s *serverport.Server, handler http.Handler, options ...func(server *http.Server)) (func(ctx context.Context) error, error) {
+
+	if err := s.Listen(ctx); err != nil {
+		return nil, err
 	}
-
-	si.address = listener.Addr().String()
-
-	close(si.started)
-}
-
-func (s *server) StartServer(ctx context.Context, handler http.Handler, options ...func(server *http.Server)) (func(ctx context.Context) error, error) {
-
-	if s.listener == nil {
-		if s.address == "" {
-			return nil, errors.New("either address or listener must be provided")
-		}
-		listener, err := net.Listen("tcp", s.address)
-		if err != nil {
-			return nil, err
-		}
-		s.listener = listener
-	}
-
-	StartedServer(ctx, s.listener)
 
 	srv := &http.Server{
 		Handler:           handler,
@@ -91,7 +39,7 @@ func (s *server) StartServer(ctx context.Context, handler http.Handler, options 
 	}
 
 	go func() {
-		err := srv.Serve(s.listener)
+		err := srv.Serve(s.Listener)
 		if err != nil && err != http.ErrServerClosed {
 			panic(err)
 		}
@@ -102,41 +50,47 @@ func (s *server) StartServer(ctx context.Context, handler http.Handler, options 
 	}, nil
 }
 
-type server struct {
-	listener       net.Listener
-	address        string
+type ServerOptions struct {
+	serverOptions  []serverport.ServerOpts
 	httpServerOpts []func(server *http.Server)
 }
 
-type serverOpts func(server *server)
+type ServerOptionModifier func(server *ServerOptions)
 
-func WithListener(listener net.Listener) serverOpts {
-	return func(server *server) {
-		server.listener = listener
+func WithServerPortOptions(opts ...serverport.ServerOpts) ServerOptionModifier {
+	return func(serverOptions *ServerOptions) {
+		serverOptions.serverOptions = append(serverOptions.serverOptions, opts...)
 	}
 }
 
-func WithAddress(addr string) serverOpts {
-	return func(server *server) {
-		server.address = addr
-	}
+func WithListener(listener net.Listener) ServerOptionModifier {
+	return WithServerPortOptions(serverport.WithListener(listener))
 }
 
-func WithHttpServerOpts(opts ...func(server *http.Server)) serverOpts {
-	return func(server *server) {
+func WithAddress(addr string) ServerOptionModifier {
+	return WithServerPortOptions(serverport.WithAddress(addr))
+}
+
+func WithHttpServerOpts(opts ...func(server *http.Server)) ServerOptionModifier {
+	return func(server *ServerOptions) {
 		server.httpServerOpts = opts
 	}
 }
 
-func NewHook(handler http.Handler, options ...serverOpts) fx.Hook {
+func NewHook(handler http.Handler, serverOptionModifiers ...ServerOptionModifier) fx.Hook {
 	var (
 		close func(ctx context.Context) error
 		err   error
 	)
 
-	s := &server{}
-	for _, option := range options {
-		option(s)
+	serverOptions := &ServerOptions{}
+	for _, serverOptionModifier := range serverOptionModifiers {
+		serverOptionModifier(serverOptions)
+	}
+
+	server := serverport.NewServer(serverPortDiscr)
+	for _, option := range serverOptions.serverOptions {
+		option(server)
 	}
 
 	return fx.Hook{
@@ -145,7 +99,7 @@ func NewHook(handler http.Handler, options ...serverOpts) fx.Hook {
 			defer func() {
 				logging.FromContext(ctx).Infof("HTTP server started")
 			}()
-			close, err = s.StartServer(ctx, handler, s.httpServerOpts...)
+			close, err = startServer(ctx, server, handler, serverOptions.httpServerOpts...)
 			return err
 		},
 		OnStop: func(ctx context.Context) error {
