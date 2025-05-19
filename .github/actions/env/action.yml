@@ -7,14 +7,22 @@ runs:
       uses: docker/setup-qemu-action@v3
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    - name: "Put back the git branch into git (Earthly uses it for tagging)"
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+    - name: Cache dependencies
+      uses: nix-community/cache-nix-action@v6
+      with:
+        primary-key: nix-${{ runner.os }}-${{ hashFiles('**/flake.nix', '**/flake.lock') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-
+    - name: Load dependencies
       shell: bash
-      run: |
-        branch=""
-        if [ -n "$GITHUB_HEAD_REF" ]; then
-          branch="$GITHUB_HEAD_REF"
-        else
-          branch="${GITHUB_REF##*/}"
-        fi
-        git checkout -b "$branch" || true
+      run: nix develop --install
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          /tmp/go/pkg/mod/
+        key: ${{ runner.os }}-${{ github.job }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ github.job }}-go-
 
