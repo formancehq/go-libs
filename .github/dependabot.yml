@@ -8,8 +8,6 @@ updates:
     labels: [ "dependencies" ]
     # Groups are updated together in one pull request
     groups:
-      golang:
-        applies-to: security-updates
       otel:
         patterns:
           - "go.opentelemetry.io/otel*"
