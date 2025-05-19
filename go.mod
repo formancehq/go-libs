@@ -46,7 +46,7 @@ require (
 	github.com/uptrace/bun/extra/bunotel v1.2.9
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2
 	github.com/xdg-go/scram v1.1.2
-	github.com/xo/dburl v0.23.3
+	github.com/xo/dburl v0.23.7
 	github.com/zitadel/oidc/v2 v2.12.2
 	go.opentelemetry.io/contrib/instrumentation/host v0.59.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.59.0
