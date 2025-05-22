@@ -439,8 +439,8 @@ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 h1:sbiXRND
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0/go.mod h1:69uWxva0WgAA/4bu2Yy70SLDBwZXuQ6PbBpbsa5iZrQ=
 go.opentelemetry.io/contrib/instrumentation/runtime v0.60.0 h1:0NgN/3SYkqYJ9NBlDfl/2lzVlwos/YQLvi8sUrzJRBE=
 go.opentelemetry.io/contrib/instrumentation/runtime v0.60.0/go.mod h1:oxpUfhTkhgQaYIjtBt3T3w135dLoxq//qo3WPlPIKkE=
-go.opentelemetry.io/contrib/propagators/b3 v1.34.0 h1:9pQdCEvV/6RWQmag94D6rhU+A4rzUhYBEJ8bpscx5p8=
-go.opentelemetry.io/contrib/propagators/b3 v1.34.0/go.mod h1:FwM71WS8i1/mAK4n48t0KU6qUS/OZRBgDrHZv3RlJ+w=
+go.opentelemetry.io/contrib/propagators/b3 v1.36.0 h1:xrAb/G80z/l5JL6XlmUMSD1i6W8vXkWrLfmkD3w/zZo=
+go.opentelemetry.io/contrib/propagators/b3 v1.36.0/go.mod h1:UREJtqioFu5awNaCR8aEx7MfJROFlAWb6lPaJFbHaG0=
 go.opentelemetry.io/otel v1.36.0 h1:UumtzIklRBY6cI/lllNZlALOF5nNIzJVb16APdvgTXg=
 go.opentelemetry.io/otel v1.36.0/go.mod h1:/TcFMXYjyRNh8khOAO9ybYkqaDBb/70aVwkNML4pP8E=
 go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.36.0 h1:zwdo1gS2eH26Rg+CoqVQpEK1h8gvt5qyU5Kk5Bixvow=
