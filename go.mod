@@ -41,7 +41,7 @@ require (
 	github.com/uptrace/bun v1.2.12
 	github.com/uptrace/bun/dialect/pgdialect v1.2.12
 	github.com/uptrace/bun/extra/bundebug v1.2.9
-	github.com/uptrace/bun/extra/bunotel v1.2.9
+	github.com/uptrace/bun/extra/bunotel v1.2.12
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2
 	github.com/xdg-go/scram v1.1.2
 	github.com/xo/dburl v0.23.8
@@ -111,7 +111,7 @@ require (
 	github.com/go-chi/render v1.0.3 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
