@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.4
 	github.com/aws/aws-sdk-go-v2 v1.36.5
 	github.com/aws/aws-sdk-go-v2/config v1.29.16
-	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.5.12
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.5.13
 	github.com/formancehq/go-libs v1.7.2
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/chi/v5 v5.2.1
