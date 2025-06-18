@@ -2,18 +2,14 @@ package publish
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
-	transport "github.com/aws/smithy-go/endpoints"
 	"github.com/spf13/pflag"
 
 	"github.com/IBM/sarama"
-	"github.com/ThreeDotsLabs/watermill-aws/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/formancehq/go-libs/v3/aws/iam"
 	circuitbreaker "github.com/formancehq/go-libs/v3/publish/circuit_breaker"
@@ -244,26 +240,9 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 				credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
 			))
 		}
-		cfg, err := config.LoadDefaultConfig(cmd.Context(), loadOptions...)
-		if err != nil {
-			panic(fmt.Sprintf("unable load aws config %v", err))
-		}
-
-		sqsOpts := []func(*sqsservice.Options){}
-		if sqsEndpointOverride != "" {
-			sqsUrl, err := url.Parse(sqsEndpointOverride)
-			if err != nil {
-				panic(fmt.Sprintf("unable to parse sqs url %q", sqsEndpointOverride))
-			}
-			sqsOpts = append(sqsOpts, sqsservice.WithEndpointResolverV2(sqs.OverrideEndpointResolver{
-				Endpoint: transport.Endpoint{
-					URI: *sqsUrl,
-				},
-			}))
-		}
 
 		options = append(options,
-			sqsModule(cmd, cfg, sqsOpts),
+			sqsModule(cmd, sqsEndpointOverride, loadOptions),
 		)
 	case kafkaEnabled:
 		brokers, _ := cmd.Flags().GetStringSlice(PublisherKafkaBrokerFlag)
