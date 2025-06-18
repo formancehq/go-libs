@@ -2,12 +2,17 @@ package publish
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
+	transport "github.com/aws/smithy-go/endpoints"
 	"github.com/spf13/pflag"
 
 	"github.com/IBM/sarama"
+	"github.com/ThreeDotsLabs/watermill-aws/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/formancehq/go-libs/v3/aws/iam"
 	circuitbreaker "github.com/formancehq/go-libs/v3/publish/circuit_breaker"
@@ -47,6 +52,9 @@ const (
 	PublisherNatsMaxReconnectFlag  = "publisher-nats-max-reconnect"
 	PublisherNatsReconnectWaitFlag = "publisher-nats-reconnect-wait"
 	PublisherNatsAutoProvisionFlag = "publisher-nats-auto-provision"
+	// SQS Listener configuration
+	SubscriberSqsEnabledFlag          = "subscriber-sqs-enabled"
+	SubscriberSqsEndpointOverrideFlag = "subscriber-sqs-endpoint-override"
 )
 
 type ConfigDefault struct {
@@ -77,6 +85,9 @@ type ConfigDefault struct {
 	PublisherNatsMaxReconnect  int
 	PublisherNatsReconnectWait time.Duration
 	PublisherNatsAutoProvision bool
+	// SQS configuration
+	SubscriberSqsEnabled          bool
+	SubscriberSqsEndpointOverride string
 }
 
 var (
@@ -103,6 +114,7 @@ var (
 		PublisherNatsMaxReconnect:                   -1, // We want to reconnect forever
 		PublisherNatsReconnectWait:                  2 * time.Second,
 		PublisherNatsAutoProvision:                  true,
+		SubscriberSqsEnabled:                        false,
 	}
 )
 
@@ -136,6 +148,10 @@ func AddFlags(serviceName string, flags *pflag.FlagSet, options ...func(*ConfigD
 
 	// NATS
 	InitNatsCLIFlags(flags, serviceName, options...)
+
+	// SQS
+	flags.Bool(SubscriberSqsEnabledFlag, values.SubscriberSqsEnabled, "Subscribe to events on SQS")
+	flags.String(SubscriberSqsEndpointOverrideFlag, values.SubscriberSqsEndpointOverride, "Connect to SQS using a custom endpoint (eg. localstack)")
 }
 
 // Used by membership
@@ -195,6 +211,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 	httpEnabled, _ := cmd.Flags().GetBool(PublisherHttpEnabledFlag)
 	natsEnabled, _ := cmd.Flags().GetBool(PublisherNatsEnabledFlag)
 	kafkaEnabled, _ := cmd.Flags().GetBool(PublisherKafkaEnabledFlag)
+	sqsEnabled, _ := cmd.Flags().GetBool(SubscriberSqsEnabledFlag)
 
 	switch {
 	case httpEnabled:
@@ -213,6 +230,33 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 			nats.MaxReconnects(maxReconnect),
 			nats.ReconnectWait(maxReconnectWait),
 		))
+	case sqsEnabled:
+		region, _ := cmd.Flags().GetString(iam.AWSRegionFlag)
+		sqsEndpointOverride, _ := cmd.Flags().GetString(SubscriberSqsEndpointOverrideFlag)
+
+		cfg, err := config.LoadDefaultConfig(cmd.Context(),
+			config.WithRegion(region),
+		)
+		if err != nil {
+			panic(fmt.Sprintf("unable load aws config %v", err))
+		}
+
+		sqsOpts := []func(*sqsservice.Options){}
+		if sqsEndpointOverride != "" {
+			sqsUrl, err := url.Parse(sqsEndpointOverride)
+			if err != nil {
+				panic(fmt.Sprintf("unable to parse sqs url %q", sqsEndpointOverride))
+			}
+			sqsOpts = append(sqsOpts, sqsservice.WithEndpointResolverV2(sqs.OverrideEndpointResolver{
+				Endpoint: transport.Endpoint{
+					URI: *sqsUrl,
+				},
+			}))
+		}
+
+		options = append(options,
+			sqsModule(cfg, sqsOpts),
+		)
 	case kafkaEnabled:
 		brokers, _ := cmd.Flags().GetStringSlice(PublisherKafkaBrokerFlag)
 
