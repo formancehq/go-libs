@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
 	transport "github.com/aws/smithy-go/endpoints"
 	"github.com/spf13/pflag"
@@ -234,9 +235,16 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 		region, _ := cmd.Flags().GetString(iam.AWSRegionFlag)
 		sqsEndpointOverride, _ := cmd.Flags().GetString(SubscriberSqsEndpointOverrideFlag)
 
-		cfg, err := config.LoadDefaultConfig(cmd.Context(),
+		loadOptions := []func(*config.LoadOptions) error{
 			config.WithRegion(region),
-		)
+		}
+		if sqsEndpointOverride != "" {
+			// if we are overriding the endpoint assume we are in a dev context
+			loadOptions = append(loadOptions, config.WithCredentialsProvider(
+				credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
+			))
+		}
+		cfg, err := config.LoadDefaultConfig(cmd.Context(), loadOptions...)
 		if err != nil {
 			panic(fmt.Sprintf("unable load aws config %v", err))
 		}
