@@ -8,21 +8,23 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/formancehq/go-libs/v3/service"
+	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 )
 
-func NewSqsSubscriber(logger watermill.LoggerAdapter, config aws.Config, optFns []func(*sqsservice.Options)) (*sqs.Subscriber, error) {
+func NewSqsSubscriber(cmd *cobra.Command, logger watermill.LoggerAdapter, config aws.Config, optFns []func(*sqsservice.Options)) (*sqs.Subscriber, error) {
 	return sqs.NewSubscriber(sqs.SubscriberConfig{
-		DoNotCreateQueueIfNotExists: true,
+		DoNotCreateQueueIfNotExists: !service.IsDebug(cmd),
 		AWSConfig:                   config,
 		OptFns:                      optFns,
 	}, logger)
 }
 
-func sqsModule(config aws.Config, optFns []func(*sqsservice.Options)) fx.Option {
+func sqsModule(cmd *cobra.Command, config aws.Config, optFns []func(*sqsservice.Options)) fx.Option {
 	return fx.Options(
 		fx.Provide(func(lc fx.Lifecycle, logger watermill.LoggerAdapter) (*sqs.Subscriber, error) {
-			ret, err := NewSqsSubscriber(logger, config, optFns)
+			ret, err := NewSqsSubscriber(cmd, logger, config, optFns)
 			if err != nil {
 				return nil, err
 			}

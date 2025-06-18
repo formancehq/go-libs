@@ -263,7 +263,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 		}
 
 		options = append(options,
-			sqsModule(cfg, sqsOpts),
+			sqsModule(cmd, cfg, sqsOpts),
 		)
 	case kafkaEnabled:
 		brokers, _ := cmd.Flags().GetStringSlice(PublisherKafkaBrokerFlag)
