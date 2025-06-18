@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/spf13/pflag"
 
 	"github.com/IBM/sarama"
@@ -228,21 +226,11 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 			nats.ReconnectWait(maxReconnectWait),
 		))
 	case sqsEnabled:
-		region, _ := cmd.Flags().GetString(iam.AWSRegionFlag)
 		sqsEndpointOverride, _ := cmd.Flags().GetString(SubscriberSqsEndpointOverrideFlag)
 
-		loadOptions := []func(*config.LoadOptions) error{
-			config.WithRegion(region),
-		}
-		if sqsEndpointOverride != "" {
-			// if we are overriding the endpoint assume we are in a dev context
-			loadOptions = append(loadOptions, config.WithCredentialsProvider(
-				credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
-			))
-		}
-
 		options = append(options,
-			sqsModule(cmd, sqsEndpointOverride, loadOptions),
+			fx.Supply(iam.LoadOptionFromCommand(cmd)),
+			sqsModule(cmd, sqsEndpointOverride),
 		)
 	case kafkaEnabled:
 		brokers, _ := cmd.Flags().GetStringSlice(PublisherKafkaBrokerFlag)

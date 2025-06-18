@@ -10,6 +10,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
 	transport "github.com/aws/smithy-go/endpoints"
 	"github.com/formancehq/go-libs/v3/service"
@@ -25,13 +26,23 @@ func NewSqsSubscriber(cmd *cobra.Command, logger watermill.LoggerAdapter, config
 	}, logger)
 }
 
-func sqsModule(cmd *cobra.Command, sqsEndpointOverride string, loadOptions []func(*config.LoadOptions) error) fx.Option {
+func sqsModule(cmd *cobra.Command, sqsEndpointOverride string) fx.Option {
 	return fx.Options(
+		fx.Provide(func(optFn func(*config.LoadOptions) error) []func(*config.LoadOptions) error {
+			loadOptions := []func(*config.LoadOptions) error{optFn}
+			if sqsEndpointOverride != "" {
+				// if we are overriding the endpoint assume we are in a dev context
+				loadOptions = append(loadOptions, config.WithCredentialsProvider(
+					credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
+				))
+			}
+			return loadOptions
+		}),
 		fx.Provide(
-			fx.Annotate(func() (aws.Config, error) {
-				cfg, err := config.LoadDefaultConfig(cmd.Context(), loadOptions...)
+			fx.Annotate(func(loadOpts []func(*config.LoadOptions) error) (aws.Config, error) {
+				cfg, err := config.LoadDefaultConfig(cmd.Context(), loadOpts...)
 				if err != nil {
-					return cfg, fmt.Errorf("unable load aws config %w", err)
+					return cfg, fmt.Errorf("unable to load aws config %w", err)
 				}
 				return cfg, nil
 			}, fx.ResultTags(`name:"publish-subscriber-sqs-cfg"`, ``)),
