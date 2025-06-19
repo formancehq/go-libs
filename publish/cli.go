@@ -47,6 +47,9 @@ const (
 	PublisherNatsMaxReconnectFlag  = "publisher-nats-max-reconnect"
 	PublisherNatsReconnectWaitFlag = "publisher-nats-reconnect-wait"
 	PublisherNatsAutoProvisionFlag = "publisher-nats-auto-provision"
+	// SQS Listener configuration
+	SubscriberSqsEnabledFlag          = "subscriber-sqs-enabled"
+	SubscriberSqsEndpointOverrideFlag = "subscriber-sqs-endpoint-override"
 )
 
 type ConfigDefault struct {
@@ -77,6 +80,9 @@ type ConfigDefault struct {
 	PublisherNatsMaxReconnect  int
 	PublisherNatsReconnectWait time.Duration
 	PublisherNatsAutoProvision bool
+	// SQS configuration
+	SubscriberSqsEnabled          bool
+	SubscriberSqsEndpointOverride string
 }
 
 var (
@@ -103,6 +109,7 @@ var (
 		PublisherNatsMaxReconnect:                   -1, // We want to reconnect forever
 		PublisherNatsReconnectWait:                  2 * time.Second,
 		PublisherNatsAutoProvision:                  true,
+		SubscriberSqsEnabled:                        false,
 	}
 )
 
@@ -136,6 +143,10 @@ func AddFlags(serviceName string, flags *pflag.FlagSet, options ...func(*ConfigD
 
 	// NATS
 	InitNatsCLIFlags(flags, serviceName, options...)
+
+	// SQS
+	flags.Bool(SubscriberSqsEnabledFlag, values.SubscriberSqsEnabled, "Subscribe to events on SQS")
+	flags.String(SubscriberSqsEndpointOverrideFlag, values.SubscriberSqsEndpointOverride, "Connect to SQS using a custom endpoint (eg. localstack)")
 }
 
 // Used by membership
@@ -195,6 +206,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 	httpEnabled, _ := cmd.Flags().GetBool(PublisherHttpEnabledFlag)
 	natsEnabled, _ := cmd.Flags().GetBool(PublisherNatsEnabledFlag)
 	kafkaEnabled, _ := cmd.Flags().GetBool(PublisherKafkaEnabledFlag)
+	sqsEnabled, _ := cmd.Flags().GetBool(SubscriberSqsEnabledFlag)
 
 	switch {
 	case httpEnabled:
@@ -213,6 +225,13 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 			nats.MaxReconnects(maxReconnect),
 			nats.ReconnectWait(maxReconnectWait),
 		))
+	case sqsEnabled:
+		sqsEndpointOverride, _ := cmd.Flags().GetString(SubscriberSqsEndpointOverrideFlag)
+
+		options = append(options,
+			fx.Supply(iam.LoadOptionFromCommand(cmd)),
+			sqsModule(cmd, sqsEndpointOverride),
+		)
 	case kafkaEnabled:
 		brokers, _ := cmd.Flags().GetStringSlice(PublisherKafkaBrokerFlag)
 
