@@ -28,16 +28,18 @@ func NewSqsSubscriber(cmd *cobra.Command, logger watermill.LoggerAdapter, config
 
 func sqsModule(cmd *cobra.Command, sqsEndpointOverride string) fx.Option {
 	return fx.Options(
-		fx.Provide(func(optFn func(*config.LoadOptions) error) []func(*config.LoadOptions) error {
-			loadOptions := []func(*config.LoadOptions) error{optFn}
-			if sqsEndpointOverride != "" {
-				// if we are overriding the endpoint assume we are in a dev context
-				loadOptions = append(loadOptions, config.WithCredentialsProvider(
-					credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
-				))
-			}
-			return loadOptions
-		}),
+		fx.Provide(
+			fx.Annotate(func(optFn func(*config.LoadOptions) error) []func(*config.LoadOptions) error {
+				loadOptions := []func(*config.LoadOptions) error{optFn}
+				if sqsEndpointOverride != "" {
+					// if we are overriding the endpoint assume we are in a dev context
+					loadOptions = append(loadOptions, config.WithCredentialsProvider(
+						credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
+					))
+				}
+				return loadOptions
+			}, fx.ParamTags(`name:"publish-sqs-enabled"`), fx.ResultTags(`name:"publish-subscriber-sqs-load-opts"`)),
+		),
 		fx.Provide(
 			fx.Annotate(func(loadOpts []func(*config.LoadOptions) error) (aws.Config, error) {
 				cfg, err := config.LoadDefaultConfig(cmd.Context(), loadOpts...)
@@ -45,7 +47,7 @@ func sqsModule(cmd *cobra.Command, sqsEndpointOverride string) fx.Option {
 					return cfg, fmt.Errorf("unable to load aws config %w", err)
 				}
 				return cfg, nil
-			}, fx.ResultTags(`name:"publish-subscriber-sqs-cfg"`, ``)),
+			}, fx.ParamTags(`name:"publish-subscriber-sqs-load-opts"`), fx.ResultTags(`name:"publish-subscriber-sqs-cfg"`, ``)),
 		),
 		fx.Provide(
 			fx.Annotate(func() ([]func(*sqsservice.Options), error) {

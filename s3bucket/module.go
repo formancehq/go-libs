@@ -24,7 +24,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 	endpointOverride, _ := cmd.Flags().GetString(S3BucketEndpointOverrideFlag)
 	if awsEnabled {
 		options = append(options,
-			fx.Supply(iam.LoadOptionFromCommand(cmd)),
+			fx.Supply(fx.Annotate(iam.LoadOptionFromCommand(cmd), fx.ResultTags(`name:"s3-bucket-aws-enabled"`))),
 			awsModule(cmd, endpointOverride),
 		)
 	}
