@@ -229,7 +229,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 		sqsEndpointOverride, _ := cmd.Flags().GetString(SubscriberSqsEndpointOverrideFlag)
 
 		options = append(options,
-			fx.Supply(iam.LoadOptionFromCommand(cmd)),
+			fx.Supply(fx.Annotate(iam.LoadOptionFromCommand(cmd), fx.ResultTags(`name:"publish-sqs-enabled"`))),
 			sqsModule(cmd, sqsEndpointOverride),
 		)
 	case kafkaEnabled:
