@@ -50,6 +50,7 @@ func (d *Deferred[V]) Reset() {
 		}
 	}
 	d.done = make(chan struct{})
+	d.err = nil
 	d.value = nil
 }
 
@@ -65,9 +66,13 @@ func (d *Deferred[V]) Wait(ctx context.Context) (V, error) {
 	select {
 	case <-d.done:
 		var zero V
+		if d.err != nil {
+			return zero, d.err
+		}
 		if d.value == nil {
 			return zero, errors.New("closed with no value")
 		}
+
 		return *d.value, nil
 	case <-ctx.Done():
 		var zero V
