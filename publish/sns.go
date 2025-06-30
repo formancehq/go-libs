@@ -23,8 +23,12 @@ func NewSnsPublisher(cmd *cobra.Command, logger watermill.LoggerAdapter, config 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch credentials: %w", err)
 	}
+	accountID := "000000000000" // if we are using a static credentials provider in a dev env, it may be empty
+	if credentials.AccountID != "" {
+		accountID = credentials.AccountID
+	}
 
-	topicResolver, err := sns.NewGenerateArnTopicResolver(credentials.AccountID, config.Region)
+	topicResolver, err := sns.NewGenerateArnTopicResolver(accountID, config.Region)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create topic resolver for sns: %w", err)
 	}
