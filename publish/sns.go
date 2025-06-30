@@ -19,8 +19,19 @@ import (
 )
 
 func NewSnsPublisher(cmd *cobra.Command, logger watermill.LoggerAdapter, config aws.Config, optFns []func(*snsservice.Options)) (*sns.Publisher, error) {
+	credentials, err := config.Credentials.Retrieve(cmd.Context())
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch credentials: %w", err)
+	}
+
+	topicResolver, err := sns.NewGenerateArnTopicResolver(credentials.AccountID, config.Region)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create topic resolver for sns: %w", err)
+	}
+
 	return sns.NewPublisher(sns.PublisherConfig{
 		DoNotCreateTopicIfNotExists: !service.IsDebug(cmd),
+		TopicResolver:               topicResolver,
 		AWSConfig:                   config,
 		OptFns:                      optFns,
 	}, logger)
