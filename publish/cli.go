@@ -50,6 +50,9 @@ const (
 	// SQS Listener configuration
 	SubscriberSqsEnabledFlag          = "subscriber-sqs-enabled"
 	SubscriberSqsEndpointOverrideFlag = "subscriber-sqs-endpoint-override"
+	// SNS configuration
+	PublisherSnsEnabledFlag          = "publisher-sns-enabled"
+	PublisherSnsEndpointOverrideFlag = "publisher-sns-endpoint-override"
 )
 
 type ConfigDefault struct {
@@ -83,6 +86,9 @@ type ConfigDefault struct {
 	// SQS configuration
 	SubscriberSqsEnabled          bool
 	SubscriberSqsEndpointOverride string
+	// SNS configuration
+	PublisherSnsEnabled          bool
+	PublisherSnsEndpointOverride string
 }
 
 var (
@@ -110,6 +116,7 @@ var (
 		PublisherNatsReconnectWait:                  2 * time.Second,
 		PublisherNatsAutoProvision:                  true,
 		SubscriberSqsEnabled:                        false,
+		PublisherSnsEnabled:                         false,
 	}
 )
 
@@ -147,6 +154,10 @@ func AddFlags(serviceName string, flags *pflag.FlagSet, options ...func(*ConfigD
 	// SQS
 	flags.Bool(SubscriberSqsEnabledFlag, values.SubscriberSqsEnabled, "Subscribe to events on SQS")
 	flags.String(SubscriberSqsEndpointOverrideFlag, values.SubscriberSqsEndpointOverride, "Connect to SQS using a custom endpoint (eg. localstack)")
+
+	// SNS
+	flags.Bool(PublisherSnsEnabledFlag, values.PublisherSnsEnabled, "Publish events to SNS")
+	flags.String(PublisherSnsEndpointOverrideFlag, values.PublisherSnsEndpointOverride, "Connect to SNS using a custom endpoint (eg. localstack)")
 }
 
 // Used by membership
@@ -207,6 +218,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 	natsEnabled, _ := cmd.Flags().GetBool(PublisherNatsEnabledFlag)
 	kafkaEnabled, _ := cmd.Flags().GetBool(PublisherKafkaEnabledFlag)
 	sqsEnabled, _ := cmd.Flags().GetBool(SubscriberSqsEnabledFlag)
+	snsEnabled, _ := cmd.Flags().GetBool(PublisherSnsEnabledFlag)
 
 	switch {
 	case httpEnabled:
@@ -231,6 +243,14 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 		options = append(options,
 			fx.Supply(fx.Annotate(iam.LoadOptionFromCommand(cmd), fx.ResultTags(`name:"publish-sqs-enabled"`))),
 			sqsModule(cmd, sqsEndpointOverride),
+		)
+		fallthrough // we might have both a sqs listener and a sns publisher
+	case snsEnabled:
+		snsEndpointOverride, _ := cmd.Flags().GetString(PublisherSnsEndpointOverrideFlag)
+
+		options = append(options,
+			fx.Supply(fx.Annotate(iam.LoadOptionFromCommand(cmd), fx.ResultTags(`name:"publish-sns-enabled"`))),
+			snsModule(cmd, snsEndpointOverride),
 		)
 	case kafkaEnabled:
 		brokers, _ := cmd.Flags().GetStringSlice(PublisherKafkaBrokerFlag)
