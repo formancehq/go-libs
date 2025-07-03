@@ -7,7 +7,7 @@ require (
 	github.com/ClickHouse/ch-go v0.66.1
 	github.com/ClickHouse/clickhouse-go/v2 v2.37.2
 	github.com/IBM/sarama v1.45.2
-	github.com/ThreeDotsLabs/watermill v1.4.4
+	github.com/ThreeDotsLabs/watermill v1.4.7
 	github.com/ThreeDotsLabs/watermill-aws v1.0.0
 	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1
 	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.6
