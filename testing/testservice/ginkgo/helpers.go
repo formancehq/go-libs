@@ -25,7 +25,11 @@ func DeferNew(
 		go func() {
 			defer GinkgoRecover()
 
-			Expect(service.Start(context.Background())).To(Succeed())
+			err := service.Start(context.Background())
+			if err != nil {
+				d.SetErr(err)
+				Fail(err.Error())
+			}
 			d.SetValue(service)
 		}()
 
