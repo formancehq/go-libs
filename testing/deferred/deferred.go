@@ -85,6 +85,11 @@ func (d *Deferred[V]) SetValue(v V) {
 	close(d.done)
 }
 
+func (d *Deferred[V]) SetErr(err error) {
+	d.err = err
+	close(d.done)
+}
+
 func New[V any]() *Deferred[V] {
 	return &Deferred[V]{
 		done: make(chan struct{}),
