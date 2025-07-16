@@ -2,8 +2,8 @@ package profiling
 
 import (
 	"github.com/formancehq/go-libs/httpserver"
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/fx"
 )
 
