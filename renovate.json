@@ -1,34 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    ":prHourlyLimitNone",
-    ":rebaseStalePrs"
+    "github>formancehq/shared-config//renovate/presets/golang"
   ],
-  "major": {
-    "automerge": false
-  },
-  "constraints": {
-    "go": "1.22"
-  },
-  "postUpdateOptions": ["gomodTidy"],
-  "labels": ["dependencies"],
-  "baseBranches": ["main"],
-  "packageRules": [
-    {
-      "matchUpdateTypes": ["major"],
-      "matchBaseBranches": ["main"],
-      "enabled": false
-    },
-    {
-      "matchDepNames": ["golang", "go"],
-      "groupName": "go"
-    }
-  ],
-  "lockFileMaintenance": {
-    "enabled": true,
-    "automerge": true,
-    "automergeType": "pr",
-    "platformAutomerge": true
-  }
+  "baseBranches": [
+    "main"
+  ]
 }
