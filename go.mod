@@ -31,7 +31,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.13.0
 	github.com/jackc/pgx/v5 v5.7.5
-	github.com/jackc/pgxlisten v0.0.0-20241005155529-9d952acd6a6c
+	github.com/jackc/pgxlisten v0.0.0-20241106001234-1d6f6656415c
 	github.com/lestrrat-go/jwx v1.2.31
 	github.com/nats-io/nats-server/v2 v2.11.6
 	github.com/nats-io/nats.go v1.43.0
