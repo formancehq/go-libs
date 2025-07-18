@@ -44,10 +44,10 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
 	github.com/stretchr/testify v1.10.0
-	github.com/uptrace/bun v1.2.14
-	github.com/uptrace/bun/dialect/pgdialect v1.2.14
-	github.com/uptrace/bun/extra/bundebug v1.2.14
-	github.com/uptrace/bun/extra/bunotel v1.2.14
+	github.com/uptrace/bun v1.2.15
+	github.com/uptrace/bun/dialect/pgdialect v1.2.15
+	github.com/uptrace/bun/extra/bundebug v1.2.15
+	github.com/uptrace/bun/extra/bunotel v1.2.15
 	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2
 	github.com/xdg-go/scram v1.1.2
 	github.com/xo/dburl v0.23.8
@@ -74,7 +74,7 @@ require (
 	go.uber.org/dig v1.19.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/zap v1.27.0
-	google.golang.org/grpc v1.74.0
+	google.golang.org/grpc v1.74.1
 )
 
 require (
@@ -211,7 +211,7 @@ require (
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
