@@ -9,12 +9,6 @@ import (
 var (
 	ErrMissingCurrencies = errors.New("missing currencies")
 
-	UnsupportedCurrencies = map[string]struct{}{
-		"HUF": {},
-		"ISK": {},
-		"TWD": {},
-	}
-
 	ISO4217Currencies = map[string]int{
 		"AFN": 2, //  Afghan afghani
 		"EUR": 2, //  Euro
