@@ -18,8 +18,7 @@ import (
 // We developed this package because we need to convert amounts from strings,
 // and apply the precision to them to have minor units. If we do that with
 // the big package using floats and divisions/multiplcations, we will
-// sometimes loose precision, which is unacceptable.
-// Here is an example of loosing precision with the big package:
+// sometimes lose precision, which is unacceptable.
 
 var (
 	// ErrInvalidAmount is returned when the amount is invalid
@@ -83,7 +82,7 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 
 	default:
 		// The decimal part is longer than the precision, we have to send an
-		// error because we don't want to loose the precision
+		// error because we don't want to lose the precision
 		return nil, ErrInvalidPrecision
 	}
 }
