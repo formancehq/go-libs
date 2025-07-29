@@ -120,6 +120,20 @@ func TestGetAmountWithPrecisionFromString(t *testing.T) {
 			expecterErr:  ErrInvalidAmount,
 		},
 		{
+			name:         "amount string is empty with zero precision",
+			amountString: "",
+			precision:    0,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "amount string is empty with non-zero precision",
+			amountString: "",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
 			name:         "float number with decimal part > precision",
 			amountString: "123.456",
 			precision:    2,
@@ -146,6 +160,7 @@ func TestGetAmountWithPrecisionFromString(t *testing.T) {
 				return
 			}
 
+			require.NotNil(t, amount)
 			if amount.Cmp(tc.expected) != 0 {
 				t.Errorf("expected %v, got %v", tc.expected, amount)
 			}

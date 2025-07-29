@@ -33,8 +33,11 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 		return nil, errors.Wrap(ErrInvalidPrecision, fmt.Sprintf("precision is negative: %d", precision))
 	}
 
-	parts := strings.Split(amountString, ".")
+	if amountString == "" {
+		return nil, errors.Wrap(ErrInvalidAmount, "amount string is empty")
+	}
 
+	parts := strings.Split(amountString, ".")
 	lengthParts := len(parts)
 
 	if lengthParts > 2 || lengthParts == 0 {
