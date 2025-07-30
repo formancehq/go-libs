@@ -120,7 +120,8 @@ func (e ErrConstraintsFailed) Error() string {
 }
 
 func (e ErrConstraintsFailed) Is(err error) bool {
-	_, ok := err.(ErrConstraintsFailed)
+	var errConstraintsFailed ErrConstraintsFailed
+	ok := errors.As(err, &errConstraintsFailed)
 	return ok
 }
 
@@ -161,7 +162,8 @@ func (e ErrRaisedException) Error() string {
 }
 
 func (e ErrRaisedException) Is(err error) bool {
-	_, ok := err.(ErrRaisedException)
+	var errRaisedException ErrRaisedException
+	ok := errors.As(err, &errRaisedException)
 	return ok
 }
 
