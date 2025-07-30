@@ -232,6 +232,39 @@ func TestErrTooManyClient(t *testing.T) {
 	})
 }
 
+func TestErrFKConstraintFailed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Is", func(t *testing.T) {
+		t.Parallel()
+		pgErr := &pgconn.PgError{
+			Code:           "23503",
+			Message:        "foreign key constraint violation",
+			ConstraintName: "users_role_id_fkey",
+		}
+		fkErr := postgres.ErrFKConstraintFailed{} // Create a zero value for comparison
+		err := postgres.ResolveError(pgErr)
+
+		require.True(t, errors.Is(err, fkErr))
+	})
+}
+
+func TestErrValidationFailed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Is", func(t *testing.T) {
+		t.Parallel()
+		pgErr := &pgconn.PgError{
+			Code:    "23502",
+			Message: "not-null constraint violation",
+		}
+		validationErr := postgres.ErrValidationFailed{} // Create a zero value for comparison
+		err := postgres.ResolveError(pgErr)
+
+		require.True(t, errors.Is(err, validationErr))
+	})
+}
+
 func TestConstructorFunctions(t *testing.T) {
 	t.Parallel()
 

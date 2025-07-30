@@ -66,6 +66,12 @@ func (e ErrFKConstraintFailed) Error() string {
 	return e.err.Error()
 }
 
+func (e ErrFKConstraintFailed) Is(err error) bool {
+	var errFKConstraintFailed ErrFKConstraintFailed
+	ok := errors.As(err, &errFKConstraintFailed)
+	return ok
+}
+
 func (e ErrFKConstraintFailed) Unwrap() error {
 	return e.err
 }
@@ -86,6 +92,12 @@ type ErrValidationFailed struct {
 
 func (e ErrValidationFailed) Error() string {
 	return e.err.Error()
+}
+
+func (e ErrValidationFailed) Is(err error) bool {
+	var errValidationFailed ErrValidationFailed
+	ok := errors.As(err, &errValidationFailed)
+	return ok
 }
 
 func (e ErrValidationFailed) Unwrap() error {
