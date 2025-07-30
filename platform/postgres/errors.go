@@ -15,9 +15,14 @@ func ResolveError(err error) error {
 			return ErrNotFound
 		}
 
-		switch pge := err.(type) {
-		case *pgconn.PgError:
+		var pge *pgconn.PgError
+		switch {
+		case errors.As(err, &pge):
 			switch pge.Code {
+			case "23502":
+				return newErrNonNullValidationFailed(pge)
+			case "23503":
+				return newErrFkConstraintFailed(pge)
 			case "23505":
 				return newErrConstraintsFailed(pge)
 			case "53300":
@@ -53,6 +58,59 @@ func IsNotFoundError(err error) bool {
 	return errors.Is(err, ErrNotFound)
 }
 
+type ErrFKConstraintFailed struct {
+	err *pgconn.PgError
+}
+
+func (e ErrFKConstraintFailed) Error() string {
+	return e.err.Error()
+}
+
+func (e ErrFKConstraintFailed) Is(err error) bool {
+	var errFKConstraintFailed ErrFKConstraintFailed
+	ok := errors.As(err, &errFKConstraintFailed)
+	return ok
+}
+
+func (e ErrFKConstraintFailed) Unwrap() error {
+	return e.err
+}
+
+func (e ErrFKConstraintFailed) GetConstraint() string {
+	return e.err.ConstraintName
+}
+
+func newErrFkConstraintFailed(err *pgconn.PgError) ErrFKConstraintFailed {
+	return ErrFKConstraintFailed{
+		err: err,
+	}
+}
+
+type ErrValidationFailed struct {
+	err *pgconn.PgError
+}
+
+func (e ErrValidationFailed) Error() string {
+	return e.err.Error()
+}
+
+func (e ErrValidationFailed) Is(err error) bool {
+	var errValidationFailed ErrValidationFailed
+	ok := errors.As(err, &errValidationFailed)
+	return ok
+}
+
+func (e ErrValidationFailed) Unwrap() error {
+	return e.err
+}
+
+func newErrNonNullValidationFailed(err *pgconn.PgError) ErrValidationFailed {
+	return ErrValidationFailed{
+		err: err,
+	}
+}
+
+// ErrConstraintsFailed wraps 23505 pg error, meaning uniqueness constraint failed
 type ErrConstraintsFailed struct {
 	err *pgconn.PgError
 }
@@ -62,7 +120,8 @@ func (e ErrConstraintsFailed) Error() string {
 }
 
 func (e ErrConstraintsFailed) Is(err error) bool {
-	_, ok := err.(ErrConstraintsFailed)
+	var errConstraintsFailed ErrConstraintsFailed
+	ok := errors.As(err, &errConstraintsFailed)
 	return ok
 }
 
@@ -103,7 +162,8 @@ func (e ErrRaisedException) Error() string {
 }
 
 func (e ErrRaisedException) Is(err error) bool {
-	_, ok := err.(ErrRaisedException)
+	var errRaisedException ErrRaisedException
+	ok := errors.As(err, &errRaisedException)
 	return ok
 }
 
