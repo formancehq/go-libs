@@ -12,8 +12,8 @@ import (
 )
 
 type Bunerrors interface {
-	e(msg string, err error) error
-	rollbackOnTxError(ctx context.Context, tx *bun.Tx, err error)
+	E(msg string, err error) error
+	RollbackOnTxError(ctx context.Context, tx *bun.Tx, err error)
 }
 
 var (
@@ -35,7 +35,7 @@ func NewBunerrors(fkViolationColumns []string) Bunerrors {
 	}
 }
 
-func (b *bunerrors) e(msg string, err error) error {
+func (b *bunerrors) E(msg string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -67,12 +67,12 @@ func (b *bunerrors) e(msg string, err error) error {
 	return fmt.Errorf("%s: %w", msg, err)
 }
 
-func (b *bunerrors) rollbackOnTxError(ctx context.Context, tx *bun.Tx, err error) {
+func (b *bunerrors) RollbackOnTxError(ctx context.Context, tx *bun.Tx, err error) {
 	if err == nil {
 		return
 	}
 
 	if rollbackErr := tx.Rollback(); rollbackErr != nil {
-		logging.FromContext(ctx).WithField("original_error", err.Error()).Errorf("failed to rollback transaction: %w", rollbackErr)
+		logging.FromContext(ctx).WithField("original_error", err.Error()).Errorf("failed to rollback transaction: %s", rollbackErr)
 	}
 }

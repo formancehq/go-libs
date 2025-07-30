@@ -1,27 +1,16 @@
-package bunerrors
+package bunerrors_test
 
 import (
 	"database/sql"
 	"errors"
+	"github.com/formancehq/go-libs/v3/bun/bunerrors"
 	"testing"
 
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )
-
-func TestNewBunerrors(t *testing.T) {
-	// Test that NewBunerrors returns a non-nil instance
-	b := NewBunerrors([]string{"column1", "column2"})
-	require.NotNil(t, b)
-
-	// Check that the fKViolationColumns field is set correctly
-	bunerrorsImpl, ok := b.(*bunerrors)
-	require.True(t, ok)
-	require.Equal(t, []string{"column1", "column2"}, bunerrorsImpl.fKViolationColumns)
-}
 
 func TestBunerrorsE(t *testing.T) {
 	t.Parallel()
@@ -49,7 +38,7 @@ func TestBunerrorsE(t *testing.T) {
 			},
 			msg:           "test message",
 			fkColumns:     []string{},
-			expectedError: ErrValidation,
+			expectedError: bunerrors.ErrValidation,
 		},
 		{
 			name: "duplicate key value error",
@@ -58,7 +47,7 @@ func TestBunerrorsE(t *testing.T) {
 			},
 			msg:           "test message",
 			fkColumns:     []string{},
-			expectedError: ErrDuplicateKeyValue,
+			expectedError: bunerrors.ErrDuplicateKeyValue,
 		},
 		{
 			name: "foreign key violation with matching column",
@@ -68,7 +57,7 @@ func TestBunerrorsE(t *testing.T) {
 			},
 			msg:            "test message",
 			fkColumns:      []string{"test_column"},
-			expectedError:  ErrForeignKeyViolation,
+			expectedError:  bunerrors.ErrForeignKeyViolation,
 			expectedPrefix: "test_column",
 		},
 		{
@@ -79,14 +68,14 @@ func TestBunerrorsE(t *testing.T) {
 			},
 			msg:           "test message",
 			fkColumns:     []string{"test_column"},
-			expectedError: ErrForeignKeyViolation,
+			expectedError: bunerrors.ErrForeignKeyViolation,
 		},
 		{
 			name:          "sql no rows error",
 			err:           sql.ErrNoRows,
 			msg:           "test message",
 			fkColumns:     []string{},
-			expectedError: ErrNotFound,
+			expectedError: bunerrors.ErrNotFound,
 		},
 		{
 			name:      "generic error",
@@ -104,8 +93,8 @@ func TestBunerrorsE(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			b := NewBunerrors(tt.fkColumns).(*bunerrors)
-			err := b.e(tt.msg, tt.err)
+			b := bunerrors.NewBunerrors(tt.fkColumns)
+			err := b.E(tt.msg, tt.err)
 
 			if tt.name == "nil error" {
 				assert.NoError(t, err)
@@ -132,7 +121,7 @@ func TestBunerrorsRollbackOnTxError(t *testing.T) {
 
 	// Test the nil error case
 	t.Run("nil error", func(t *testing.T) {
-		b := NewBunerrors([]string{}).(*bunerrors)
+		b := bunerrors.NewBunerrors([]string{})
 
 		// For nil error, rollback should not be called
 		var tx *bun.Tx = nil
@@ -140,7 +129,7 @@ func TestBunerrorsRollbackOnTxError(t *testing.T) {
 
 		// This should not panic because the error is nil
 		// and the method should return early without calling tx.Rollback()
-		b.rollbackOnTxError(ctx, tx, nil)
+		b.RollbackOnTxError(ctx, tx, nil)
 	})
 
 	// Note: We can't easily test the case where error is not nil
