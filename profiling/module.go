@@ -13,10 +13,10 @@ func NewModule(bindPort string, enable bool) fx.Option {
 		return fx.Options()
 	}
 	return fx.Options(
-		fx.Invoke(func(m *chi.Mux, lc fx.Lifecycle) {
+		fx.Invoke(fx.Annotate(func(m *chi.Mux, lc fx.Lifecycle) {
 			lc.Append(httpserver.NewHook(m, httpserver.WithAddress(bindPort)))
-		}),
-		fx.Provide(NewRouter),
+		}, fx.ParamTags(`name:"profilingRouter"`, ``))),
+		fx.Provide(fx.Annotate(NewRouter, fx.ResultTags(`name:"profilingRouter"`))),
 	)
 }
 
