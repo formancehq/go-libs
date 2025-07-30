@@ -21,7 +21,7 @@ func ResolveError(err error) error {
 			switch pge.Code {
 			case "23502":
 				return newErrNonNullValidationFailed(pge)
-			case "25503":
+			case "23503":
 				return newErrFkConstraintFailed(pge)
 			case "23505":
 				return newErrConstraintsFailed(pge)

@@ -43,7 +43,7 @@ func TestResolveError(t *testing.T) {
 	t.Run("FKConstraintFailedError", func(t *testing.T) {
 		t.Parallel()
 		pgErr := &pgconn.PgError{
-			Code:           "25503",
+			Code:           "23503",
 			Message:        "foreign key constraint violation",
 			ConstraintName: "users_role_id_fkey",
 		}
@@ -238,7 +238,7 @@ func TestConstructorFunctions(t *testing.T) {
 	t.Run("newErrFkConstraintFailed", func(t *testing.T) {
 		t.Parallel()
 		pgErr := &pgconn.PgError{
-			Code:           "25503",
+			Code:           "23503",
 			Message:        "foreign key constraint violation",
 			ConstraintName: "users_role_id_fkey",
 		}
