@@ -30,9 +30,9 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.13.0
 	github.com/jackc/pgx/v5 v5.7.5
-	github.com/jackc/pgxlisten v0.0.0-20241106001234-1d6f6656415c
+	github.com/jackc/pgxlisten v0.0.0-20250802141604-12b92425684c
 	github.com/lestrrat-go/jwx v1.2.31
-	github.com/nats-io/nats-server/v2 v2.11.6
+	github.com/nats-io/nats-server/v2 v2.11.7
 	github.com/nats-io/nats.go v1.43.0
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/onsi/ginkgo/v2 v2.22.1
@@ -207,14 +207,14 @@ require (
 	go.opentelemetry.io/otel/log v0.6.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.39.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.15.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.26.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.33.0 // indirect
+	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
