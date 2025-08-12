@@ -7,8 +7,7 @@ import (
 
 var _ logrus.Hook = (*traceHook)(nil)
 
-type traceHook struct {
-}
+type traceHook struct{}
 
 // Fire implements logrus.Hook.
 func (h *traceHook) Fire(entry *logrus.Entry) error {
@@ -22,11 +21,8 @@ func (h *traceHook) Fire(entry *logrus.Entry) error {
 		return nil
 	}
 
-	entry = entry.WithFields(map[string]interface{}{
-		"trace_id": span.SpanContext().TraceID().String(),
-		"span_id":  span.SpanContext().SpanID().String(),
-	})
-
+	entry.Data["trace_id"] = span.SpanContext().TraceID().String()
+	entry.Data["span_id"] = span.SpanContext().SpanID().String()
 	return nil
 
 }
