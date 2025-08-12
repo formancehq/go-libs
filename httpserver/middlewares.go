@@ -25,9 +25,9 @@ func LoggerMiddleware(l logging.Logger) func(h http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
+			r = r.WithContext(logging.ContextWithLogger(r.Context(), l))
+			logger := logging.FromContext(r.Context())
 
-			logger := l.WithContext(r.Context())
-			r = r.WithContext(logging.ContextWithLogger(r.Context(), logger))
 			rec := NewLoggingResponseWriter(w)
 			// copy
 			method := r.Method
