@@ -104,17 +104,23 @@ var _ = Describe("SQS Listener", func() {
 
 			logger = logging.NewDefaultLogger(GinkgoWriter, true, true, false)
 		})
-		DescribeTable("can't start listening when config is invalid",
+		DescribeTable("can't create listener when config is invalid",
 			func(workerCount int, match string) {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-
-				listener := queue.NewListener(logger, workerCount)
-				err := listener.Listen(ctx, ch, func(ctx context.Context, meta map[string]string, msg []byte) error { return nil })
+				listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error { return nil }, workerCount)
 				Expect(err).NotTo(BeNil())
 				Expect(err.Error()).To(ContainSubstring(match))
+				Expect(listener).To(BeNil())
 			},
-			Entry("worker count is too small", 0, "WorkerCount"),
+			Entry("worker count is too small", 0, "workerCount"),
+		)
+		DescribeTable("can't create listener when callback is nil",
+			func(workerCount int, match string) {
+				listener, err := queue.NewListener(logger, nil, workerCount)
+				Expect(err).NotTo(BeNil())
+				Expect(err.Error()).To(ContainSubstring(match))
+				Expect(listener).To(BeNil())
+			},
+			Entry("callback is nil", 1, "callback"),
 		)
 		It("calls the callback function for each message", func(specCtx SpecContext) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -132,9 +138,9 @@ var _ = Describe("SQS Listener", func() {
 				out <- string(msg)
 				return nil
 			}
-			listener := queue.NewListener(logger, 2)
-			err := listener.Listen(ctx, ch, fn)
+			listener, err := queue.NewListener(logger, fn, 2)
 			Expect(err).To(BeNil())
+			listener.Listen(ctx, ch)
 
 			body := "hi"
 			res, err := client.SendMessage(specCtx, &sqsservice.SendMessageInput{

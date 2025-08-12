@@ -56,15 +56,13 @@ func (mr *MockListenerMockRecorder) Done() *gomock.Call {
 }
 
 // Listen mocks base method.
-func (m *MockListener) Listen(ctx context.Context, ch <-chan *message.Message, fn CallbackFn) error {
+func (m *MockListener) Listen(ctx context.Context, ch <-chan *message.Message) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Listen", ctx, ch, fn)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Listen", ctx, ch)
 }
 
 // Listen indicates an expected call of Listen.
-func (mr *MockListenerMockRecorder) Listen(ctx, ch, fn any) *gomock.Call {
+func (mr *MockListenerMockRecorder) Listen(ctx, ch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Listen", reflect.TypeOf((*MockListener)(nil).Listen), ctx, ch, fn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Listen", reflect.TypeOf((*MockListener)(nil).Listen), ctx, ch)
 }
