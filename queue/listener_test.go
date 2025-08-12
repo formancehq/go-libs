@@ -2,7 +2,7 @@ package queue_test
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/md5" //nolint: gosec
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -168,6 +168,7 @@ func (m *MessageMatcher) Match(actual any) (success bool, err error) {
 		return false, nil
 	}
 
+	//nolint: gosec
 	hash := md5.Sum([]byte(msg))
 	sum := hex.EncodeToString(hash[:])
 	if sum != m.md5OfBody {
