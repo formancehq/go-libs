@@ -1,7 +1,6 @@
 package s3bucket
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 
@@ -9,7 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	transport "github.com/aws/smithy-go/endpoints"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 )
@@ -52,8 +50,10 @@ func awsModule(cmd *cobra.Command, s3EndpointOverride string) fx.Option {
 				if err != nil {
 					return s3Opts, fmt.Errorf("unable to parse s3 url %q", s3EndpointOverride)
 				}
-				resolver := &CustomEndpointResolver{url: *s3Url}
-				s3Opts = append(s3Opts, s3.WithEndpointResolverV2(resolver))
+				s3Opts = append(s3Opts, func(o *s3.Options) {
+					o.UsePathStyle = true
+					o.BaseEndpoint = aws.String(s3Url.String())
+				})
 				return s3Opts, nil
 			}, fx.ResultTags(`name:"s3-bucket-aws-opts"`, ``)),
 		),
@@ -63,14 +63,4 @@ func awsModule(cmd *cobra.Command, s3EndpointOverride string) fx.Option {
 			}, fx.ParamTags(`name:"s3-bucket-aws-cfg"`, `name:"s3-bucket-aws-opts"`)),
 		),
 	)
-}
-
-type CustomEndpointResolver struct {
-	url url.URL
-}
-
-func (r *CustomEndpointResolver) ResolveEndpoint(_ context.Context, _ s3.EndpointParameters) (transport.Endpoint, error) {
-	return transport.Endpoint{
-		URI: r.url,
-	}, nil
 }
