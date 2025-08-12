@@ -128,7 +128,7 @@ func SetHooks(l *logrus.Logger, otelTraces bool) {
 		logrus.FatalLevel,
 		logrus.ErrorLevel,
 		logrus.WarnLevel,
-	)))
+	)), NewTraceHook())
 	for _, hook := range hooks {
 		l.AddHook(hook)
 	}

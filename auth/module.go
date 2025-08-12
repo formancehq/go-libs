@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"github.com/formancehq/go-libs/v3/logging"
 	"go.uber.org/fx"
 )
 
@@ -24,9 +23,8 @@ func Module(cfg ModuleConfig) fx.Option {
 
 	if cfg.Enabled {
 		options = append(options,
-			fx.Decorate(func(logger logging.Logger) Authenticator {
+			fx.Decorate(func() Authenticator {
 				return newJWTAuth(
-					logger,
 					cfg.ReadKeySetMaxRetries,
 					cfg.Issuer,
 					cfg.Service,

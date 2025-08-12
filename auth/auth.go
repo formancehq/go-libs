@@ -17,7 +17,6 @@ import (
 )
 
 type jwtAuth struct {
-	logger              logging.Logger
 	httpClient          *http.Client
 	accessTokenVerifier op.AccessTokenVerifier
 
@@ -33,14 +32,12 @@ func newOtlpHttpClient(maxRetries int) *http.Client {
 }
 
 func newJWTAuth(
-	logger logging.Logger,
 	readKeySetMaxRetries int,
 	issuer string,
 	service string,
 	checkScopes bool,
 ) *jwtAuth {
 	return &jwtAuth{
-		logger:              logger,
 		httpClient:          newOtlpHttpClient(readKeySetMaxRetries),
 		accessTokenVerifier: nil,
 		issuer:              issuer,
@@ -51,15 +48,16 @@ func newJWTAuth(
 
 // Authenticate validates the JWT in the request and returns the user, if valid.
 func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, error) {
+	logger := logging.FromContext(r.Context()).WithField("auth", "authenticate")
 	authHeader := r.Header.Get("authorization")
 	if authHeader == "" {
-		ja.logger.Error("no authorization header")
+		logger.Error("no authorization header")
 		return false, fmt.Errorf("no authorization header")
 	}
 
 	if !strings.HasPrefix(authHeader, strings.ToLower(oidc.PrefixBearer)) &&
 		!strings.HasPrefix(authHeader, oidc.PrefixBearer) {
-		ja.logger.Error("malformed authorization header")
+		logger.Error("malformed authorization header")
 		return false, fmt.Errorf("malformed authorization header")
 	}
 
@@ -68,13 +66,13 @@ func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, e
 
 	accessTokenVerifier, err := ja.getAccessTokenVerifier(r.Context())
 	if err != nil {
-		ja.logger.Error("unable to create access token verifier", zap.Error(err))
+		logger.Error("unable to create access token verifier", zap.Error(err))
 		return false, fmt.Errorf("unable to create access token verifier: %w", err)
 	}
 
 	claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](r.Context(), token, accessTokenVerifier)
 	if err != nil {
-		ja.logger.Error("unable to verify access token", zap.Error(err))
+		logger.Error("unable to verify access token", zap.Error(err))
 		return false, fmt.Errorf("unable to verify access token: %w", err)
 	}
 
@@ -90,7 +88,7 @@ func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, e
 		}
 
 		if !allowed {
-			ja.logger.Info("not enough scopes")
+			logger.Info("not enough scopes")
 			return false, fmt.Errorf("missing access, found scopes: '%s' need %s:read|write", strings.Join(scope, ", "), ja.service)
 		}
 	}
@@ -98,7 +96,7 @@ func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, e
 	return true, nil
 }
 
-func (ja *jwtAuth) getAccessTokenVerifier(ctx context.Context) (op.AccessTokenVerifier, error) {
+func (ja *jwtAuth) getAccessTokenVerifier(_ context.Context) (op.AccessTokenVerifier, error) {
 	if ja.accessTokenVerifier == nil {
 		//discoveryConfiguration, err := client.Discover(ja.Issuer, ja.httpClient)
 		//if err != nil {
