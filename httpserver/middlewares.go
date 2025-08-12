@@ -7,26 +7,48 @@ import (
 	"github.com/formancehq/go-libs/v3/logging"
 )
 
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func NewLoggingResponseWriter(w http.ResponseWriter) *loggingResponseWriter {
+	return &loggingResponseWriter{w, http.StatusOK}
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(statusCode int) {
+	lrw.statusCode = statusCode
+	lrw.ResponseWriter.WriteHeader(statusCode)
+}
+
 func LoggerMiddleware(l logging.Logger) func(h http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			r = r.WithContext(logging.ContextWithLogger(r.Context(), l))
 
+			logger := l.WithContext(r.Context())
+			r = r.WithContext(logging.ContextWithLogger(r.Context(), logger))
+			rec := NewLoggingResponseWriter(w)
 			// copy
 			method := r.Method
 			path := r.URL.Path
 
-			h.ServeHTTP(w, r)
-
+			h.ServeHTTP(rec, r)
 			latency := time.Since(start)
 
-			l.WithFields(map[string]interface{}{
+			logger = logger.WithFields(map[string]interface{}{
 				"method":     method,
 				"path":       path,
 				"latency":    latency,
 				"user_agent": r.UserAgent(),
-			}).Info("Request")
+				"status":     rec.statusCode,
+			})
+			if rec.statusCode >= 400 {
+				logger.Error("Request")
+			} else {
+				logger.Info("Request")
+			}
+
 		})
 	}
 }
