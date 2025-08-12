@@ -34,6 +34,8 @@ func (h *traceHook) Levels() []logrus.Level {
 		logrus.FatalLevel,
 		logrus.ErrorLevel,
 		logrus.WarnLevel,
+		logrus.DebugLevel,
+		logrus.InfoLevel,
 	}
 }
 
