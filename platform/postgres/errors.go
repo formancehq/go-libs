@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/pkg/errors"
 )
 
@@ -19,23 +20,25 @@ func ResolveError(err error) error {
 		switch {
 		case errors.As(err, &pge):
 			switch pge.Code {
-			case "23502":
+			case pgerrcode.NotNullViolation:
 				return newErrNonNullValidationFailed(pge)
-			case "23503":
+			case pgerrcode.ForeignKeyViolation:
 				return newErrFkConstraintFailed(pge)
-			case "23505":
+			case pgerrcode.UniqueViolation:
 				return newErrConstraintsFailed(pge)
-			case "53300":
+			case pgerrcode.TooManyConnections:
 				return newErrTooManyClient(err)
-			case "40P01":
+			case pgerrcode.DeadlockDetected:
 				return ErrDeadlockDetected
-			case "40001":
+			case pgerrcode.SerializationFailure:
 				return ErrSerialization
-			case "42P01":
+			case pgerrcode.UndefinedTable:
 				return ErrMissingTable
-			case "3F000":
+			case pgerrcode.InvalidSchemaName:
 				return ErrMissingSchema
-			case "P0001":
+			case pgerrcode.CheckViolation:
+				return newErrCheckViolation(pge)
+			case pgerrcode.RaiseException:
 				return newErrRaisedException(pge)
 			}
 		}
@@ -135,6 +138,30 @@ func (e ErrConstraintsFailed) GetConstraint() string {
 
 func newErrConstraintsFailed(err *pgconn.PgError) ErrConstraintsFailed {
 	return ErrConstraintsFailed{
+		err: err,
+	}
+}
+
+type ErrCheckViolation struct {
+	err *pgconn.PgError
+}
+
+func (e ErrCheckViolation) Error() string {
+	return e.err.Error()
+}
+
+func (e ErrCheckViolation) Is(err error) bool {
+	var errChecks ErrCheckViolation
+	ok := errors.As(err, &errChecks)
+	return ok
+}
+
+func (e ErrCheckViolation) Unwrap() error {
+	return e.err
+}
+
+func newErrCheckViolation(err *pgconn.PgError) ErrCheckViolation {
+	return ErrCheckViolation{
 		err: err,
 	}
 }
