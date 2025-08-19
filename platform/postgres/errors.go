@@ -83,6 +83,14 @@ func (e ErrFKConstraintFailed) GetConstraint() string {
 	return e.err.ConstraintName
 }
 
+func (e ErrFKConstraintFailed) GetDetail() string {
+	return e.err.Detail
+}
+
+func (e ErrFKConstraintFailed) GetMessage() string {
+	return e.err.Message
+}
+
 func newErrFkConstraintFailed(err *pgconn.PgError) ErrFKConstraintFailed {
 	return ErrFKConstraintFailed{
 		err: err,
@@ -105,6 +113,14 @@ func (e ErrValidationFailed) Is(err error) bool {
 
 func (e ErrValidationFailed) Unwrap() error {
 	return e.err
+}
+
+func (e ErrValidationFailed) GetDetail() string {
+	return e.err.Detail
+}
+
+func (e ErrValidationFailed) GetMessage() string {
+	return e.err.Message
 }
 
 func newErrNonNullValidationFailed(err *pgconn.PgError) ErrValidationFailed {
@@ -134,6 +150,14 @@ func (e ErrConstraintsFailed) Unwrap() error {
 
 func (e ErrConstraintsFailed) GetConstraint() string {
 	return e.err.ConstraintName
+}
+
+func (e ErrConstraintsFailed) GetDetail() string {
+	return e.err.Detail
+}
+
+func (e ErrConstraintsFailed) GetMessage() string {
+	return e.err.Message
 }
 
 func newErrConstraintsFailed(err *pgconn.PgError) ErrConstraintsFailed {

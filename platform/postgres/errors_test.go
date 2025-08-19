@@ -30,6 +30,7 @@ func TestResolveError(t *testing.T) {
 		pgErr := &pgconn.PgError{
 			Code:    "23502",
 			Message: "not-null constraint violation",
+			Detail:  `Failing row contains (null, 27, t, null, 50, t)`,
 		}
 		err := postgres.ResolveError(pgErr)
 		require.Error(t, err)
@@ -37,6 +38,8 @@ func TestResolveError(t *testing.T) {
 		var validationErr postgres.ErrValidationFailed
 		require.ErrorAs(t, err, &validationErr)
 		require.Equal(t, pgErr.Error(), validationErr.Error())
+		require.Equal(t, `Failing row contains (null, 27, t, null, 50, t)`, validationErr.GetDetail())
+		require.Equal(t, `not-null constraint violation`, validationErr.GetMessage())
 		require.Equal(t, pgErr, validationErr.Unwrap())
 	})
 
@@ -46,6 +49,7 @@ func TestResolveError(t *testing.T) {
 			Code:           "23503",
 			Message:        "foreign key constraint violation",
 			ConstraintName: "users_role_id_fkey",
+			Detail:         `Key (role_id)=(44) is not present in table "users_role"`,
 		}
 		err := postgres.ResolveError(pgErr)
 		require.Error(t, err)
@@ -53,6 +57,8 @@ func TestResolveError(t *testing.T) {
 		var fkErr postgres.ErrFKConstraintFailed
 		require.ErrorAs(t, err, &fkErr)
 		require.Equal(t, "users_role_id_fkey", fkErr.GetConstraint())
+		require.Equal(t, `Key (role_id)=(44) is not present in table "users_role"`, fkErr.GetDetail())
+		require.Equal(t, `foreign key constraint violation`, fkErr.GetMessage())
 		require.Equal(t, pgErr.Error(), fkErr.Error())
 		require.Equal(t, pgErr, fkErr.Unwrap())
 	})
@@ -62,6 +68,7 @@ func TestResolveError(t *testing.T) {
 		pgErr := &pgconn.PgError{
 			Code:           "23505",
 			Message:        "unique constraint violation",
+			Detail:         "Key (id)=(15) already exists",
 			ConstraintName: "users_email_key",
 		}
 		err := postgres.ResolveError(pgErr)
@@ -70,6 +77,8 @@ func TestResolveError(t *testing.T) {
 		var constraintsErr postgres.ErrConstraintsFailed
 		require.ErrorAs(t, err, &constraintsErr)
 		require.Equal(t, "users_email_key", constraintsErr.GetConstraint())
+		require.Equal(t, "Key (id)=(15) already exists", constraintsErr.GetDetail())
+		require.Equal(t, `unique constraint violation`, constraintsErr.GetMessage())
 		require.Equal(t, pgErr.Error(), constraintsErr.Error())
 		require.Equal(t, pgErr, constraintsErr.Unwrap())
 	})
