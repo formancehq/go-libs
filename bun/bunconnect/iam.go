@@ -39,9 +39,10 @@ var _ driver.Driver = &iamDriver{}
 var _ driver.DriverContext = &iamDriver{}
 
 type iamConnector struct {
-	dsn    string
-	driver *iamDriver
-	logger logging.Logger
+	dsn     string
+	driver  *iamDriver
+	logger  logging.Logger
+	options []Option
 }
 
 func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
@@ -51,14 +52,24 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	}
 
 	authenticationToken, err := auth.BuildAuthToken(
-		context.Background(), url.Host, i.driver.awsConfig.Region,
-		url.User.Username(), i.driver.awsConfig.Credentials)
+		context.Background(),
+		url.Host,
+		i.driver.awsConfig.Region,
+		url.User.Username(),
+		i.driver.awsConfig.Credentials,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "building aws auth token")
 	}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
-		url.Hostname(), url.Port(), url.User.Username(), authenticationToken, url.Path[1:])
+	dsn := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s",
+		url.Hostname(),
+		url.Port(),
+		url.User.Username(),
+		authenticationToken,
+		url.Path[1:],
+	)
 	for key, strings := range url.Query() {
 		for _, value := range strings {
 			dsn = fmt.Sprintf("%s %s=%s", dsn, key, value)
@@ -70,6 +81,9 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse dsn: %w", err)
+	}
+	for _, opt := range i.options {
+		opt(config)
 	}
 
 	connector := stdlib.GetConnector(*config)

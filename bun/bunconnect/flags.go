@@ -34,7 +34,17 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.Int(PostgresMaxOpenConnsFlag, 20, "Max opened connections")
 }
 
-func ConnectionOptionsFromFlags(cmd *cobra.Command) (*ConnectionOptions, error) {
+type Option func(options *pgx.ConnConfig)
+
+func WithRuntimeParams(params map[string]string) Option {
+	return func(options *pgx.ConnConfig) {
+		for k, v := range params {
+			options.RuntimeParams[k] = v
+		}
+	}
+}
+
+func ConnectionOptionsFromFlags(cmd *cobra.Command, opts ...Option) (*ConnectionOptions, error) {
 	var connector func(string) (driver.Connector, error)
 
 	awsEnable, _ := cmd.Flags().GetBool(PostgresAWSEnableIAMFlag)
@@ -50,7 +60,8 @@ func ConnectionOptionsFromFlags(cmd *cobra.Command) (*ConnectionOptions, error) 
 				driver: &iamDriver{
 					awsConfig: cfg,
 				},
-				logger: logging.FromContext(cmd.Context()),
+				options: opts,
+				logger:  logging.FromContext(cmd.Context()),
 			}, nil
 		}
 	} else {
@@ -59,6 +70,11 @@ func ConnectionOptionsFromFlags(cmd *cobra.Command) (*ConnectionOptions, error) 
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse dsn: %w", err)
 			}
+
+			for _, opt := range opts {
+				opt(parseConfig)
+			}
+
 			return stdlib.GetConnector(*parseConfig), nil
 		}
 	}
