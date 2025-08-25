@@ -75,16 +75,13 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 	tmpDir, err := os.MkdirTemp(wd, "localstack-test")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		// on CI we'll remove the entire working directory so we can skip this cleanup
-		// if we try to remove now we'll get permission denied due to docker creating restricted cert files
-		if os.Getenv("GITHUB_ACTIONS") != "true" {
-			err := os.RemoveAll(tmpDir)
-			assert.NoErrorf(t, err, fmt.Sprintf("GITHUB_ACTIONS=%s", os.Getenv("GITHUB_ACTIONS")))
-		}
+		err := os.RemoveAll(tmpDir)
+		assert.NoErrorf(t, err, fmt.Sprintf("GITHUB_ACTIONS=%s", os.Getenv("GITHUB_ACTIONS")))
 	})
 
 	env := []string{
 		"PERSISTENCE=0",
+		"SKIP_SSL_CERT_DOWNLOAD=1",
 		fmt.Sprintf("SERVICES=%s", strings.Join(cfg.Services, ",")),
 		fmt.Sprintf("AWS_DEFAULT_REGION=%s", cfg.DefaultRegion),
 		fmt.Sprintf("GATEWAY_LISTEN=%s:%d", defaultHostIP, defaultBindPort),
@@ -110,7 +107,7 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 
 			endpoint := fmt.Sprintf("http://localhost:%s/_localstack/init/ready", resource.GetPort(bindPortString))
 			req, err := http.NewRequest("GET", endpoint, nil)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
 			res, err := client.Do(req)
 			if err != nil {
@@ -120,7 +117,8 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 					err,
 				)
 			}
-			require.Equal(t, http.StatusOK, res.StatusCode)
+			defer res.Body.Close()
+			assert.Equal(t, http.StatusOK, res.StatusCode)
 			return nil
 		},
 	})
