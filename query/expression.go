@@ -1,8 +1,10 @@
 package query
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -299,9 +301,18 @@ func ParseJSON(data string) (Builder, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
-	m := make(map[string]any)
-	if err := json.Unmarshal([]byte(data), &m); err != nil {
+	decoded, err := decodeWithBigInt([]byte(data))
+	if err != nil {
 		return nil, err
+	}
+	if decoded == nil {
+		return nil, nil
+	}
+
+	var m map[string]any
+	var ok bool
+	if m, ok = decoded.(map[string]any); !ok {
+		return nil, fmt.Errorf("unexpected type %T", m)
 	}
 
 	if len(m) == 0 {
@@ -309,4 +320,47 @@ func ParseJSON(data string) (Builder, error) {
 	}
 
 	return mapMapToExpression(m)
+}
+
+// Decode a json value using `big.Int`s as numbers
+func decodeWithBigInt(data []byte) (any, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+
+	return convertJsonNumbersToBigInt(v)
+}
+
+// Convert `json.Number`s to `big.Int`s recursively
+func convertJsonNumbersToBigInt(v any) (any, error) {
+	var err error
+	switch val := v.(type) {
+	case map[string]any:
+		for k, vv := range val {
+			val[k], err = convertJsonNumbersToBigInt(vv)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return val, nil
+	case []any:
+		for i, vv := range val {
+			val[i], err = convertJsonNumbersToBigInt(vv)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return val, nil
+	case json.Number:
+		if bigint, ok := new(big.Int).SetString(val.String(), 10); ok {
+			return &bigint, nil
+		}
+		return nil, fmt.Errorf("provided json number was not an integer")
+	default:
+		return val, nil
+	}
 }
