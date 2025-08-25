@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/formancehq/go-libs/v3/testing/docker"
 	"github.com/ory/dockertest/v3"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	oryDocker "github.com/ory/dockertest/v3/docker"
@@ -69,11 +70,17 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 		cfg.Version = defaultVersion
 	}
 
-	tmpDir, err := os.MkdirTemp("", "localstack-test")
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	tmpDir, err := os.MkdirTemp(wd, "localstack-test")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		err := os.RemoveAll(tmpDir)
-		require.NoError(t, err)
+		// on CI we'll remove the entire working directory so we can skip this cleanup
+		// if we try to remove now we'll get permission denied due to docker creating restricted cert files
+		if os.Getenv("GITHUB_ACTIONS") != "true" {
+			err := os.RemoveAll(tmpDir)
+			assert.NoErrorf(t, err, fmt.Sprintf("GITHUB_ACTIONS=%s", os.Getenv("GITHUB_ACTIONS")))
+		}
 	})
 
 	env := []string{
