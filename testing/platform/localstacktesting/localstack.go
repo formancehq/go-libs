@@ -57,6 +57,7 @@ type LocalstackServer struct {
 	Config        Config
 	defaultRegion string
 	resource      *dockertest.Resource
+	internalPort  string
 }
 
 func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *LocalstackServer {
@@ -69,15 +70,6 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 	if cfg.Version == "" {
 		cfg.Version = defaultVersion
 	}
-
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-	tmpDir, err := os.MkdirTemp(wd, "localstack-test")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		err := os.RemoveAll(tmpDir)
-		assert.NoErrorf(t, err, fmt.Sprintf("GITHUB_ACTIONS=%s", os.Getenv("GITHUB_ACTIONS")))
-	})
 
 	env := []string{
 		"PERSISTENCE=0",
@@ -96,7 +88,6 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 		RunOptions: &dockertest.RunOptions{
 			Repository: "localstack/localstack",
 			Tag:        cfg.Version,
-			Mounts:     []string{fmt.Sprintf("%s:/var/lib/localstack", tmpDir)},
 			Env:        env,
 			PortBindings: map[oryDocker.Port][]oryDocker.PortBinding{
 				oryDocker.Port(bindPortString): {{HostIP: defaultHostIP, HostPort: fmt.Sprintf("%d", defaultBindPort)}},
@@ -127,6 +118,7 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 		Port:          resource.GetPort(bindPortString),
 		defaultRegion: cfg.DefaultRegion,
 		resource:      resource,
+		internalPort:  bindPortString,
 	}
 }
 
@@ -135,7 +127,7 @@ func (s *LocalstackServer) GetPort() string {
 }
 
 func (s *LocalstackServer) GetHostPort() string {
-	return s.resource.GetHostPort(fmt.Sprintf("%s/tcp", s.GetPort()))
+	return s.resource.GetHostPort(s.internalPort)
 }
 
 func (s *LocalstackServer) Endpoint() string {
