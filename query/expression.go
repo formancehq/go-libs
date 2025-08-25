@@ -357,7 +357,7 @@ func convertJsonNumbersToBigInt(v any) (any, error) {
 		return val, nil
 	case json.Number:
 		if bigint, ok := new(big.Int).SetString(val.String(), 10); ok {
-			return &bigint, nil
+			return bigint, nil
 		}
 		return nil, fmt.Errorf("provided json number was not an integer")
 	default:
