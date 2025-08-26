@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ func TestParseExpression(t *testing.T) {
 				"$or": [
 					{
 						"$gte": {
-							"balance": 1000
+							"balance": 288230376151711747
 						}
 					},
 					{
@@ -42,9 +43,11 @@ func TestParseExpression(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.Equal(t, "not ((account = ?) and ((balance >= ?) or (metadata[category] = ?)))", q)
+	var expected_balance big.Int
+	expected_balance.SetString("288230376151711747", 10)
 	require.Equal(t, []any{
 		"accounts::pending",
-		float64(1000),
+		&expected_balance,
 		"gold",
 	}, args)
 }
