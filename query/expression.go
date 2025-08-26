@@ -312,7 +312,7 @@ func ParseJSON(data string) (Builder, error) {
 	var m map[string]any
 	var ok bool
 	if m, ok = decoded.(map[string]any); !ok {
-		return nil, fmt.Errorf("unexpected type %T", m)
+		return nil, fmt.Errorf("unexpected type %T", decoded)
 	}
 
 	if len(m) == 0 {
