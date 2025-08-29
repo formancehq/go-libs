@@ -16,8 +16,8 @@ require (
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.3
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.4
 	github.com/aws/aws-sdk-go-v2 v1.38.2
-	github.com/aws/aws-sdk-go-v2/config v1.31.4
-	github.com/aws/aws-sdk-go-v2/credentials v1.18.8
+	github.com/aws/aws-sdk-go-v2/config v1.31.5
+	github.com/aws/aws-sdk-go-v2/credentials v1.18.9
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.5.14
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.84.1
 	github.com/aws/aws-sdk-go-v2/service/sns v1.37.2
@@ -118,7 +118,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ses v1.26.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sfn v1.31.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.52.8 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.28.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.29.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
