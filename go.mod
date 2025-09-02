@@ -23,7 +23,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sns v1.37.2
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.3
 	github.com/aws/smithy-go v1.23.0
-	github.com/elgohr/go-localstack v1.0.137
+	github.com/elgohr/go-localstack v1.0.138
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v5 v5.2.3
@@ -45,7 +45,7 @@ require (
 	github.com/riandyrn/otelchi v0.12.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.7
+	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
 	github.com/uptrace/bun v1.2.15
 	github.com/uptrace/bun/dialect/pgdialect v1.2.15
