@@ -31,7 +31,11 @@ func TestListener(t *testing.T) {
 
 func initClient() (client *sqsservice.Client, queueURL string, ch <-chan *message.Message, err error) {
 	ctx := logging.TestingContext()
-	l, err := localstack.NewInstance()
+	fromEnvOpt, err := localstack.WithClientFromEnv()
+	if err != nil {
+		return nil, "", ch, fmt.Errorf("Could not connect to Docker %w", err)
+	}
+	l, err := localstack.NewInstance(fromEnvOpt)
 	if err != nil {
 		return nil, "", ch, fmt.Errorf("Could not connect to Docker %w", err)
 	}
