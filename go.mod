@@ -23,7 +23,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sns v1.37.2
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.3
 	github.com/aws/smithy-go v1.23.0
-	github.com/elgohr/go-localstack v1.0.138
+	github.com/elgohr/go-localstack v1.0.139
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v5 v5.2.3
@@ -31,7 +31,7 @@ require (
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.13.0
-	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
+	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/jackc/pgxlisten v0.0.0-20250802141604-12b92425684c
 	github.com/lestrrat-go/jwx v1.2.31
