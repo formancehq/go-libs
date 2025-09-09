@@ -15,13 +15,13 @@ require (
 	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.0.6
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.3
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.4
-	github.com/aws/aws-sdk-go-v2 v1.38.3
-	github.com/aws/aws-sdk-go-v2/config v1.31.6
-	github.com/aws/aws-sdk-go-v2/credentials v1.18.10
+	github.com/aws/aws-sdk-go-v2 v1.39.0
+	github.com/aws/aws-sdk-go-v2/config v1.31.7
+	github.com/aws/aws-sdk-go-v2/credentials v1.18.11
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.5.14
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.84.1
 	github.com/aws/aws-sdk-go-v2/service/sns v1.37.2
-	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.3
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.4
 	github.com/aws/smithy-go v1.23.0
 	github.com/elgohr/go-localstack v1.0.139
 	github.com/go-chi/chi/v5 v5.2.3
@@ -32,7 +32,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.13.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
-	github.com/jackc/pgx/v5 v5.7.5
+	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jackc/pgxlisten v0.0.0-20250802141604-12b92425684c
 	github.com/lestrrat-go/jwx v1.2.31
 	github.com/nats-io/nats-server/v2 v2.11.8
@@ -90,9 +90,9 @@ require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.11 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.6 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.7 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.7 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.37 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.53.7 // indirect
@@ -108,7 +108,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.7.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.18 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.18 // indirect
 	github.com/aws/aws-sdk-go-v2/service/kinesis v1.29.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.58.3 // indirect
@@ -118,9 +118,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ses v1.26.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sfn v1.31.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.52.8 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.29.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.38.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.29.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.38.3 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
