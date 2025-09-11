@@ -19,15 +19,15 @@ import (
 )
 
 const (
-	DebugFlag        = "debug"
-	GracePeriodFlag  = "grace-period"
-	TotalStopTimeout = "total-stop-timeout"
+	DebugFlag                   = "debug"
+	GracePeriodBeforeOnStopFlag = "grace-period" // Keeping the same flag value for retro compatibility
+	TotalStopTimeout            = "total-stop-timeout"
 )
 
 func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(DebugFlag, false, "Debug mode")
 	flags.Bool(logging.JsonFormattingLoggerFlag, false, "Format logs as json")
-	flags.Duration(GracePeriodFlag, 0, "Grace period before triggering onStop hooks (e.g. to give time for"+
+	flags.Duration(GracePeriodBeforeOnStopFlag, 0, "Grace period before triggering onStop hooks (e.g. to give time for"+
 		" k8s to stop sending requests to the app before turning down the http server")
 	flags.Duration(TotalStopTimeout, fx.DefaultTimeout, "Total time allowed for all OnStop hooks to complete (see https://pkg.go.dev/go.uber.org/fx#StopTimeout)")
 }
@@ -52,7 +52,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 	}
 	a.logger.Infof("Starting application")
 
-	gracePeriod, _ := cmd.Flags().GetDuration(GracePeriodFlag)
+	gracePeriod, _ := cmd.Flags().GetDuration(GracePeriodBeforeOnStopFlag)
 	totalStopTimeout, _ := cmd.Flags().GetDuration(TotalStopTimeout)
 
 	app := a.newFxApp(a.logger, gracePeriod, totalStopTimeout)
