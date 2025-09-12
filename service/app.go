@@ -19,14 +19,17 @@ import (
 )
 
 const (
-	DebugFlag       = "debug"
-	GracePeriodFlag = "grace-period"
+	DebugFlag                   = "debug"
+	GracePeriodBeforeOnStopFlag = "grace-period" // Keeping the same flag value for retro compatibility
+	TotalStopTimeoutFlag        = "total-stop-timeout"
 )
 
 func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(DebugFlag, false, "Debug mode")
 	flags.Bool(logging.JsonFormattingLoggerFlag, false, "Format logs as json")
-	flags.Duration(GracePeriodFlag, 0, "Grace period for shutdown")
+	flags.Duration(GracePeriodBeforeOnStopFlag, 0, "Grace period before triggering onStop hooks (e.g. to give time for"+
+		" k8s to stop sending requests to the app before turning down the http server")
+	flags.Duration(TotalStopTimeoutFlag, fx.DefaultTimeout, "Total time allowed for all OnStop hooks to complete (see https://pkg.go.dev/go.uber.org/fx#StopTimeout)")
 }
 
 type App struct {
@@ -49,9 +52,10 @@ func (a *App) Run(cmd *cobra.Command) error {
 	}
 	a.logger.Infof("Starting application")
 
-	gracePeriod, _ := cmd.Flags().GetDuration(GracePeriodFlag)
+	gracePeriod, _ := cmd.Flags().GetDuration(GracePeriodBeforeOnStopFlag)
+	totalStopTimeout, _ := cmd.Flags().GetDuration(TotalStopTimeoutFlag)
 
-	app := a.newFxApp(a.logger, gracePeriod)
+	app := a.newFxApp(a.logger, gracePeriod, totalStopTimeout)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), a.logger)); err != nil {
 		switch {
 		case errorsutils.IsErrorWithExitCode(err):
@@ -96,7 +100,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 	return nil
 }
 
-func (a *App) newFxApp(logger logging.Logger, gracePeriod time.Duration) *fx.App {
+func (a *App) newFxApp(logger logging.Logger, gracePeriod time.Duration, totalStopTimeout time.Duration) *fx.App {
 	options := append(
 		a.options,
 		fx.NopLogger,
@@ -110,6 +114,7 @@ func (a *App) newFxApp(logger logging.Logger, gracePeriod time.Duration) *fx.App
 				},
 			})
 		}),
+		fx.StopTimeout(totalStopTimeout),
 	)
 	options = append([]fx.Option{
 		fx.Invoke(func(lc fx.Lifecycle) {
