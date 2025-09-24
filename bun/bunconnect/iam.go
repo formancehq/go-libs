@@ -5,6 +5,9 @@ import (
 	"database/sql/driver"
 	"fmt"
 
+	"github.com/formancehq/go-libs/v3/otlp"
+	"go.opentelemetry.io/otel"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -15,6 +18,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/xo/dburl"
 )
+
+var tracer = otel.Tracer("github.com/formancehq/go-libs/v3/bun/bunconnect")
 
 type iamDriver struct {
 	awsConfig aws.Config
@@ -51,13 +56,23 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		return nil, errors.Wrapf(err, "parsing dsn: %s", i.dsn)
 	}
 
-	authenticationToken, err := auth.BuildAuthToken(
-		context.Background(),
-		url.Host,
-		i.driver.awsConfig.Region,
-		url.User.Username(),
-		i.driver.awsConfig.Credentials,
-	)
+	authenticationToken, err := func() (string, error) {
+		ctx, span := tracer.Start(ctx, "iam.build-auth-token")
+		defer span.End()
+
+		ret, err := auth.BuildAuthToken(
+			ctx,
+			url.Host,
+			i.driver.awsConfig.Region,
+			url.User.Username(),
+			i.driver.awsConfig.Credentials,
+		)
+		if err != nil {
+			otlp.RecordError(ctx, err)
+		}
+
+		return ret, nil
+	}()
 	if err != nil {
 		return nil, errors.Wrap(err, "building aws auth token")
 	}
@@ -86,9 +101,9 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		opt(config)
 	}
 
-	connector := stdlib.GetConnector(*config)
+	config.Tracer = newPgxTracer()
 
-	return connector.Connect(ctx)
+	return stdlib.GetConnector(*config).Connect(ctx)
 }
 
 func (i iamConnector) Driver() driver.Driver {
