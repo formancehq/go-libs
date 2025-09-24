@@ -75,6 +75,8 @@ func ConnectionOptionsFromFlags(cmd *cobra.Command, opts ...Option) (*Connection
 				opt(parseConfig)
 			}
 
+			parseConfig.Tracer = newPgxTracer()
+
 			return stdlib.GetConnector(*parseConfig), nil
 		}
 	}
