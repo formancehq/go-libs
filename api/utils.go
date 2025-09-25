@@ -14,8 +14,10 @@ import (
 const (
 	defaultLimit = 15
 
-	ErrorCodeNotFound = "NOT_FOUND"
-	ErrorInternal     = "INTERNAL"
+	ErrorCodeNotFound   = "NOT_FOUND"
+	ErrorInternal       = "INTERNAL"
+	ErrorCodeForbidden  = "FORBIDDEN"
+	ErrorCodeValidation = "VALIDATION"
 )
 
 func writeJSON(w http.ResponseWriter, statusCode int, v any) {
