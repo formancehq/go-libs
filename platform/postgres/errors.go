@@ -107,6 +107,10 @@ func (e ErrValidationFailed) Unwrap() error {
 	return e.err
 }
 
+func (e ErrValidationFailed) Message() string {
+	return e.err.Message
+}
+
 func newErrValidationFailed(err *pgconn.PgError) ErrValidationFailed {
 	return ErrValidationFailed{
 		err: err,
