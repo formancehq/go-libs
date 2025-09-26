@@ -27,17 +27,31 @@ func TestResolveError(t *testing.T) {
 
 	t.Run("ValidationFailedError", func(t *testing.T) {
 		t.Parallel()
-		pgErr := &pgconn.PgError{
-			Code:    "23502",
-			Message: "not-null constraint violation",
+		tests := map[string]*pgconn.PgError{
+			"not-null constraint violation": {
+				Code:    "23502",
+				Message: "not-null constraint violation",
+			},
+			"invalid input syntax for type": {
+				Code:    "22P02",
+				Message: "invalid input syntax for type",
+			},
 		}
-		err := postgres.ResolveError(pgErr)
-		require.Error(t, err)
 
-		var validationErr postgres.ErrValidationFailed
-		require.ErrorAs(t, err, &validationErr)
-		require.Equal(t, pgErr.Error(), validationErr.Error())
-		require.Equal(t, pgErr, validationErr.Unwrap())
+		for name, tt := range tests {
+			name := name
+			tt := tt
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				err := postgres.ResolveError(tt)
+				require.Error(t, err)
+
+				var validationErr postgres.ErrValidationFailed
+				require.ErrorAs(t, err, &validationErr)
+				require.Equal(t, tt.Error(), validationErr.Error())
+				require.Equal(t, tt, validationErr.Unwrap())
+			})
+		}
 	})
 
 	t.Run("FKConstraintFailedError", func(t *testing.T) {

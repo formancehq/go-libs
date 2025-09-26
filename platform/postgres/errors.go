@@ -20,8 +20,8 @@ func ResolveError(err error) error {
 		switch {
 		case errors.As(err, &pge):
 			switch pge.Code {
-			case pgerrcode.NotNullViolation:
-				return newErrNonNullValidationFailed(pge)
+			case pgerrcode.NotNullViolation, pgerrcode.InvalidTextRepresentation:
+				return newErrValidationFailed(pge)
 			case pgerrcode.ForeignKeyViolation:
 				return newErrFkConstraintFailed(pge)
 			case pgerrcode.UniqueViolation:
@@ -107,7 +107,11 @@ func (e ErrValidationFailed) Unwrap() error {
 	return e.err
 }
 
-func newErrNonNullValidationFailed(err *pgconn.PgError) ErrValidationFailed {
+func (e ErrValidationFailed) Message() string {
+	return e.err.Message
+}
+
+func newErrValidationFailed(err *pgconn.PgError) ErrValidationFailed {
 	return ErrValidationFailed{
 		err: err,
 	}
