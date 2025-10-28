@@ -1,4 +1,4 @@
-package rp
+package client
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package rp
+package client
 
 import (
 	"github.com/formancehq/go-libs/v3/oidc"
