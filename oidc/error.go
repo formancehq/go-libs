@@ -13,6 +13,7 @@ const (
 	InvalidScope         errorType = "invalid_scope"
 	InvalidClient        errorType = "invalid_client"
 	InvalidGrant         errorType = "invalid_grant"
+	InvalidToken         errorType = "invalid_token"
 	UnauthorizedClient   errorType = "unauthorized_client"
 	UnsupportedGrantType errorType = "unsupported_grant_type"
 	ServerError          errorType = "server_error"
@@ -35,6 +36,11 @@ const (
 )
 
 var (
+	ErrInvalidToken = func() *Error {
+		return &Error{
+			ErrorType: InvalidToken,
+		}
+	}
 	ErrInvalidRequest = func() *Error {
 		return &Error{
 			ErrorType: InvalidRequest,
