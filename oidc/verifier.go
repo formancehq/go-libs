@@ -26,16 +26,10 @@ type Claims interface {
 	GetAuthenticationContextClassReference() string
 	GetAuthTime() time.Time
 	GetAuthorizedParty() string
-	ClaimsSignature
-}
-
-type ClaimsSignature interface {
-	SetSignatureAlgorithm(algorithm jose.SignatureAlgorithm)
 }
 
 type IDClaims interface {
 	Claims
-	GetSignatureAlgorithm() jose.SignatureAlgorithm
 	GetAccessTokenHash() string
 }
 
@@ -149,36 +143,34 @@ func CheckAuthorizedParty(claims Claims, clientID string) error {
 	return nil
 }
 
-func CheckSignature(ctx context.Context, token string, payload []byte, claims ClaimsSignature, supportedSigAlgs []string, set KeySet) error {
+func CheckSignature(ctx context.Context, token string, payload []byte, supportedSigAlgs []string, set KeySet) (jose.SignatureAlgorithm, error) {
 	jws, err := jose.ParseSigned(token, toJoseSignatureAlgorithms(supportedSigAlgs))
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "go-jose/go-jose: unexpected signature algorithm") {
 			// TODO(v4): we should wrap errors instead of returning static ones.
 			// This is a workaround so we keep returning the same error for now.
-			return ErrSignatureUnsupportedAlg
+			return "", ErrSignatureUnsupportedAlg
 		}
-		return ErrParse
+		return "", ErrParse
 	}
 	if len(jws.Signatures) == 0 {
-		return ErrSignatureMissing
+		return "", ErrSignatureMissing
 	}
 	if len(jws.Signatures) > 1 {
-		return ErrSignatureMultiple
+		return "", ErrSignatureMultiple
 	}
 	sig := jws.Signatures[0]
 
 	signedPayload, err := set.VerifySignature(ctx, jws)
 	if err != nil {
-		return fmt.Errorf("%w (%v)", ErrSignatureInvalid, err)
+		return "", fmt.Errorf("%w (%v)", ErrSignatureInvalid, err)
 	}
 
 	if !bytes.Equal(signedPayload, payload) {
-		return ErrSignatureInvalidPayload
+		return "", ErrSignatureInvalidPayload
 	}
 
-	claims.SetSignatureAlgorithm(jose.SignatureAlgorithm(sig.Header.Algorithm))
-
-	return nil
+	return jose.SignatureAlgorithm(sig.Header.Algorithm), nil
 }
 
 // TODO(v4): Use the new jose.SignatureAlgorithm type directly, instead of string.

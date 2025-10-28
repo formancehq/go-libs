@@ -15,11 +15,11 @@ import (
 func VerifyTokens[C oidc.IDClaims](ctx context.Context, accessToken, idToken string, v *Verifier) (claims C, err error) {
 	var nilClaims C
 
-	claims, err = VerifyIDToken[C](ctx, idToken, v)
+	claims, sigAlgorithm, err := VerifyIDToken[C](ctx, idToken, v)
 	if err != nil {
 		return nilClaims, err
 	}
-	if err := VerifyAccessToken(accessToken, claims.GetAccessTokenHash(), claims.GetSignatureAlgorithm()); err != nil {
+	if err := VerifyAccessToken(accessToken, claims.GetAccessTokenHash(), sigAlgorithm); err != nil {
 		return nilClaims, err
 	}
 
@@ -28,63 +28,64 @@ func VerifyTokens[C oidc.IDClaims](ctx context.Context, accessToken, idToken str
 
 // VerifyIDToken validates the id token according to
 // https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
-func VerifyIDToken[C oidc.Claims](ctx context.Context, token string, v *Verifier) (claims C, err error) {
+func VerifyIDToken[C oidc.Claims](ctx context.Context, token string, v *Verifier) (claims C, algorithm jose.SignatureAlgorithm, err error) {
 
 	var nilClaims C
 
 	decrypted, err := oidc.DecryptToken(token)
 	if err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 	payload, err := oidc.ParseToken(decrypted, &claims)
 	if err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 
 	if err := oidc.CheckSubject(claims); err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 
 	if v.Issuer != nil {
 		if !v.Issuer(claims.GetIssuer()) {
-			return nilClaims, oidc.ErrIssuerInvalid
+			return nilClaims, "", oidc.ErrIssuerInvalid
 		}
 	}
 
 	if err = oidc.CheckAudience(claims, v.ClientID); err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 
 	if err = oidc.CheckAuthorizedParty(claims, v.ClientID); err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 
-	if err = oidc.CheckSignature(ctx, decrypted, payload, claims, v.SupportedSignAlgs, v.KeySet); err != nil {
-		return nilClaims, err
+	sigAlgorithm, err := oidc.CheckSignature(ctx, decrypted, payload, v.SupportedSignAlgs, v.KeySet)
+	if err != nil {
+		return nilClaims, "", err
 	}
 
 	if err = oidc.CheckExpiration(claims, v.Offset); err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 
 	if err = oidc.CheckIssuedAt(claims, v.MaxAgeIAT, v.Offset); err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 
 	if v.Nonce != nil {
 		if err = oidc.CheckNonce(claims, v.Nonce(ctx)); err != nil {
-			return nilClaims, err
+			return nilClaims, "", err
 		}
 	}
 
 	if err = oidc.CheckAuthorizationContextClassReference(claims, v.ACR); err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
 
 	if err = oidc.CheckAuthTime(claims, v.MaxAge); err != nil {
-		return nilClaims, err
+		return nilClaims, "", err
 	}
-	return claims, nil
+	return claims, sigAlgorithm, nil
 }
 
 // VerifyAccessToken validates the access token according to

@@ -10,7 +10,6 @@ import (
 
 	"github.com/formancehq/go-libs/v3/time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/muhlemmer/gu"
 	"github.com/zitadel/schema"
 	"golang.org/x/text/language"
@@ -284,5 +283,3 @@ type RequestObject struct {
 func (r *RequestObject) GetIssuer() string {
 	return r.Issuer
 }
-
-func (*RequestObject) SetSignatureAlgorithm(algorithm jose.SignatureAlgorithm) {}

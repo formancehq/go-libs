@@ -48,9 +48,6 @@ type TokenClaims struct {
 	ClientID                            string       `json:"client_id,omitempty"`
 	JWTID                               string       `json:"jti,omitempty"`
 	Actor                               *ActorClaims `json:"act,omitempty"`
-
-	// Additional information set by this framework
-	SignatureAlg jose.SignatureAlgorithm `json:"-"`
 }
 
 func (c *TokenClaims) GetIssuer() string {
@@ -85,16 +82,8 @@ func (c *TokenClaims) GetAuthorizedParty() string {
 	return c.AuthorizedParty
 }
 
-func (c *TokenClaims) GetSignatureAlgorithm() jose.SignatureAlgorithm {
-	return c.SignatureAlg
-}
-
 func (c *TokenClaims) GetAuthenticationContextClassReference() string {
 	return c.AuthenticationContextClassReference
-}
-
-func (c *TokenClaims) SetSignatureAlgorithm(algorithm jose.SignatureAlgorithm) {
-	c.SignatureAlg = algorithm
 }
 
 type AccessTokenClaims struct {

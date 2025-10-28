@@ -6,8 +6,6 @@ import (
 	"slices"
 
 	"github.com/formancehq/go-libs/v3/time"
-
-	jose "github.com/go-jose/go-jose/v4"
 )
 
 const (
@@ -215,9 +213,6 @@ func (j *JWTTokenRequest) GetAuthTime() time.Time {
 func (j *JWTTokenRequest) GetAuthorizedParty() string {
 	return ""
 }
-
-// SetSignatureAlgorithm implements the Claims interface
-func (j *JWTTokenRequest) SetSignatureAlgorithm(_ jose.SignatureAlgorithm) {}
 
 // GetSubject implements the TokenRequest interface
 func (j *JWTTokenRequest) GetSubject() string {
