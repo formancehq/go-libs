@@ -111,9 +111,6 @@ func NewIDTokenVerifier(clientID string, keySet oidc.KeySet, options ...Verifier
 		ClientID: clientID,
 		KeySet:   keySet,
 		Offset:   time.Second,
-		Nonce: func(_ context.Context) string {
-			return ""
-		},
 	}
 
 	for _, opts := range append(defaultOptions, options...) {

@@ -1,5 +1,10 @@
 package oidc
 
+import (
+	"strconv"
+	"strings"
+)
+
 // UserInfo implements OpenID Connect Core 1.0, section 5.1.
 // https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims.
 type UserInfo struct {
@@ -73,10 +78,12 @@ type UserInfoEmail struct {
 type Bool bool
 
 func (bs *Bool) UnmarshalJSON(data []byte) error {
-	if string(data) == "true" || string(data) == `"true"` {
-		*bs = true
+	s := strings.Trim(string(data), `"`)
+	value, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
 	}
-
+	*bs = Bool(value)
 	return nil
 }
 

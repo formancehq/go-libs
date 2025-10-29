@@ -2,10 +2,10 @@ package client
 
 import (
 	"github.com/formancehq/go-libs/v3/oidc"
+	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
 	"github.com/formancehq/go-libs/v3/time"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/zitadel/oidc/v3/pkg/crypto"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 )
 
 var (

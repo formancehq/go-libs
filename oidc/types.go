@@ -25,12 +25,19 @@ func (a *Audience) UnmarshalJSON(text []byte) error {
 	}
 	switch aud := i.(type) {
 	case []any:
-		*a = make([]string, len(aud))
-		for i, audience := range aud {
-			(*a)[i] = audience.(string)
+		out := make([]string, 0, len(aud))
+		for _, audience := range aud {
+			str, ok := audience.(string)
+			if !ok {
+				return fmt.Errorf("oidc.Audience: expected string element, got %T", audience)
+			}
+			out = append(out, str)
 		}
+		*a = out
 	case string:
 		*a = []string{aud}
+	default:
+		return fmt.Errorf("oidc.Audience: unsupported JSON type %T", i)
 	}
 	return nil
 }
@@ -175,6 +182,10 @@ func (s SpaceDelimitedArray) String() string {
 }
 
 func (s *SpaceDelimitedArray) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*s = SpaceDelimitedArray{}
+		return nil
+	}
 	*s = strings.Split(string(text), " ")
 	return nil
 }
@@ -191,6 +202,10 @@ func (s *SpaceDelimitedArray) UnmarshalJSON(data []byte) error {
 	var str string
 	if err := json.Unmarshal(data, &str); err != nil {
 		return err
+	}
+	if len(str) == 0 {
+		*s = SpaceDelimitedArray{}
+		return nil
 	}
 	*s = strings.Split(str, " ")
 	return nil

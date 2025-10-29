@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/formancehq/go-libs/v3/oidc"
-	"github.com/formancehq/go-libs/v3/time"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 	"golang.org/x/oauth2"
+
+	"github.com/formancehq/go-libs/v3/oidc"
+	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
+	"github.com/formancehq/go-libs/v3/time"
 )
 
 func newDeviceClientCredentialsRequest(scopes []string, rp RelyingParty) (*oidc.ClientCredentialsRequest, error) {
@@ -132,11 +133,14 @@ func PollDeviceAccessTokenEndpoint[C oidc.IDClaims](ctx context.Context, interva
 		case <-timer:
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, interval)
-		defer cancel()
+		tokens, err := func() (*oidc.Tokens[C], error) {
+			ctx, cancel := context.WithTimeout(ctx, interval)
+			defer cancel()
 
-		resp, err := CallDeviceAccessTokenEndpoint(ctx, request, caller, opts...)
-		if err == nil {
+			resp, err := CallDeviceAccessTokenEndpoint(ctx, request, caller, opts...)
+			if err != nil {
+				return nil, err
+			}
 
 			var idTokenClaims C
 			if resp.IDToken != "" {
@@ -157,9 +161,13 @@ func PollDeviceAccessTokenEndpoint[C oidc.IDClaims](ctx context.Context, interva
 				IDTokenClaims: idTokenClaims,
 				IDToken:       resp.IDToken,
 			}, nil
+		}()
+		if err == nil {
+			return tokens, nil
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			interval += 5 * time.Second
+			continue
 		}
 		var target *oidc.Error
 		if !errors.As(err, &target) {

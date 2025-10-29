@@ -10,10 +10,13 @@ import (
 	"github.com/go-jose/go-jose/v4"
 
 	"github.com/formancehq/go-libs/v3/oidc"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
+	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
 )
 
 func NewRemoteKeySet(client *http.Client, jwksURL string, opts ...func(*remoteKeySet)) oidc.KeySet {
+	if client == nil {
+		client = httphelper.DefaultHTTPClient
+	}
 	keyset := &remoteKeySet{httpClient: client, jwksURL: jwksURL}
 	for _, opt := range opts {
 		opt(keyset)

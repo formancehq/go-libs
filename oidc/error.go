@@ -154,7 +154,7 @@ func (e *Error) MarshalJSON() ([]byte, error) {
 		ErrorDescription: e.Description,
 		State:            e.State,
 	}
-	if e.returnParent {
+	if e.returnParent && e.Parent != nil {
 		m.Parent = e.Parent.Error()
 	}
 	return json.Marshal(m)

@@ -150,7 +150,7 @@ func (t *IDTokenClaims) SetUserInfo(i *UserInfo) {
 	t.UserInfoPhone = i.UserInfoPhone
 	t.Address = i.Address
 	if t.Claims == nil {
-		t.Claims = make(map[string]any, len(t.Claims))
+		t.Claims = make(map[string]any, len(i.Claims))
 	}
 	gu.MapMerge(i.Claims, t.Claims)
 }

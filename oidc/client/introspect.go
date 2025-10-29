@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/formancehq/go-libs/v3/oidc"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
+	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
 )
 
 func Introspect(ctx context.Context, relyingParty RelyingParty, token string) (*oidc.IntrospectionResponse, error) {

@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/formancehq/go-libs/v3/oidc"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
+	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
 )
 
 // Discover calls the discovery endpoint of the provided issuer and returns its configuration
-// It accepts an optional argument "wellknownUrl" which can be used to overide the dicovery endpoint url
+// It accepts an optional argument "wellknownUrl" which can be used to override the discovery endpoint url
 func Discover[V any](ctx context.Context, issuer string, httpClient *http.Client, wellKnownUrl ...string) (*V, error) {
 
 	wellKnown := strings.TrimSuffix(issuer, "/") + oidc.DiscoveryEndpoint

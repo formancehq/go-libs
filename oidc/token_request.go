@@ -38,7 +38,7 @@ const (
 var AllGrantTypes = []GrantType{
 	GrantTypeCode, GrantTypeRefreshToken, GrantTypeClientCredentials,
 	GrantTypeBearer, GrantTypeTokenExchange, GrantTypeImplicit,
-	GrantTypeDeviceCode, ClientAssertionTypeJWTAssertion,
+	GrantTypeDeviceCode,
 }
 
 type GrantType string

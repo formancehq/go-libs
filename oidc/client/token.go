@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/formancehq/go-libs/v3/oidc"
+	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
 	"github.com/formancehq/go-libs/v3/time"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 	"golang.org/x/oauth2"
 )
 
@@ -26,8 +26,14 @@ func callTokenEndpoint(ctx context.Context, request any, authFn any, caller Toke
 	if err != nil {
 		return nil, err
 	}
+
+	client := caller.HttpClient()
+	if client == nil {
+		client = httphelper.DefaultHTTPClient
+	}
+
 	tokenRes := new(oidc.AccessTokenResponse)
-	if err := httphelper.HttpRequest(caller.HttpClient(), req, &tokenRes); err != nil {
+	if err := httphelper.HttpRequest(client, req, &tokenRes); err != nil {
 		return nil, err
 	}
 	token := &oauth2.Token{

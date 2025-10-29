@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/formancehq/go-libs/v3/oidc"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
+	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
 )
 
 const (
@@ -54,7 +54,7 @@ type RelyingParty interface {
 	// be used to start a DeviceAuthorization flow.
 	GetDeviceAuthorizationEndpoint() string
 
-	// GetInstropectionEndpoint returns the endpoint to introspect a specific token
+	// GetIntrospectionEndpoint returns the endpoint to introspect a specific token
 	GetIntrospectionEndpoint() string
 
 	// IDTokenVerifier returns the verifier used for oidc id_token verification
@@ -388,7 +388,6 @@ type RefreshTokenRequest struct {
 func RefreshTokens[C oidc.IDClaims](ctx context.Context, rp RelyingParty, refreshToken, clientAssertion, clientAssertionType string) (*oidc.Tokens[C], error) {
 	request := RefreshTokenRequest{
 		RefreshToken:        refreshToken,
-		Scopes:              rp.OAuthConfig().Scopes,
 		ClientID:            rp.OAuthConfig().ClientID,
 		ClientSecret:        rp.OAuthConfig().ClientSecret,
 		ClientAssertion:     clientAssertion,
