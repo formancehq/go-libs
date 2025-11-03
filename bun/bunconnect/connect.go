@@ -20,12 +20,13 @@ type ConnectionOptions struct {
 	MaxIdleConns       int
 	MaxOpenConns       int
 	ConnMaxIdleTime    time.Duration
+	ConnMaxLifetime    time.Duration
 	Connector          func(dsn string) (driver.Connector, error) `json:",omitempty"`
 }
 
 func (opts ConnectionOptions) String() string {
-	return fmt.Sprintf("dsn=%s, max-idle-conns=%d, max-open-conns=%d, conn-max-idle-time=%s",
-		opts.DatabaseSourceName, opts.MaxIdleConns, opts.MaxOpenConns, opts.ConnMaxIdleTime)
+	return fmt.Sprintf("dsn=%s, max-idle-conns=%d, max-open-conns=%d, conn-max-idle-time=%s, conn-max-lifetime=%s",
+		opts.DatabaseSourceName, opts.MaxIdleConns, opts.MaxOpenConns, opts.ConnMaxIdleTime, opts.ConnMaxLifetime)
 }
 
 func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.QueryHook) (*bun.DB, error) {
@@ -50,6 +51,9 @@ func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.Quer
 	sqldb.SetMaxIdleConns(options.MaxIdleConns)
 	if options.ConnMaxIdleTime != 0 {
 		sqldb.SetConnMaxIdleTime(options.ConnMaxIdleTime)
+	}
+	if options.ConnMaxLifetime != 0 {
+		sqldb.SetConnMaxLifetime(options.ConnMaxLifetime)
 	}
 	if options.MaxOpenConns != 0 {
 		sqldb.SetMaxOpenConns(options.MaxOpenConns)

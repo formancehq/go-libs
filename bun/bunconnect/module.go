@@ -23,6 +23,7 @@ func Module(connectionOptions ConnectionOptions, debug bool) fx.Option {
 					"max-idle-conns":         connectionOptions.MaxIdleConns,
 					"max-open-conns":         connectionOptions.MaxOpenConns,
 					"max-conn-max-idle-time": connectionOptions.ConnMaxIdleTime,
+					"conn-max-lifetime":      connectionOptions.ConnMaxLifetime,
 				}).
 				Infof("opening database connection")
 
