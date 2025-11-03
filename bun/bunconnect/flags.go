@@ -24,6 +24,7 @@ const (
 	PostgresMaxIdleConnsFlag    = "postgres-max-idle-conns"
 	PostgresMaxOpenConnsFlag    = "postgres-max-open-conns"
 	PostgresConnMaxIdleTimeFlag = "postgres-conn-max-idle-time"
+	PostgresConnMaxLifetimeFlag = "postgres-conn-max-lifetime"
 )
 
 func AddFlags(flags *pflag.FlagSet) {
@@ -31,6 +32,7 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(PostgresAWSEnableIAMFlag, false, "Enable AWS IAM authentication")
 	flags.Int(PostgresMaxIdleConnsFlag, 0, "Max Idle connections")
 	flags.Duration(PostgresConnMaxIdleTimeFlag, time.Minute, "Max Idle time for connections")
+	flags.Duration(PostgresConnMaxLifetimeFlag, 0, "Max lifetime for connections")
 	flags.Int(PostgresMaxOpenConnsFlag, 20, "Max opened connections")
 }
 
@@ -87,12 +89,14 @@ func ConnectionOptionsFromFlags(cmd *cobra.Command, opts ...Option) (*Connection
 	}
 	maxIdleConns, _ := cmd.Flags().GetInt(PostgresMaxIdleConnsFlag)
 	connMaxIdleConns, _ := cmd.Flags().GetDuration(PostgresConnMaxIdleTimeFlag)
+	connMaxLifetime, _ := cmd.Flags().GetDuration(PostgresConnMaxLifetimeFlag)
 	maxOpenConns, _ := cmd.Flags().GetInt(PostgresMaxOpenConnsFlag)
 
 	return &ConnectionOptions{
 		DatabaseSourceName: postgresUri,
 		MaxIdleConns:       maxIdleConns,
 		ConnMaxIdleTime:    connMaxIdleConns,
+		ConnMaxLifetime:    connMaxLifetime,
 		MaxOpenConns:       maxOpenConns,
 		Connector:          connector,
 	}, nil
