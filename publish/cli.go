@@ -224,6 +224,11 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 	case httpEnabled:
 		options = append(options, httpModule())
 	case natsEnabled:
+		natsConnName := queueGroup
+		clientId, _ := cmd.Flags().GetString(PublisherNatsClientIDFlag)
+		if clientId != "" {
+			natsConnName = clientId
+		}
 		natsUrl, _ := cmd.Flags().GetString(PublisherNatsURLFlag)
 		autoProvision, _ := cmd.Flags().GetBool(PublisherNatsAutoProvisionFlag)
 		maxReconnect, _ := cmd.Flags().GetInt(PublisherNatsMaxReconnectFlag)
@@ -233,7 +238,7 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 			natsUrl,
 			queueGroup,
 			autoProvision,
-			nats.Name(queueGroup),
+			nats.Name(natsConnName),
 			nats.MaxReconnects(maxReconnect),
 			nats.ReconnectWait(maxReconnectWait),
 		))
