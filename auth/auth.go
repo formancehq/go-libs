@@ -1,53 +1,39 @@
 package auth
 
 import (
-	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
+
+	"github.com/formancehq/go-libs/v3/oidc"
 
 	"github.com/formancehq/go-libs/v3/collectionutils"
 	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/hashicorp/go-retryablehttp"
-	"github.com/zitadel/oidc/v2/pkg/client/rp"
-	"github.com/zitadel/oidc/v2/pkg/oidc"
-	"github.com/zitadel/oidc/v2/pkg/op"
-	"go.uber.org/zap"
 )
 
-type jwtAuth struct {
-	httpClient          *http.Client
-	accessTokenVerifier op.AccessTokenVerifier
-
+type JWTAuth struct {
 	issuer      string
 	checkScopes bool
 	service     string
+	keySet      oidc.KeySet
 }
 
-func newOtlpHttpClient(maxRetries int) *http.Client {
-	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = maxRetries
-	return retryClient.StandardClient()
-}
-
-func newJWTAuth(
-	readKeySetMaxRetries int,
+func NewJWTAuth(
+	keySet oidc.KeySet,
 	issuer string,
 	service string,
 	checkScopes bool,
-) *jwtAuth {
-	return &jwtAuth{
-		httpClient:          newOtlpHttpClient(readKeySetMaxRetries),
-		accessTokenVerifier: nil,
-		issuer:              issuer,
-		checkScopes:         checkScopes,
-		service:             service,
+) *JWTAuth {
+	return &JWTAuth{
+		issuer:      issuer,
+		checkScopes: checkScopes,
+		service:     service,
+		keySet:      keySet,
 	}
 }
 
 // Authenticate validates the JWT in the request and returns the user, if valid.
-func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, error) {
+func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
 	logger := logging.FromContext(r.Context()).WithField("auth", "authenticate")
 	authHeader := r.Header.Get("authorization")
 	if authHeader == "" {
@@ -55,25 +41,40 @@ func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, e
 		return false, fmt.Errorf("no authorization header")
 	}
 
-	if !strings.HasPrefix(authHeader, strings.ToLower(oidc.PrefixBearer)) &&
-		!strings.HasPrefix(authHeader, oidc.PrefixBearer) {
-		logger.Error("malformed authorization header")
+	if !strings.HasPrefix(authHeader, "bearer") &&
+		!strings.HasPrefix(authHeader, "Bearer") {
 		return false, fmt.Errorf("malformed authorization header")
 	}
 
-	token := strings.TrimPrefix(authHeader, strings.ToLower(oidc.PrefixBearer))
-	token = strings.TrimPrefix(token, oidc.PrefixBearer)
+	token := authHeader[6:]
+	token = strings.TrimSpace(token)
 
-	accessTokenVerifier, err := ja.getAccessTokenVerifier(r.Context())
+	claims := &oidc.AccessTokenClaims{}
+	decrypted, err := oidc.DecryptToken(token)
 	if err != nil {
-		logger.Error("unable to create access token verifier", zap.Error(err))
-		return false, fmt.Errorf("unable to create access token verifier: %w", err)
+		return false, err
+	}
+	payload, err := oidc.ParseToken(decrypted, &claims)
+	if err != nil {
+		return false, err
 	}
 
-	claims, err := op.VerifyAccessToken[*oidc.AccessTokenClaims](r.Context(), token, accessTokenVerifier)
-	if err != nil {
-		logger.Error("unable to verify access token", zap.Error(err))
-		return false, fmt.Errorf("unable to verify access token: %w", err)
+	if err := oidc.CheckIssuer(claims, ja.issuer); err != nil {
+		return false, err
+	}
+
+	if _, err = oidc.CheckSignature(
+		r.Context(),
+		decrypted,
+		payload,
+		[]string{}, // Default to RS256
+		ja.keySet,
+	); err != nil {
+		return false, err
+	}
+
+	if err = oidc.CheckExpiration(claims, 0); err != nil {
+		return false, err
 	}
 
 	if ja.checkScopes {
@@ -82,9 +83,10 @@ func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, e
 		allowed := true
 		switch r.Method {
 		case http.MethodOptions, http.MethodGet, http.MethodHead, http.MethodTrace:
-			allowed = allowed && (collectionutils.Contains(scope, ja.service+":read") || collectionutils.Contains(scope, ja.service+":write"))
+			allowed = collectionutils.Contains(scope, ja.service+":read") ||
+				collectionutils.Contains(scope, ja.service+":write")
 		default:
-			allowed = allowed && collectionutils.Contains(scope, ja.service+":write")
+			allowed = collectionutils.Contains(scope, ja.service+":write")
 		}
 
 		if !allowed {
@@ -94,27 +96,4 @@ func (ja *jwtAuth) Authenticate(w http.ResponseWriter, r *http.Request) (bool, e
 	}
 
 	return true, nil
-}
-
-func (ja *jwtAuth) getAccessTokenVerifier(_ context.Context) (op.AccessTokenVerifier, error) {
-	if ja.accessTokenVerifier == nil {
-		//discoveryConfiguration, err := client.Discover(ja.Issuer, ja.httpClient)
-		//if err != nil {
-		//	return nil, err
-		//}
-
-		// todo: ugly quick fix
-		authServicePort := "8080"
-		if fromEnv := os.Getenv("AUTH_SERVICE_PORT"); fromEnv != "" {
-			authServicePort = fromEnv
-		}
-		keySet := rp.NewRemoteKeySet(ja.httpClient, fmt.Sprintf("http://auth:%s/keys", authServicePort))
-
-		ja.accessTokenVerifier = op.NewAccessTokenVerifier(
-			os.Getenv("STACK_PUBLIC_URL")+"/api/auth",
-			keySet,
-		)
-	}
-
-	return ja.accessTokenVerifier, nil
 }
