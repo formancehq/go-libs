@@ -22,28 +22,26 @@ type ModuleConfig struct {
 func Module(cfg ModuleConfig) fx.Option {
 	options := make([]fx.Option, 0)
 
-	options = append(options,
-		fx.Provide(func() Authenticator {
-			return NewNoAuth()
-		}),
-	)
-
 	if cfg.Enabled {
 		options = append(options,
-			fx.Provide(func() *http.Client {
-				httpClient := retryablehttp.NewClient()
-				httpClient.RetryMax = cfg.ReadKeySetMaxRetries
-				return httpClient.StandardClient()
-			}),
-			fx.Provide(func(ctx context.Context, httpClient *http.Client) (oidc.KeySet, error) {
-				discovery, err := client.Discover[oidc.DiscoveryConfiguration](ctx, cfg.Issuer, httpClient)
+			fx.Supply(http.DefaultClient),
+			fx.Provide(func(httpClient *http.Client) (oidc.KeySet, error) {
+				retryableHttpClient := retryablehttp.NewClient()
+				retryableHttpClient.RetryMax = cfg.ReadKeySetMaxRetries
+				retryableHttpClient.HTTPClient = httpClient
+
+				discovery, err := client.Discover[oidc.DiscoveryConfiguration](
+					context.Background(),
+					cfg.Issuer,
+					retryableHttpClient.StandardClient(),
+				)
 				if err != nil {
 					return nil, err
 				}
 
 				return client.NewRemoteKeySet(httpClient, discovery.JwksURI), nil
 			}),
-			fx.Decorate(func(keySet oidc.KeySet) Authenticator {
+			fx.Provide(func(keySet oidc.KeySet) Authenticator {
 				return NewJWTAuth(
 					keySet,
 					cfg.Issuer,
@@ -52,7 +50,13 @@ func Module(cfg ModuleConfig) fx.Option {
 				)
 			}),
 		)
+	} else {
+		options = append(options,
+			fx.Provide(func() Authenticator {
+				return NewNoAuth()
+			}),
+		)
 	}
 
-	return fx.Options(options...)
+	return fx.Module("auth", options...)
 }
