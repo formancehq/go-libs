@@ -1,0 +1,61 @@
+package audit
+
+import (
+	"time"
+)
+
+// Config holds the HTTP audit configuration
+type Config struct {
+	// Core settings
+	Enabled   bool   `json:"enabled"`
+	AppName   string `json:"app_name"`
+	TopicName string `json:"topic_name"`
+
+	// Body capture
+	MaxBodySize int64 `json:"max_body_size"`
+
+	// Filtering
+	ExcludedPaths []string `json:"excluded_paths"`
+
+	// Security
+	SensitiveHeaders []string `json:"sensitive_headers"`
+
+	// Publisher (Kafka or NATS, but not both)
+	Kafka *KafkaConfig `json:"kafka,omitempty"`
+	NATS  *NATSConfig  `json:"nats,omitempty"`
+}
+
+type KafkaConfig struct {
+	Broker           string `json:"broker"`
+	TLSEnabled       bool   `json:"tls_enabled"`
+	SASLEnabled      bool   `json:"sasl_enabled"`
+	SASLUsername     string `json:"sasl_username"`
+	SASLPassword     string `json:"sasl_password"`
+	SASLMechanism    string `json:"sasl_mechanism"`
+	SASLScramSHASize int    `json:"sasl_scram_sha_size"` // 256 or 512
+}
+
+type NATSConfig struct {
+	URL               string        `json:"url"`
+	ClientID          string        `json:"client_id"`
+	MaxReconnects     int           `json:"max_reconnects"`
+	MaxReconnectsWait time.Duration `json:"max_reconnects_wait"`
+}
+
+// DefaultConfig returns sensible defaults
+func DefaultConfig(appName string) Config {
+	return Config{
+		Enabled:     true,
+		AppName:     appName,
+		TopicName:   appName + "-audit",
+		MaxBodySize: 1024 * 1024, // 1MB
+		SensitiveHeaders: []string{
+			"Authorization",
+			"Cookie",
+			"Set-Cookie",
+			"X-API-Key",
+			"X-Auth-Token",
+			"Proxy-Authorization",
+		},
+	}
+}
