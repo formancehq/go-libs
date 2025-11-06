@@ -107,3 +107,24 @@ func algToKeyType(key any, alg string) bool {
 	}
 	return false
 }
+
+// testKeySet implements oidc.KeySet for testing
+type StaticKeySet struct {
+	keys []jose.JSONWebKey
+}
+
+func (t *StaticKeySet) VerifySignature(ctx context.Context, jws *jose.JSONWebSignature) ([]byte, error) {
+	keyID, alg := GetKeyIDAndAlg(jws)
+	if alg == "" {
+		alg = string(jose.RS256)
+	}
+	key, err := FindMatchingKey(keyID, KeyUseSignature, alg, t.keys...)
+	if err != nil {
+		return nil, err
+	}
+	return jws.Verify(&key)
+}
+
+func NewStaticKeySet(keys ...jose.JSONWebKey) *StaticKeySet {
+	return &StaticKeySet{keys: keys}
+}
