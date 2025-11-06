@@ -32,18 +32,18 @@ func NewJWTAuth(
 	}
 }
 
-// Authenticate validates the JWT in the request and returns the user, if valid.
-func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
+// validateToken validates and parses the JWT token, returning the claims if valid
+func (ja *JWTAuth) validateToken(r *http.Request) (*oidc.AccessTokenClaims, error) {
 	logger := logging.FromContext(r.Context()).WithField("auth", "authenticate")
 	authHeader := r.Header.Get("authorization")
 	if authHeader == "" {
 		logger.Error("no authorization header")
-		return false, fmt.Errorf("no authorization header")
+		return nil, fmt.Errorf("no authorization header")
 	}
 
 	if !strings.HasPrefix(authHeader, "bearer") &&
 		!strings.HasPrefix(authHeader, "Bearer") {
-		return false, fmt.Errorf("malformed authorization header")
+		return nil, fmt.Errorf("malformed authorization header")
 	}
 
 	token := authHeader[6:]
@@ -52,15 +52,15 @@ func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, e
 	claims := &oidc.AccessTokenClaims{}
 	decrypted, err := oidc.DecryptToken(token)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	payload, err := oidc.ParseToken(decrypted, &claims)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	if err := oidc.CheckIssuer(claims, ja.issuer); err != nil {
-		return false, err
+		return nil, err
 	}
 
 	if _, err = oidc.CheckSignature(
@@ -70,11 +70,11 @@ func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, e
 		[]string{}, // Default to RS256
 		ja.keySet,
 	); err != nil {
-		return false, err
+		return nil, err
 	}
 
 	if err = oidc.CheckExpiration(claims, 0); err != nil {
-		return false, err
+		return nil, err
 	}
 
 	if ja.checkScopes {
@@ -91,9 +91,30 @@ func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, e
 
 		if !allowed {
 			logger.Info("not enough scopes")
-			return false, fmt.Errorf("missing access, found scopes: '%s' need %s:read|write", strings.Join(scope, ", "), ja.service)
+			return nil, fmt.Errorf("missing access, found scopes: '%s' need %s:read|write", strings.Join(scope, ", "), ja.service)
 		}
 	}
 
+	return claims, nil
+}
+
+// Authenticate validates the JWT in the request and returns the user, if valid.
+// This method is kept for backwards compatibility.
+func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
+	_, err := ja.validateToken(r)
+	if err != nil {
+		return false, err
+	}
 	return true, nil
+}
+
+// AuthenticateWithClaims validates the JWT in the request and returns the claims.
+// This implements the AuthenticatorWithClaims interface, allowing downstream
+// middlewares to access validated claims from the request context.
+func (ja *JWTAuth) AuthenticateWithClaims(_ http.ResponseWriter, r *http.Request) (bool, *oidc.AccessTokenClaims, error) {
+	claims, err := ja.validateToken(r)
+	if err != nil {
+		return false, nil, err
+	}
+	return true, claims, nil
 }

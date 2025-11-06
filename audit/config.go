@@ -20,6 +20,10 @@ type Config struct {
 	// Security
 	SensitiveHeaders []string `json:"sensitive_headers"`
 
+	// DisableIdentityExtraction disables JWT identity extraction for audit logs.
+	// Set to true if you don't want to parse JWTs or if you have security concerns.
+	DisableIdentityExtraction bool `json:"disable_identity_extraction"`
+
 	// Publisher (Kafka or NATS, but not both)
 	Kafka *KafkaConfig `json:"kafka,omitempty"`
 	NATS  *NATSConfig  `json:"nats,omitempty"`
