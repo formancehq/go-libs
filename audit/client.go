@@ -232,13 +232,12 @@ func (c *Client) AuditHTTPRequest(w http.ResponseWriter, r *http.Request, next h
 }
 
 func (c *Client) publishAuditEvent(ctx context.Context, req HTTPRequest, resp HTTPResponse) {
-	// Extract identity from context (if auth middleware stored it) or JWT
-	// NOTE: ExtractIdentity tries context first (secure, validated claims),
-	// then falls back to parsing JWT if needed (for backwards compatibility).
+	// Extract identity from validated claims in context
+	// NOTE: This requires the auth middleware to run before the audit middleware
+	// and store validated claims using AuthenticatorWithClaims interface.
 	identity := ""
-	if !c.config.DisableIdentityExtraction && req.Header != nil {
-		authHeader := req.Header.Get("Authorization")
-		identity = ExtractIdentity(ctx, authHeader, c.logger)
+	if !c.config.DisableIdentityExtraction {
+		identity = ExtractIdentity(ctx, c.logger)
 	}
 
 	// Sanitize headers

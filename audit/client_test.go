@@ -63,10 +63,10 @@ func TestDisableIdentityExtraction(t *testing.T) {
 }
 
 func TestExtractIdentityFromContext(t *testing.T) {
-	// Test that ExtractIdentity prefers context claims over JWT parsing
+	// Test that ExtractIdentity reads validated claims from context
 	logger := zap.NewNop()
 
-	// Create a context with claims
+	// Create a context with claims (as stored by auth middleware)
 	claims := &oidc.AccessTokenClaims{
 		TokenClaims: oidc.TokenClaims{
 			Subject: "user-from-context",
@@ -74,26 +74,42 @@ func TestExtractIdentityFromContext(t *testing.T) {
 	}
 	ctx := context.WithValue(context.Background(), auth.ClaimsContextKey, claims)
 
-	// Call ExtractIdentity with a fake JWT in the header
-	// It should use the context claims, not parse the JWT
-	identity := audit.ExtractIdentity(ctx, "Bearer fake.jwt.token", logger)
+	// Extract identity from context
+	identity := audit.ExtractIdentity(ctx, logger)
 
 	if identity != "user-from-context" {
 		t.Errorf("expected 'user-from-context', got '%s'", identity)
 	}
 }
 
-func TestExtractIdentityFallbackToJWT(t *testing.T) {
-	// Test that ExtractIdentity falls back to JWT parsing when no context claims
+func TestExtractIdentityNoContext(t *testing.T) {
+	// Test that ExtractIdentity returns empty string when no claims in context
 	logger := zap.NewNop()
 	ctx := context.Background()
 
-	// Without context claims, it should try to parse JWT
-	// Since we're using a fake token, it should return empty string
-	identity := audit.ExtractIdentity(ctx, "Bearer fake.jwt.token", logger)
+	// Without context claims, should return empty string
+	identity := audit.ExtractIdentity(ctx, logger)
 
-	// With a fake token, we expect empty string (parsing fails gracefully)
 	if identity != "" {
-		t.Errorf("expected empty string with fake token, got '%s'", identity)
+		t.Errorf("expected empty string without context claims, got '%s'", identity)
+	}
+}
+
+func TestExtractIdentityEmptySubject(t *testing.T) {
+	// Test that ExtractIdentity returns empty string when subject is empty
+	logger := zap.NewNop()
+
+	// Create claims with empty subject
+	claims := &oidc.AccessTokenClaims{
+		TokenClaims: oidc.TokenClaims{
+			Subject: "",
+		},
+	}
+	ctx := context.WithValue(context.Background(), auth.ClaimsContextKey, claims)
+
+	identity := audit.ExtractIdentity(ctx, logger)
+
+	if identity != "" {
+		t.Errorf("expected empty string with empty subject, got '%s'", identity)
 	}
 }
