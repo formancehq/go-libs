@@ -31,6 +31,11 @@ func TestParseExpression(t *testing.T) {
 						}
 					}
 				]
+			},
+			{
+				"$in": {
+					"account": ["A", "B"]
+				}
 			}
 		]
 	}
@@ -42,12 +47,14 @@ func TestParseExpression(t *testing.T) {
 		return fmt.Sprintf("%s %s ?", key, DefaultComparisonOperatorsMapping[operator]), []any{value}, nil
 	}))
 	require.NoError(t, err)
-	require.Equal(t, "not ((account = ?) and ((balance >= ?) or (metadata[category] = ?)))", q)
-	var expected_balance big.Int
-	expected_balance.SetString("288230376151711747", 10)
+	require.Equal(t, "not ((account = ?) and ((balance >= ?) or (metadata[category] = ?)) and (account IN ?))", q)
+
+	var expectedBalance big.Int
+	expectedBalance.SetString("288230376151711747", 10)
 	require.Equal(t, []any{
 		"accounts::pending",
-		&expected_balance,
+		&expectedBalance,
 		"gold",
+		[]any{"A", "B"},
 	}, args)
 }

@@ -6,4 +6,5 @@ var DefaultComparisonOperatorsMapping = map[string]string{
 	"$gt":    ">",
 	"$lte":   "<=",
 	"$lt":    "<",
+	"$in":    "IN",
 }
