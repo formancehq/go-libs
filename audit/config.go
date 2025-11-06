@@ -19,7 +19,7 @@ type Config struct {
 	ExcludedPaths []string `json:"excluded_paths"`
 
 	// Security
-	SensitiveHeaders      []string `json:"sensitive_headers"`
+	SensitiveHeaders       []string `json:"sensitive_headers"`
 	SensitiveResponsePaths []string `json:"sensitive_response_paths"` // Paths where response body should be redacted
 
 	// DisableIdentityExtraction disables JWT identity extraction for audit logs.
