@@ -17,8 +17,9 @@ import (
 // middleware chain, otherwise this will return an empty string.
 //
 // Example middleware order:
-//   handler = authMiddleware(handler)    // First: validate JWT and store claims in context
-//   handler = auditMiddleware(handler)   // Second: read claims from context
+//
+//	handler = authMiddleware(handler)    // First: validate JWT and store claims in context
+//	handler = auditMiddleware(handler)   // Second: read claims from context
 //
 // Returns empty string if:
 // - No claims found in context (auth middleware not run or disabled)
