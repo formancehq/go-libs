@@ -32,6 +32,11 @@ type Client struct {
 
 // NewClient creates a new audit client
 func NewClient(cfg Config, logger *zap.Logger) (*Client, error) {
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	client := &Client{
 		config: cfg,
 		logger: logger,
@@ -51,27 +56,26 @@ func NewClient(cfg Config, logger *zap.Logger) (*Client, error) {
 		if err := client.setupNATSPublisher(); err != nil {
 			return nil, err
 		}
-	} else if cfg.Enabled {
-		logger.Warn("audit is enabled but no publisher is configured (kafka or nats)")
 	}
 
 	return client, nil
 }
 
 func (c *Client) setupKafkaPublisher() error {
-	options := []publish.SaramaOption{
-		publish.WithSASLCredentials(
-			c.config.Kafka.SASLUsername,
-			c.config.Kafka.SASLPassword,
-		),
-	}
+	options := []publish.SaramaOption{}
 
 	if c.config.Kafka.TLSEnabled {
 		options = append(options, publish.WithTLS())
 	}
 
 	if c.config.Kafka.SASLEnabled {
-		options = append(options, publish.WithSASLMechanism(sarama.SASLMechanism(c.config.Kafka.SASLMechanism)))
+		options = append(options,
+			publish.WithSASLCredentials(
+				c.config.Kafka.SASLUsername,
+				c.config.Kafka.SASLPassword,
+			),
+			publish.WithSASLMechanism(sarama.SASLMechanism(c.config.Kafka.SASLMechanism)),
+		)
 
 		// Validate SHA size
 		if c.config.Kafka.SASLScramSHASize != 256 && c.config.Kafka.SASLScramSHASize != 512 {
@@ -203,7 +207,7 @@ func (c *Client) AuditHTTPRequest(w http.ResponseWriter, r *http.Request, next h
 		body, err = io.ReadAll(r.Body)
 	}
 
-	if err != nil && !errors.Is(err, io.EOF) {
+	if err != nil {
 		c.logger.Error("failed to read request body", zap.Error(err))
 	}
 
@@ -240,14 +244,22 @@ func (c *Client) publishAuditEvent(ctx context.Context, req HTTPRequest, resp HT
 		identity = ExtractIdentity(ctx, c.logger)
 	}
 
-	// Sanitize headers
+	// Sanitize request headers
 	if req.Header != nil {
 		req.Header = SanitizeHeaders(req.Header, c.config.SensitiveHeaders)
 	}
 
-	// Remove response body for sensitive endpoints
-	if req.Path == "/api/auth/oauth/token" {
-		resp.Body = ""
+	// Sanitize response headers
+	if resp.Headers != nil {
+		resp.Headers = SanitizeHeaders(resp.Headers, c.config.SensitiveHeaders)
+	}
+
+	// Remove response body for sensitive paths
+	for _, sensitivePath := range c.config.SensitiveResponsePaths {
+		if req.Path == sensitivePath {
+			resp.Body = ""
+			break
+		}
 	}
 
 	// Create payload

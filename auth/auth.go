@@ -41,13 +41,14 @@ func (ja *JWTAuth) validateToken(r *http.Request) (*oidc.AccessTokenClaims, erro
 		return nil, fmt.Errorf("no authorization header")
 	}
 
-	if !strings.HasPrefix(authHeader, "bearer") &&
-		!strings.HasPrefix(authHeader, "Bearer") {
+	// Extract token using case-insensitive "Bearer " prefix check
+	const bearerPrefix = "bearer "
+	if len(authHeader) < len(bearerPrefix) ||
+		!strings.EqualFold(authHeader[:len(bearerPrefix)], bearerPrefix) {
 		return nil, fmt.Errorf("malformed authorization header")
 	}
 
-	token := authHeader[6:]
-	token = strings.TrimSpace(token)
+	token := strings.TrimSpace(authHeader[len(bearerPrefix):])
 
 	claims := &oidc.AccessTokenClaims{}
 	decrypted, err := oidc.DecryptToken(token)

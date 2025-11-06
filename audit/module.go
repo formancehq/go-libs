@@ -36,6 +36,13 @@ func Module(cfg ModuleConfig) fx.Option {
 				disabledCfg.Enabled = false
 				return NewClient(disabledCfg, logger)
 			}),
+			fx.Invoke(func(lc fx.Lifecycle, client *Client) {
+				lc.Append(fx.Hook{
+					OnStop: func(ctx context.Context) error {
+						return client.Close()
+					},
+				})
+			}),
 		)
 	}
 

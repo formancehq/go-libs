@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"errors"
 	"time"
 )
 
@@ -18,7 +19,8 @@ type Config struct {
 	ExcludedPaths []string `json:"excluded_paths"`
 
 	// Security
-	SensitiveHeaders []string `json:"sensitive_headers"`
+	SensitiveHeaders      []string `json:"sensitive_headers"`
+	SensitiveResponsePaths []string `json:"sensitive_response_paths"` // Paths where response body should be redacted
 
 	// DisableIdentityExtraction disables JWT identity extraction for audit logs.
 	// Set to true if you don't want to parse JWTs or if you have security concerns.
@@ -62,4 +64,24 @@ func DefaultConfig(appName string) Config {
 			"Proxy-Authorization",
 		},
 	}
+}
+
+// Validate checks the configuration for common errors
+func (c Config) Validate() error {
+	// If audit is disabled, no further validation needed
+	if !c.Enabled {
+		return nil
+	}
+
+	// Check for mutual exclusivity: Kafka and NATS cannot both be configured
+	if c.Kafka != nil && c.NATS != nil {
+		return errors.New("cannot configure both Kafka and NATS publishers simultaneously")
+	}
+
+	// At least one publisher must be configured when audit is enabled
+	if c.Kafka == nil && c.NATS == nil {
+		return errors.New("audit is enabled but no publisher is configured (kafka or nats)")
+	}
+
+	return nil
 }
