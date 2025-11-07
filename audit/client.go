@@ -200,12 +200,12 @@ func (c *Client) AuditHTTPRequest(w http.ResponseWriter, r *http.Request, next h
 	// Read body with size limit
 	var body []byte
 	var err error
-	if c.config.MaxBodySize > 0 {
-		limitedReader := io.LimitReader(r.Body, c.config.MaxBodySize)
-		body, err = io.ReadAll(limitedReader)
-	} else {
-		body, err = io.ReadAll(r.Body)
+	bodySize := c.config.MaxBodySize
+	if bodySize <= 0 {
+		bodySize = 10 * 1024 * 1024 // 10MB default limit
 	}
+	limitedReader := io.LimitReader(r.Body, bodySize)
+	body, err = io.ReadAll(limitedReader)
 
 	if err != nil {
 		c.logger.Error("failed to read request body", zap.Error(err))

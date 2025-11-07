@@ -18,14 +18,15 @@ import (
 // PublisherClient wraps an existing message.Publisher to send audit logs
 // This avoids creating a separate Kafka/NATS connection and reuses the application's publisher
 type PublisherClient struct {
-	publisher        message.Publisher
-	topic            string
-	appName          string
-	maxBodySize      int64
-	excludedPaths    []string
-	sensitiveHeaders []string
-	logger           logging.Logger
-	bufPool          *sync.Pool
+	publisher              message.Publisher
+	topic                  string
+	appName                string
+	maxBodySize            int64
+	excludedPaths          []string
+	sensitiveHeaders       []string
+	sensitiveResponsePaths []string
+	logger                 logging.Logger
+	bufPool                *sync.Pool
 }
 
 // NewClientWithPublisher creates an audit client using an existing publisher
@@ -38,16 +39,18 @@ func NewClientWithPublisher(
 	maxBodySize int64,
 	excludedPaths []string,
 	sensitiveHeaders []string,
+	sensitiveResponsePaths []string,
 	logger logging.Logger,
 ) *PublisherClient {
 	return &PublisherClient{
-		publisher:        publisher,
-		topic:            topic,
-		appName:          appName,
-		maxBodySize:      maxBodySize,
-		excludedPaths:    excludedPaths,
-		sensitiveHeaders: sensitiveHeaders,
-		logger:           logger,
+		publisher:              publisher,
+		topic:                  topic,
+		appName:                appName,
+		maxBodySize:            maxBodySize,
+		excludedPaths:          excludedPaths,
+		sensitiveHeaders:       sensitiveHeaders,
+		sensitiveResponsePaths: sensitiveResponsePaths,
+		logger:                 logger,
 		bufPool: &sync.Pool{
 			New: func() any {
 				return new(bytes.Buffer)
@@ -78,14 +81,14 @@ func (c *PublisherClient) AuditHTTPRequest(w http.ResponseWriter, r *http.Reques
 	// Read body with size limit
 	var body []byte
 	var err error
-	if c.maxBodySize > 0 {
-		limitedReader := io.LimitReader(r.Body, c.maxBodySize)
-		body, err = io.ReadAll(limitedReader)
-	} else {
-		body, err = io.ReadAll(r.Body)
+	bodySize := c.maxBodySize
+	if bodySize <= 0 {
+		bodySize = 10 * 1024 * 1024 // 10MB default limit
 	}
+	limitedReader := io.LimitReader(r.Body, bodySize)
+	body, err = io.ReadAll(limitedReader)
 
-	if err != nil && err != io.EOF {
+	if err != nil {
 		c.logger.Errorf("failed to read request body: %v", err)
 	}
 
@@ -100,7 +103,7 @@ func (c *PublisherClient) AuditHTTPRequest(w http.ResponseWriter, r *http.Reques
 	buf.Reset()
 	defer c.bufPool.Put(buf)
 
-	rww := NewResponseWriterWrapper(w, buf, c.logger)
+	rww := NewResponseWriterWrapper(w, buf, c.logger, c.maxBodySize)
 	next.ServeHTTP(rww, r)
 
 	response := HTTPResponse{
@@ -124,6 +127,16 @@ func (c *PublisherClient) publishAuditEvent(ctx context.Context, req HTTPRequest
 	}
 	if resp.Headers != nil {
 		resp.Headers = SanitizeHeaders(resp.Headers, c.sensitiveHeaders)
+	}
+
+	// If the request path is in sensitiveResponsePaths, redact the response body
+	if len(c.sensitiveResponsePaths) > 0 {
+		for _, p := range c.sensitiveResponsePaths {
+			if req.Path == p {
+				resp.Body = "[REDACTED]"
+				break
+			}
+		}
 	}
 
 	// Create payload
@@ -166,28 +179,50 @@ func (c *PublisherClient) Close() error {
 // ResponseWriterWrapper wraps http.ResponseWriter to capture response
 type ResponseWriterWrapper struct {
 	http.ResponseWriter
-	Body       *bytes.Buffer
-	StatusCode *int
-	logger     logging.Logger
+	Body          *bytes.Buffer
+	StatusCode    *int
+	logger        logging.Logger
+	maxBodySize   int64
+	capturedBytes int64
+	truncated     bool
 }
 
 // NewResponseWriterWrapper creates a new ResponseWriterWrapper
-func NewResponseWriterWrapper(w http.ResponseWriter, buf *bytes.Buffer, logger logging.Logger) *ResponseWriterWrapper {
+func NewResponseWriterWrapper(w http.ResponseWriter, buf *bytes.Buffer, logger logging.Logger, maxBodySize int64) *ResponseWriterWrapper {
 	defaultStatus := http.StatusOK
 	return &ResponseWriterWrapper{
 		ResponseWriter: w,
 		Body:           buf,
 		StatusCode:     &defaultStatus,
 		logger:         logger,
+		maxBodySize:    maxBodySize,
+		capturedBytes:  0,
+		truncated:      false,
 	}
 }
 
 // Write writes the data to the connection and captures it
 func (w *ResponseWriterWrapper) Write(b []byte) (int, error) {
-	// Capture to buffer for audit logging
-	if _, err := w.Body.Write(b); err != nil {
-		// Log the error but continue - audit capture failure shouldn't break the response
-		w.logger.Errorf("failed to capture response body for audit: %v", err)
+	// Capture to buffer for audit logging with size limit
+	if w.maxBodySize > 0 && !w.truncated {
+		remainingCapacity := w.maxBodySize - w.capturedBytes
+		if remainingCapacity > 0 {
+			bytesToCapture := int64(len(b))
+			if bytesToCapture > remainingCapacity {
+				bytesToCapture = remainingCapacity
+				w.truncated = true
+			}
+
+			if _, err := w.Body.Write(b[:bytesToCapture]); err != nil {
+				// Log the error but continue - audit capture failure shouldn't break the response
+				w.logger.Errorf("failed to capture response body for audit: %v", err)
+			}
+			w.capturedBytes += bytesToCapture
+
+			if w.truncated {
+				w.Body.WriteString("... [truncated]")
+			}
+		}
 	}
 
 	// Write to actual response writer

@@ -67,6 +67,8 @@ func ModuleWithPublisher(cfg ModuleWithPublisherConfig) fx.Option {
 				cfg.MaxBodySize,
 				cfg.ExcludedPaths,
 				cfg.SensitiveHeaders,
+				// No sensitive response paths configured here by default
+				nil,
 				logger,
 			)
 
