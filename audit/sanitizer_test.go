@@ -10,12 +10,12 @@ import (
 // TestSanitizeHeaders tests the critical security feature of header sanitization
 func TestSanitizeHeaders(t *testing.T) {
 	tests := []struct {
-		name              string
-		input             http.Header
-		sensitiveHeaders  []string
-		expectedPresent   []string
-		expectedAbsent    []string
-		testDeepCopy      bool
+		name             string
+		input            http.Header
+		sensitiveHeaders []string
+		expectedPresent  []string
+		expectedAbsent   []string
+		testDeepCopy     bool
 	}{
 		{
 			name: "should remove authorization header",
@@ -30,11 +30,11 @@ func TestSanitizeHeaders(t *testing.T) {
 		{
 			name: "should remove multiple sensitive headers",
 			input: http.Header{
-				"Authorization":       []string{"Bearer token"},
-				"Cookie":              []string{"session=abc123"},
-				"X-Api-Key":           []string{"secret-key"},
-				"Content-Type":        []string{"application/json"},
-				"X-Request-Id":        []string{"req-123"},
+				"Authorization": []string{"Bearer token"},
+				"Cookie":        []string{"session=abc123"},
+				"X-Api-Key":     []string{"secret-key"},
+				"Content-Type":  []string{"application/json"},
+				"X-Request-Id":  []string{"req-123"},
 			},
 			sensitiveHeaders: []string{"Authorization", "Cookie", "X-Api-Key"},
 			expectedPresent:  []string{"Content-Type", "X-Request-Id"},

@@ -5,14 +5,17 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 )
 
-// ModuleWithPublisherConfig holds minimal configuration for audit module
-// The publisher and most settings are auto-detected from CLI flags
+// ModuleWithPublisherConfig holds configuration for audit module
 type ModuleWithPublisherConfig struct {
-	AppName string // Application name (e.g., "ledger", "payments", "wallets")
+	AppName          string   // Application name (e.g., "ledger", "payments", "wallets")
+	Enabled          bool     // Enable audit logging
+	Topic            string   // Audit topic name (e.g., "organization-stack.audit")
+	MaxBodySize      int64    // Maximum request/response body size to capture
+	ExcludedPaths    []string // HTTP paths to exclude from auditing
+	SensitiveHeaders []string // HTTP headers to sanitize
 }
 
 // ModuleWithPublisher creates an Fx module for audit that reuses the existing publisher
@@ -48,40 +51,28 @@ type ModuleWithPublisherConfig struct {
 func ModuleWithPublisher(cfg ModuleWithPublisherConfig) fx.Option {
 	return fx.Module("audit",
 		fx.Provide(func(
-			cmd *cobra.Command,
 			publisher message.Publisher,
 			logger logging.Logger,
 		) (*PublisherClient, error) {
-			// Load audit configuration from flags
-			enabled, _ := cmd.Flags().GetBool(AuditEnabledFlag)
-
 			// If audit is disabled, return nil (will be optional in DI)
-			if !enabled {
+			if !cfg.Enabled {
 				return nil, nil
 			}
-
-			// Load other settings from flags
-			maxBodySize, _ := cmd.Flags().GetInt64(AuditMaxBodySizeFlag)
-			excludedPaths, _ := cmd.Flags().GetStringSlice(AuditExcludedPathsFlag)
-			sensitiveHeaders, _ := cmd.Flags().GetStringSlice(AuditSensitiveHeadersFlag)
-
-			// Auto-detect audit topic from publisher wildcard mapping
-			auditTopic := BuildAuditTopic(cmd)
 
 			// Create client with existing publisher
 			client := NewClientWithPublisher(
 				publisher,
-				auditTopic,
+				cfg.Topic,
 				cfg.AppName,
-				maxBodySize,
-				excludedPaths,
-				sensitiveHeaders,
+				cfg.MaxBodySize,
+				cfg.ExcludedPaths,
+				cfg.SensitiveHeaders,
 				logger,
 			)
 
 			// Log audit configuration at startup
 			logger.Infof("Audit logging enabled (topic=%s, max-body-size=%d, excluded-paths=%d)",
-				auditTopic, maxBodySize, len(excludedPaths))
+				cfg.Topic, cfg.MaxBodySize, len(cfg.ExcludedPaths))
 
 			return client, nil
 		}),

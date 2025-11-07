@@ -95,7 +95,7 @@ func TestMiddlewareExcludedPaths(t *testing.T) {
 	})
 
 	tests := []struct {
-		path          string
+		path            string
 		shouldBeAudited bool
 	}{
 		{"/health", false},
@@ -242,8 +242,8 @@ func TestMiddlewareSensitiveResponsePaths(t *testing.T) {
 	})
 
 	tests := []struct {
-		path                string
-		shouldRedactBody    bool
+		path             string
+		shouldRedactBody bool
 	}{
 		{"/api/auth/token", true},
 		{"/api/secrets", true},
