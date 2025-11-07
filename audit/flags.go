@@ -17,8 +17,8 @@ const (
 func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(AuditEnabledFlag, false, "Enable HTTP audit logging")
 	flags.Int64(AuditMaxBodySizeFlag, 1024*1024, "Maximum request/response body size to capture in bytes (default 1MB)")
-	flags.StringSlice(AuditExcludedPathsFlag, []string{"/_healthcheck", "/_/healthcheck", "/_/info"}, "HTTP paths to exclude from audit logging")
-	flags.StringSlice(AuditSensitiveHeadersFlag, []string{"Authorization", "Cookie", "Set-Cookie", "X-API-Key", "X-Auth-Token", "Proxy-Authorization"}, "HTTP headers to sanitize in audit logs")
+	flags.StringSlice(AuditExcludedPathsFlag, DefaultExcludedPaths(), "HTTP paths to exclude from audit logging")
+	flags.StringSlice(AuditSensitiveHeadersFlag, DefaultSensitiveHeaders(), "HTTP headers to sanitize in audit logs")
 }
 
 // DefaultExcludedPaths returns the default list of paths to exclude from auditing
