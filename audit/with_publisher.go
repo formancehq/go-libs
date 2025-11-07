@@ -100,7 +100,7 @@ func (c *PublisherClient) AuditHTTPRequest(w http.ResponseWriter, r *http.Reques
 	buf.Reset()
 	defer c.bufPool.Put(buf)
 
-	rww := NewResponseWriterWrapper(w, buf)
+	rww := NewResponseWriterWrapper(w, buf, c.logger)
 	next.ServeHTTP(rww, r)
 
 	response := HTTPResponse{
@@ -168,21 +168,29 @@ type ResponseWriterWrapper struct {
 	http.ResponseWriter
 	Body       *bytes.Buffer
 	StatusCode *int
+	logger     logging.Logger
 }
 
 // NewResponseWriterWrapper creates a new ResponseWriterWrapper
-func NewResponseWriterWrapper(w http.ResponseWriter, buf *bytes.Buffer) *ResponseWriterWrapper {
+func NewResponseWriterWrapper(w http.ResponseWriter, buf *bytes.Buffer, logger logging.Logger) *ResponseWriterWrapper {
 	defaultStatus := http.StatusOK
 	return &ResponseWriterWrapper{
 		ResponseWriter: w,
 		Body:           buf,
 		StatusCode:     &defaultStatus,
+		logger:         logger,
 	}
 }
 
 // Write writes the data to the connection and captures it
 func (w *ResponseWriterWrapper) Write(b []byte) (int, error) {
-	w.Body.Write(b)
+	// Capture to buffer for audit logging
+	if _, err := w.Body.Write(b); err != nil {
+		// Log the error but continue - audit capture failure shouldn't break the response
+		w.logger.Errorf("failed to capture response body for audit: %v", err)
+	}
+
+	// Write to actual response writer
 	return w.ResponseWriter.Write(b)
 }
 

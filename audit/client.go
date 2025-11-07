@@ -222,7 +222,7 @@ func (c *Client) AuditHTTPRequest(w http.ResponseWriter, r *http.Request, next h
 	buf.Reset()
 	defer c.bufPool.Put(buf)
 
-	rww := internal.NewResponseWriterWrapper(w, buf)
+	rww := internal.NewResponseWriterWrapper(w, buf, c.logger)
 	next.ServeHTTP(rww, r)
 
 	response := HTTPResponse{

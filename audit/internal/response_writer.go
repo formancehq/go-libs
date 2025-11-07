@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"net"
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
 // ResponseWriterWrapper captures the response body and status code for audit logging
@@ -12,20 +14,28 @@ type ResponseWriterWrapper struct {
 	http.ResponseWriter
 	Body       *bytes.Buffer
 	StatusCode *int
+	logger     *zap.Logger
 }
 
 // NewResponseWriterWrapper creates a wrapper for http.ResponseWriter
-func NewResponseWriterWrapper(w http.ResponseWriter, buf *bytes.Buffer) *ResponseWriterWrapper {
+func NewResponseWriterWrapper(w http.ResponseWriter, buf *bytes.Buffer, logger *zap.Logger) *ResponseWriterWrapper {
 	statusCode := 200
 	return &ResponseWriterWrapper{
 		ResponseWriter: w,
 		Body:           buf,
 		StatusCode:     &statusCode,
+		logger:         logger,
 	}
 }
 
 func (rww *ResponseWriterWrapper) Write(buf []byte) (int, error) {
-	rww.Body.Write(buf)
+	// Capture to buffer for audit logging
+	if _, err := rww.Body.Write(buf); err != nil {
+		// Log the error but continue - audit capture failure shouldn't break the response
+		rww.logger.Error("failed to capture response body for audit", zap.Error(err))
+	}
+
+	// Write to actual response writer
 	return rww.ResponseWriter.Write(buf)
 }
 

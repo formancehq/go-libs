@@ -54,16 +54,9 @@ func BuildAuditTopic(cmd *cobra.Command) string {
 func BuildAuditTopicFromMapping(mapping string) string {
 	parts := strings.SplitN(mapping, ":", 2)
 
-	// If mapping has wildcard format, extract the value
+	// If mapping has colon format, extract and use the value part
 	if len(parts) == 2 {
-		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
-
-		if key == "*" {
-			return deriveAuditTopic(value)
-		}
-
-		// If not wildcard, treat the value as base topic
 		return deriveAuditTopic(value)
 	}
 
@@ -73,6 +66,7 @@ func BuildAuditTopicFromMapping(mapping string) string {
 
 // deriveAuditTopic replaces the last segment after a separator with "audit"
 // Handles multiple separator types: ".", "-", "_"
+// Separators at index 0 (e.g., ".ledger") are handled and will be replaced to produce ".audit"
 func deriveAuditTopic(baseTopic string) string {
 	separators := []string{".", "-", "_"}
 	lastIndex := -1
@@ -86,8 +80,8 @@ func deriveAuditTopic(baseTopic string) string {
 		}
 	}
 
-	// If a separator was found, replace the last segment
-	if lastIndex > 0 {
+	// If a separator was found (including at index 0), replace the last segment
+	if lastIndex >= 0 {
 		return baseTopic[:lastIndex] + lastSep + "audit"
 	}
 
