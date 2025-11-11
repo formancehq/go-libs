@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/logging"
-
 	"github.com/uptrace/bun"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 type QueryHook struct {

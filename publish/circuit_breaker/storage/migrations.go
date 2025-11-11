@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/formancehq/go-libs/v3/migrations"
 	"github.com/uptrace/bun"
+
+	"github.com/formancehq/go-libs/v3/migrations"
 )
 
 func registerMigrations(migrator *migrations.Migrator, schema string) {

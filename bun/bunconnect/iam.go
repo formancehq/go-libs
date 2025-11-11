@@ -5,18 +5,17 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	"github.com/formancehq/go-libs/v3/otlp"
-	"go.opentelemetry.io/otel"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
-	"github.com/formancehq/go-libs/v3/logging"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pkg/errors"
 	"github.com/xo/dburl"
+	"go.opentelemetry.io/otel"
+
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/otlp"
 )
 
 var tracer = otel.Tracer("github.com/formancehq/go-libs/v3/bun/bunconnect")

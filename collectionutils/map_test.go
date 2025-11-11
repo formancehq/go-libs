@@ -3,8 +3,9 @@ package collectionutils_test
 import (
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/collectionutils"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/collectionutils"
 )
 
 func TestKeys(t *testing.T) {

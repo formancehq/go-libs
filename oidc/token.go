@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/formancehq/go-libs/v3/time"
-
 	"github.com/go-jose/go-jose/v4"
+	"github.com/muhlemmer/gu"
+	"github.com/zitadel/oidc/v3/pkg/crypto"
 	"golang.org/x/oauth2"
 
-	"github.com/muhlemmer/gu"
-
-	"github.com/zitadel/oidc/v3/pkg/crypto"
+	"github.com/formancehq/go-libs/v3/time"
 )
 
 const (
@@ -252,7 +250,7 @@ func (j *JWTProfileAssertionClaims) UnmarshalJSON(data []byte) error {
 }
 
 func NewJWTProfileAssertionFromKeyJSON(filename string, audience []string, opts ...AssertionOption) (*JWTProfileAssertionClaims, error) {
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) //nolint:gosec
 	if err != nil {
 		return nil, err
 	}

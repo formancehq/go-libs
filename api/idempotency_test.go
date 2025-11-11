@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/api"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/api"
 )
 
 func TestIdempotencyKeyFromRequest(t *testing.T) {

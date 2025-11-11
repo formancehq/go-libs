@@ -11,11 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 // Mock logger

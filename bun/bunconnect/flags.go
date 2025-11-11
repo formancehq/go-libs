@@ -6,16 +6,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/formancehq/go-libs/v3/aws/iam"
 	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/spf13/pflag"
 )
 
 const (

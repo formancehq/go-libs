@@ -9,11 +9,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/formancehq/go-libs/v3/time"
-
 	jose "github.com/go-jose/go-jose/v4"
-
 	str "github.com/zitadel/oidc/v3/pkg/strings"
+
+	"github.com/formancehq/go-libs/v3/time"
 )
 
 type Claims interface {

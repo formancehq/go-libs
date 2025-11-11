@@ -1,9 +1,10 @@
 package pgtesting
 
 import (
+	. "github.com/onsi/ginkgo/v2"
+
 	"github.com/formancehq/go-libs/v3/testing/deferred"
 	. "github.com/formancehq/go-libs/v3/testing/docker/ginkgo"
-	. "github.com/onsi/ginkgo/v2"
 )
 
 func WithNewPostgresServer(fn func(p *deferred.Deferred[*PostgresServer])) bool {

@@ -5,10 +5,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/queue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/queue"
 )
 
 func TestNewListenerWorkerCount(t *testing.T) {

@@ -1,12 +1,12 @@
 package bunmigrate
 
 import (
-	"github.com/formancehq/go-libs/v3/bun/bunconnect"
+	// Import the postgres driver.
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
 	"github.com/uptrace/bun"
 
-	// Import the postgres driver.
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/formancehq/go-libs/v3/bun/bunconnect"
 )
 
 type Executor func(cmd *cobra.Command, args []string, db *bun.DB) error

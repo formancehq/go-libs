@@ -8,9 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/health"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/health"
 )
 
 func TestHealthController(t *testing.T) {

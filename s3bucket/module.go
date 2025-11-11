@@ -1,10 +1,11 @@
 package s3bucket
 
 import (
-	"github.com/formancehq/go-libs/v3/aws/iam"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/aws/iam"
 )
 
 const (

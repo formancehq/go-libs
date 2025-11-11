@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/formancehq/go-libs/v3/testing/deferred"
-
 	"github.com/formancehq/go-libs/v3/publish"
+	"github.com/formancehq/go-libs/v3/testing/deferred"
 )
 
 func NatsInstrumentation(url *deferred.Deferred[string]) Instrumentation {

@@ -7,14 +7,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/otlp"
-
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/otlp"
 )
 
 func TestOTLPTracesModule(t *testing.T) {

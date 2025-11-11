@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/formancehq/go-libs/v3/bun/bunpaginate"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/bun/bunpaginate"
 )
 
 func Encode(t require.TestingT, v interface{}) []byte {

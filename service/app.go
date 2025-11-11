@@ -6,16 +6,14 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/dig"
-
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/formancehq/go-libs/v3/otlp/otlptraces"
+	"go.uber.org/dig"
+	"go.uber.org/fx"
 
 	"github.com/formancehq/go-libs/v3/errorsutils"
 	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
+	"github.com/formancehq/go-libs/v3/otlp/otlptraces"
 )
 
 const (

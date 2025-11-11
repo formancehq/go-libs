@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/errorsutils"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/errorsutils"
 )
 
 func TestErrorWithExitCode(t *testing.T) {

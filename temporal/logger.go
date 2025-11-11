@@ -1,8 +1,9 @@
 package temporal
 
 import (
-	"github.com/formancehq/go-libs/v3/logging"
 	"go.temporal.io/sdk/log"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 func keyvalsToMap(keyvals ...interface{}) map[string]any {

@@ -5,17 +5,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/pflag"
-
 	"github.com/IBM/sarama"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/nats-io/nats.go"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/xdg-go/scram"
+	"go.uber.org/fx"
+
 	"github.com/formancehq/go-libs/v3/aws/iam"
 	circuitbreaker "github.com/formancehq/go-libs/v3/publish/circuit_breaker"
 	topicmapper "github.com/formancehq/go-libs/v3/publish/topic_mapper"
-	"github.com/nats-io/nats.go"
-	"github.com/spf13/cobra"
-	"github.com/xdg-go/scram"
-	"go.uber.org/fx"
 )
 
 const (

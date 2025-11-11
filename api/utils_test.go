@@ -10,10 +10,11 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/formancehq/go-libs/v3/api"
 	"github.com/formancehq/go-libs/v3/bun/bunpaginate"
 	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/stretchr/testify/require"
 )
 
 func TestWriteErrorResponse(t *testing.T) {

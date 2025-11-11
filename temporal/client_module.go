@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -17,6 +16,8 @@ import (
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 type SearchAttributes struct {

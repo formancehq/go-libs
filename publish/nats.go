@@ -7,10 +7,11 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	wNats "github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 func NewNatsConn(config wNats.PublisherConfig) (*nats.Conn, error) {
@@ -127,7 +128,7 @@ func NewNatsDefaultCallbacks(logger logging.Logger, shutdowner fx.Shutdowner) NA
 
 func (c *NatsDefaultCallbacks) ClosedCB(nc *nats.Conn) {
 	c.logger.Infof("nats connection closed: %s", nc.Opts.Name)
-	c.shutdowner.Shutdown()
+	_ = c.shutdowner.Shutdown()
 }
 
 func (c *NatsDefaultCallbacks) DisconnectedCB(nc *nats.Conn) {

@@ -8,11 +8,12 @@ import (
 	"testing"
 	stdtime "time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/stretchr/testify/require"
+
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/formancehq/go-libs/v3/oidc"
 	libtime "github.com/formancehq/go-libs/v3/time"
-	"github.com/go-jose/go-jose/v4"
-	"github.com/stretchr/testify/require"
 )
 
 func setupTestKeySet(t *testing.T) (oidc.KeySet, *rsa.PrivateKey, string) {

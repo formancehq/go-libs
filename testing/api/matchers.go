@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/formancehq/go-libs/v3/api"
 	"github.com/onsi/gomega/types"
 	"github.com/pkg/errors"
+
+	"github.com/formancehq/go-libs/v3/api"
 )
 
 type HaveErrorCodeMatcher struct {

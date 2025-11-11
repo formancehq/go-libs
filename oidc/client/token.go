@@ -4,10 +4,11 @@ import (
 	"context"
 	"net/http"
 
+	"golang.org/x/oauth2"
+
 	"github.com/formancehq/go-libs/v3/oidc"
 	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
 	"github.com/formancehq/go-libs/v3/time"
-	"golang.org/x/oauth2"
 )
 
 type TokenEndpointCaller interface {

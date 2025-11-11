@@ -4,8 +4,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/collectionutils"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/collectionutils"
 )
 
 func TestLinkedList(t *testing.T) {

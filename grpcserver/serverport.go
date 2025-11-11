@@ -3,10 +3,11 @@ package grpcserver
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/serverport"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/serverport"
 )
 
 const serverPortDiscr = "grpc"

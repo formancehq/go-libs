@@ -7,15 +7,13 @@ import (
 	"time"
 
 	"github.com/ClickHouse/ch-go/proto"
-	"github.com/google/uuid"
-
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/ory/dockertest/v3"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v3/testing/docker"
-
-	"github.com/stretchr/testify/require"
 )
 
 type TestingT interface {

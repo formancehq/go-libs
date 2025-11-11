@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 func TestHcLogAdapterHook(t *testing.T) {

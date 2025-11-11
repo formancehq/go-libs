@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	libtime "github.com/formancehq/go-libs/v3/time"
 	"github.com/uptrace/bun"
+
+	libtime "github.com/formancehq/go-libs/v3/time"
 )
 
 func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,

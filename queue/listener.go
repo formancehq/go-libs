@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+
 	"github.com/formancehq/go-libs/v3/logging"
 )
 

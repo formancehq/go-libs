@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/hashicorp/go-retryablehttp"
+	"go.uber.org/fx"
 
 	"github.com/formancehq/go-libs/v3/oidc"
 	"github.com/formancehq/go-libs/v3/oidc/client"
-	"go.uber.org/fx"
 )
 
 type ModuleConfig struct {

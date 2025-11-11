@@ -8,11 +8,11 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/logging"
-
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/extra/bunotel"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 type ConnectionOptions struct {
