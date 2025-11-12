@@ -47,6 +47,7 @@ const (
 	PublisherNatsMaxReconnectFlag  = "publisher-nats-max-reconnect"
 	PublisherNatsReconnectWaitFlag = "publisher-nats-reconnect-wait"
 	PublisherNatsAutoProvisionFlag = "publisher-nats-auto-provision"
+	PublisherNatsNkeyFileFlag      = "publisher-nats-nkey-file"
 	// SQS Listener configuration
 	SubscriberSqsEnabledFlag          = "subscriber-sqs-enabled"
 	SubscriberSqsEndpointOverrideFlag = "subscriber-sqs-endpoint-override"
@@ -138,7 +139,7 @@ func AddFlags(serviceName string, flags *pflag.FlagSet, options ...func(*ConfigD
 
 	// KAFKA
 	flags.Bool(PublisherKafkaEnabledFlag, values.PublisherKafkaEnabled, "Publish write events to kafka")
-	flags.StringSlice(PublisherKafkaBrokerFlag, values.PublisherKafkaBroker, "Kafka address is kafka enabled")
+	flags.StringSlice(PublisherKafkaBrokerFlag, values.PublisherKafkaBroker, "Kafka address if kafka enabled")
 	flags.Bool(PublisherKafkaSASLEnabledFlag, values.PublisherKafkaSASLEnabled, "Enable SASL authentication on kafka publisher")
 	flags.Bool(PublisherKafkaSASLIAMEnabledFlag, values.PublisherKafkaSASLIAMEnabled, "Enable IAM authentication on kafka publisher")
 	flags.String(PublisherKafkaSASLIAMSessionNameFlag, values.PublisherKafkaSASLIAMSessionName, "IAM session name")
@@ -174,6 +175,7 @@ func InitNatsCLIFlags(flags *pflag.FlagSet, serviceName string, options ...func(
 	flags.Duration(PublisherNatsReconnectWaitFlag, values.PublisherNatsReconnectWait, "Nats: the wait time between reconnect attempts.")
 	flags.String(PublisherNatsURLFlag, values.PublisherNatsURL, "Nats url")
 	flags.Bool(PublisherNatsAutoProvisionFlag, true, "Auto create streams")
+	flags.StringArray(PublisherNatsNkeyFileFlag, []string{}, "Nats: nkey file (can be used multiple times)")
 }
 
 func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
@@ -233,14 +235,27 @@ func FXModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
 		autoProvision, _ := cmd.Flags().GetBool(PublisherNatsAutoProvisionFlag)
 		maxReconnect, _ := cmd.Flags().GetInt(PublisherNatsMaxReconnectFlag)
 		maxReconnectWait, _ := cmd.Flags().GetDuration(PublisherNatsReconnectWaitFlag)
+		nkeyFiles, _ := cmd.Flags().GetStringArray(PublisherNatsNkeyFileFlag)
+
+		natsOptions := []nats.Option{
+			nats.Name(natsConnName),
+			nats.MaxReconnects(maxReconnect),
+			nats.ReconnectWait(maxReconnectWait),
+		}
+
+		for _, file := range nkeyFiles {
+			option, err := nats.NkeyOptionFromSeed(file)
+			if err != nil {
+				panic(fmt.Sprintf("unable to parse nkey file '%s': %v", file, err))
+			}
+			natsOptions = append(natsOptions, option)
+		}
 
 		options = append(options, NatsModule(
 			natsUrl,
 			queueGroup,
 			autoProvision,
-			nats.Name(natsConnName),
-			nats.MaxReconnects(maxReconnect),
-			nats.ReconnectWait(maxReconnectWait),
+			natsOptions...,
 		))
 
 	// SNS & SQS are often used in conjunction to each other, so we set them up in the same block
