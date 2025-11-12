@@ -10,10 +10,11 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/formancehq/go-libs/v3/api"
 	"github.com/formancehq/go-libs/v3/bun/bunpaginate"
 	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/stretchr/testify/require"
 )
 
 func TestWriteErrorResponse(t *testing.T) {
@@ -653,7 +654,7 @@ func TestFetchAllPaginated(t *testing.T) {
 				},
 			}
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 
@@ -666,7 +667,7 @@ func TestFetchAllPaginated(t *testing.T) {
 				},
 			}
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 
@@ -702,7 +703,7 @@ func TestFetchAllPaginated(t *testing.T) {
 	// Test with invalid JSON response
 	invalidServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("invalid json"))
+		_, _ = w.Write([]byte("invalid json"))
 	}))
 	defer invalidServer.Close()
 

@@ -9,13 +9,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/auth"
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+
+	"github.com/formancehq/go-libs/v3/auth"
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/oidc"
 )
 
 // setupTestOIDCServer creates an HTTP test server that simulates an OIDC provider
@@ -41,7 +42,7 @@ func setupTestOIDCServer(t *testing.T) (*httptest.Server, string, chan bool) {
 	// JWKS endpoint (not used in tests, but required for a valid OIDC server)
 	mux.HandleFunc("/.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"keys": []interface{}{},
 		})
 	})

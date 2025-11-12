@@ -11,12 +11,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/formancehq/go-libs/v3/testing/docker"
 	"github.com/ory/dockertest/v3"
+	oryDocker "github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	oryDocker "github.com/ory/dockertest/v3/docker"
+	"github.com/formancehq/go-libs/v3/testing/docker"
 )
 
 var (

@@ -4,13 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/testing/testservice"
-
-	"github.com/formancehq/go-libs/v3/testing/deferred"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
+
+	"github.com/formancehq/go-libs/v3/testing/deferred"
+	"github.com/formancehq/go-libs/v3/testing/testservice"
 )
 
 func DeferNew(

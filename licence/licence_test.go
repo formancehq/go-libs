@@ -11,11 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 // Mock logger
@@ -96,7 +97,7 @@ func createTestJWKServer(t *testing.T) *httptest.Server {
 	set.Add(key)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(set)
+		_ = json.NewEncoder(w).Encode(set)
 	}))
 
 	return server

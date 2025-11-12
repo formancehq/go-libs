@@ -19,3 +19,6 @@ tests:
   @go test -race -covermode=atomic \
     -coverprofile coverage.txt \
     ./...
+
+fmt:
+  @golangci-lint fmt

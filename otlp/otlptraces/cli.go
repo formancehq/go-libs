@@ -1,10 +1,11 @@
 package otlptraces
 
 import (
-	"github.com/formancehq/go-libs/v3/otlp"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/otlp"
 )
 
 const (

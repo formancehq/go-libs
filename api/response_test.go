@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/formancehq/go-libs/v3/bun/bunpaginate"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/bun/bunpaginate"
 )
 
 func TestCursor(t *testing.T) {

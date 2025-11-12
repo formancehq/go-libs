@@ -8,11 +8,11 @@ import (
 	"strings"
 	stdtime "time"
 
-	"github.com/formancehq/go-libs/v3/time"
-
 	"github.com/muhlemmer/gu"
 	"github.com/zitadel/schema"
 	"golang.org/x/text/language"
+
+	"github.com/formancehq/go-libs/v3/time"
 )
 
 type Audience []string

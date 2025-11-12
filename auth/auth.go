@@ -5,10 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/formancehq/go-libs/v3/oidc"
-
 	"github.com/formancehq/go-libs/v3/collectionutils"
 	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/oidc"
 )
 
 type JWTAuth struct {
@@ -80,7 +79,7 @@ func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, e
 	if ja.checkScopes {
 		scope := claims.Scopes
 
-		allowed := true
+		allowed := true //nolint:ineffassign
 		switch r.Method {
 		case http.MethodOptions, http.MethodGet, http.MethodHead, http.MethodTrace:
 			allowed = collectionutils.Contains(scope, ja.service+":read") ||

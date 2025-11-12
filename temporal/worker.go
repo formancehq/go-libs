@@ -3,12 +3,13 @@ package temporal
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/v3/logging"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	temporalworkflow "go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 type Definition struct {

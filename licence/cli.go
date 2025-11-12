@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"go.uber.org/fx"
 
 	"github.com/formancehq/go-libs/v3/errorsutils"
 	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
 )
 
 var licenceEnabled = false
@@ -82,7 +82,7 @@ func waitLicenceError(
 ) {
 	for err := range licenceErrorChan {
 		if err != nil {
-			shutdowner.Shutdown(fx.ExitCode(126))
+			_ = shutdowner.Shutdown(fx.ExitCode(126))
 			return
 		}
 	}

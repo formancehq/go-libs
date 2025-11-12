@@ -1,10 +1,11 @@
 package profiling
 
 import (
-	"github.com/formancehq/go-libs/v3/httpserver"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/httpserver"
 )
 
 // NewModule creates an HTTP server serving pprof "/debug" endpoints on bindPort

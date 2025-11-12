@@ -3,9 +3,8 @@ package postgres
 import (
 	"database/sql"
 
-	"github.com/jackc/pgx/v5/pgconn"
-
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pkg/errors"
 )
 

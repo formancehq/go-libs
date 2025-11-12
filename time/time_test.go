@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	libtime "github.com/formancehq/go-libs/v3/time"
 	"github.com/stretchr/testify/require"
+
+	libtime "github.com/formancehq/go-libs/v3/time"
 )
 
 func TestNew(t *testing.T) {

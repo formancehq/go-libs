@@ -15,13 +15,13 @@ import (
 	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/elgohr/go-localstack"
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/queue"
 	"github.com/google/uuid"
-	gomegatypes "github.com/onsi/gomega/types"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	gomegatypes "github.com/onsi/gomega/types"
+
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/queue"
 )
 
 func TestListener(t *testing.T) {

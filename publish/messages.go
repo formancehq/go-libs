@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/google/uuid"
 )
 
 const (

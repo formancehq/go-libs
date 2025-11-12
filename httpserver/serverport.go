@@ -7,11 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/serverport"
+	"go.uber.org/fx"
 
 	"github.com/formancehq/go-libs/v3/logging"
-
-	"go.uber.org/fx"
+	"github.com/formancehq/go-libs/v3/serverport"
 )
 
 func ContextWithServerInfo(ctx context.Context) context.Context {

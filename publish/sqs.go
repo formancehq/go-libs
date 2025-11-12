@@ -13,9 +13,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
 	transport "github.com/aws/smithy-go/endpoints"
-	"github.com/formancehq/go-libs/v3/service"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/service"
 )
 
 func NewSqsSubscriber(cmd *cobra.Command, logger watermill.LoggerAdapter, config aws.Config, optFns []func(*sqsservice.Options)) (*sqs.Subscriber, error) {

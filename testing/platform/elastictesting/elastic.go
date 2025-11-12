@@ -4,11 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/testing/docker"
 	"github.com/olivere/elastic/v7"
 	"github.com/ory/dockertest/v3"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/testing/docker"
 )
 
 type Configuration struct {

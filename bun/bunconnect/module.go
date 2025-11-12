@@ -3,11 +3,11 @@ package bunconnect
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/v3/bun/bundebug"
-
-	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/uptrace/bun"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/bun/bundebug"
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 func Module(connectionOptions ConnectionOptions, debug bool) fx.Option {

@@ -4,10 +4,11 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/fx"
+
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/formancehq/go-libs/v3/publish/circuit_breaker/storage"
 	topicmapper "github.com/formancehq/go-libs/v3/publish/topic_mapper"
-	"go.uber.org/fx"
 )
 
 func Module(schema string, openIntervalDuration time.Duration, storageLimit int, debug bool) fx.Option {

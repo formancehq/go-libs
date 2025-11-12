@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"github.com/uptrace/bun"
 
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/formancehq/go-libs/v3/migrations"
-	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun"
 )
 
 type HookFn func(ctx context.Context, t *testing.T, db bun.IDB)

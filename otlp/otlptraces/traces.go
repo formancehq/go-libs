@@ -3,9 +3,6 @@ package otlptraces
 import (
 	"context"
 
-	"go.opentelemetry.io/otel/trace/noop"
-
-	"github.com/formancehq/go-libs/v3/otlp"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -13,7 +10,10 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/otlp"
 )
 
 const (

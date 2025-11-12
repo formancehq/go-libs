@@ -2,8 +2,9 @@ package publish
 
 import (
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/formancehq/go-libs/v3/logging"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 type watermillLoggerAdapter struct {

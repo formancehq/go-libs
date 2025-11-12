@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/api"
-	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v3/api"
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 func TestChiLogFormatter(t *testing.T) {
@@ -93,7 +94,7 @@ func TestChiLogFormatter(t *testing.T) {
 		// Create a test handler
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		})
 
 		// Set up the middleware chain

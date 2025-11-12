@@ -6,19 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ThreeDotsLabs/watermill/message"
+	natsServer "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
-
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/v3/logging"
-	natsServer "github.com/nats-io/nats-server/v2/server"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+
+	"github.com/formancehq/go-libs/v3/logging"
 )
 
 func TestModule(t *testing.T) {

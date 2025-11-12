@@ -7,20 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/formancehq/go-libs/v3/testing/utils"
 	"github.com/google/uuid"
-	"github.com/spf13/pflag"
-
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/testing/docker"
-
-	"github.com/formancehq/go-libs/v3/testing/platform/pgtesting"
-
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/extra/bundebug"
+
+	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/testing/docker"
+	"github.com/formancehq/go-libs/v3/testing/platform/pgtesting"
+	"github.com/formancehq/go-libs/v3/testing/utils"
 )
 
 var (
