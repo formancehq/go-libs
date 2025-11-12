@@ -11,7 +11,10 @@ import (
 func TestFlags(t *testing.T) {
 	t.Parallel()
 
-	os.Setenv("ROOT1", "changed")
+	err := os.Setenv("ROOT1", "changed")
+	if err != nil {
+		t.Fatalf("failed to set environment variable: %v", err)
+	}
 
 	command := &cobra.Command{
 		Use: "root",
@@ -33,6 +36,10 @@ func TestFlags(t *testing.T) {
 
 	BindEnvToCommand(command)
 
-	command.Usage()
+	err = command.Usage()
+	if err != nil {
+		t.Fatalf("failed to get usage: %v", err)
+	}
+
 	fmt.Println(command.Flags().GetString("root1"))
 }

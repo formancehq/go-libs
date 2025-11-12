@@ -26,9 +26,6 @@ linters:
     rules:
       - path: _test\.go
         linters:
-          - errcheck
-      - path: _test\.go
-        linters:
           - gosec
         text: Errors unhandled
       - path: _test\.go
@@ -39,6 +36,7 @@ linters:
     errcheck:
       exclude-functions:
         - (io.Closer).Close
+        - (*github.com/formancehq/go-libs/v3/publish/circuit_breaker.CircuitBreaker).Close
     staticcheck:
       checks:
         - -ST1001 # Use fmt.Errorf for error construction using Sprintf

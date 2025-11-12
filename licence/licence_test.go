@@ -97,7 +97,7 @@ func createTestJWKServer(t *testing.T) *httptest.Server {
 	set.Add(key)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(set)
+		_ = json.NewEncoder(w).Encode(set)
 	}))
 
 	return server
