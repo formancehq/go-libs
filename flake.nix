@@ -47,13 +47,14 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; with pkgs-unstable; [
-              pkgs.go
-              pkgs.gotools
+              pkgs.gci
               pkgs.ginkgo
-              pkgs.mockgen
+              pkgs.go
               pkgs.gomarkdoc
-              pkgs.just
               pkgs.goperf
+              pkgs.gotools
+              pkgs.just
+              pkgs.mockgen
               pkgs-unstable.golangci-lint
             ];
           };

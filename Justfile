@@ -19,3 +19,8 @@ tests:
   @go test -race -covermode=atomic \
     -coverprofile coverage.txt \
     ./...
+
+fmt:
+  @gci write --skip-generated --skip-vendor -s standard -s default -s 'prefix(github.com/formancehq/)' -s localmodule .
+  @gofmt -s -w .
+  @goimports -w .
