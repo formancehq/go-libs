@@ -22,16 +22,6 @@ linters:
   enable:
     - unused
     - gosec
-  exclusions:
-    rules:
-      - path: _test\.go
-        linters:
-          - gosec
-        text: Errors unhandled
-      - path: _test\.go
-        linters:
-          - ineffassign
-        text: ineffectual assignment to value
   settings:
     errcheck:
       exclude-functions:

@@ -19,7 +19,7 @@ func TestFor(t *testing.T) {
 		require.Equal(t, value, *ptr)
 
 		// Verify that changing the original value doesn't affect the pointer
-		value = "changed"
+		value = "changed" //nolint:ineffassign
 		require.Equal(t, "test", *ptr)
 	})
 
@@ -32,7 +32,7 @@ func TestFor(t *testing.T) {
 		require.Equal(t, value, *ptr)
 
 		// Verify that changing the original value doesn't affect the pointer
-		value = 100
+		value = 100 //nolint:ineffassign
 		require.Equal(t, 42, *ptr)
 	})
 
@@ -45,7 +45,7 @@ func TestFor(t *testing.T) {
 		require.Equal(t, value, *ptr)
 
 		// Verify that changing the original value doesn't affect the pointer
-		value = false
+		value = false //nolint:ineffassign
 		require.Equal(t, true, *ptr)
 	})
 
@@ -58,7 +58,7 @@ func TestFor(t *testing.T) {
 		require.Equal(t, value, *ptr)
 
 		// Verify that changing the original value doesn't affect the pointer
-		value = 2.71
+		value = 2.71 //nolint:ineffassign
 		require.Equal(t, 3.14, *ptr)
 	})
 
@@ -77,7 +77,7 @@ func TestFor(t *testing.T) {
 
 		// Verify that changing the original value doesn't affect the pointer
 		value.Name = "Jane"
-		value.Age = 25
+		value.Age = 25 //nolint:ineffassign
 		require.Equal(t, TestStruct{Name: "John", Age: 30}, *ptr)
 	})
 
@@ -90,7 +90,7 @@ func TestFor(t *testing.T) {
 		require.Equal(t, value, *ptr)
 
 		// Verify that changing the original value doesn't affect the pointer
-		value = append(value, 4)
+		value = append(value, 4) //nolint:ineffassign
 		require.Equal(t, []int{1, 2, 3}, *ptr)
 	})
 
