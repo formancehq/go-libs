@@ -47,7 +47,6 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; with pkgs-unstable; [
-              pkgs.gci
               pkgs.ginkgo
               pkgs.go
               pkgs.gomarkdoc
