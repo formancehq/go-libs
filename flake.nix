@@ -13,49 +13,47 @@
 
   outputs = { self, nixpkgs, nixpkgs-unstable, nur }:
     let
-      goVersion = 25;
-
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
         "x86_64-darwin"
         "aarch64-darwin"
       ];
+
       forEachSupportedSystem = f:
         nixpkgs.lib.genAttrs supportedSystems (system:
           let
             pkgs = import nixpkgs {
               inherit system;
-              overlays = [ self.overlays.default nur.overlays.default ];
-              config.allowUnfree = true;
             };
             pkgs-unstable = import nixpkgs-unstable {
               inherit system;
-              overlays = [ self.overlays.default nur.overlays.default ];
-              config.allowUnfree = true;
             };
           in
           f { pkgs = pkgs; pkgs-unstable = pkgs-unstable; system = system; }
         );
     in
     {
-      overlays.default = final: prev: {
-        go = final."go_1_${toString goVersion}";
-      };
 
       devShells = forEachSupportedSystem ({ pkgs, pkgs-unstable, system }:
+        let
+          stablePackages = with pkgs; [
+            ginkgo
+            go_1_25
+            gomarkdoc
+            goperf
+            gotools
+            just
+            mockgen
+          ];
+          unstablePackages = with pkgs-unstable; [
+            golangci-lint
+          ];
+          otherPackages = [];
+        in
         {
           default = pkgs.mkShell {
-            packages = with pkgs; with pkgs-unstable; [
-              pkgs.ginkgo
-              pkgs.go
-              pkgs.gomarkdoc
-              pkgs.goperf
-              pkgs.gotools
-              pkgs.just
-              pkgs.mockgen
-              pkgs-unstable.golangci-lint
-            ];
+            packages = stablePackages ++ unstablePackages ++ otherPackages;
           };
         }
       );
