@@ -61,7 +61,22 @@ func MetricsModule(cfg ModuleConfig) fx.Option {
 		fx.Supply(cfg),
 		fx.Provide(func(mp *sdkmetric.MeterProvider) metric.MeterProvider { return mp }),
 		fx.Provide(fx.Annotate(func(options ...sdkmetric.Option) *sdkmetric.MeterProvider {
-			ret := sdkmetric.NewMeterProvider(options...)
+			var view sdkmetric.View = func(i sdkmetric.Instrument) (sdkmetric.Stream, bool) {
+				// In a custom View function, you need to explicitly copy
+				// the name, description, and unit.
+				s := sdkmetric.Stream{Name: i.Name, Description: i.Description, Unit: i.Unit}
+				if i.Kind == sdkmetric.InstrumentKindHistogram {
+					s.Aggregation = sdkmetric.AggregationBase2ExponentialHistogram{
+						MaxSize:  160,
+						MaxScale: 20,
+					}
+					return s, true
+				}
+				return s, false
+			}
+
+			os := append(options, sdkmetric.WithView(view))
+			ret := sdkmetric.NewMeterProvider(os...)
 			otel.SetMeterProvider(ret)
 
 			return ret
