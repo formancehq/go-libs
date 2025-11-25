@@ -345,6 +345,16 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 				logging.FromContext(ctx).Debugf("Received notification: %s", notification.Payload)
 
 				switch {
+				case strings.HasPrefix(notification.Payload, "reset"):
+					_, err = conn.Exec(ctx, `
+						update `+m.getVersionsTable()+`
+						set max_counter = 0
+						where version_id = $1
+					`, lastVersion+1)
+					if err != nil {
+						logging.FromContext(ctx).Debugf("failed to reset max counter: %v", err)
+						return nil
+					}
 				case strings.HasPrefix(notification.Payload, "init: "):
 					value := strings.TrimPrefix(notification.Payload, "init: ")
 					maxCounter, err := strconv.ParseInt(value, 10, 64)
