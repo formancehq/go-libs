@@ -233,6 +233,27 @@ type TokenExchangeRequest struct {
 	Resource           string              `schema:"resource"`
 	Scopes             SpaceDelimitedArray `schema:"scope"`
 	RequestedTokenType TokenType           `schema:"requested_token_type"`
+	Audience           string              `schema:"audience"`
+	ClientID           string              `schema:"client_id"`
+	ClientSecret       string              `schema:"client_secret,omitempty"`
+}
+
+func (r *TokenExchangeRequest) GetClientID() string {
+	return r.ClientID
+}
+
+func (r *TokenExchangeRequest) GetClientSecret() string {
+	return r.ClientSecret
+}
+
+// SetClientID implements op.AuthenticatedTokenRequest
+func (r *TokenExchangeRequest) SetClientID(clientID string) {
+	r.ClientID = clientID
+}
+
+// SetClientSecret implements op.AuthenticatedTokenRequest
+func (r *TokenExchangeRequest) SetClientSecret(clientSecret string) {
+	r.ClientSecret = clientSecret
 }
 
 type ClientCredentialsRequest struct {

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	_ "github.com/aws/aws-advanced-go-wrapper/pgx-driver"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/extra/bunotel"
