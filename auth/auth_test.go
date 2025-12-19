@@ -9,6 +9,7 @@ import (
 	stdtime "time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v3/logging"
@@ -260,5 +261,26 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		authenticated, err := auth.Authenticate(nil, req)
 		require.NoError(t, err)
 		require.True(t, authenticated)
+	})
+
+	t.Run("failure with different issuer", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		unexpectedIssuer := "https://test-issuer.differentdomain.com"
+
+		auth := NewJWTAuth(keySet, issuer, "test-service", false)
+
+		// Create access token
+		token := createAccessToken(t, privateKey, unexpectedIssuer, []string{}, "test-user")
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.Error(t, err)
+		assert.False(t, authenticated)
+		assert.ErrorIs(t, err, oidc.ErrIssuerInvalid)
 	})
 }
