@@ -54,6 +54,9 @@ var (
 	ErrAuthTimeNotPresent      = errors.New("claim `auth_time` of token is missing")
 	ErrAuthTimeToOld           = errors.New("auth time of token is too old")
 	ErrAtHash                  = errors.New("at_hash does not correspond to access token")
+
+	ErrOrgIDNotPresent = errors.New("claim `organization_id` of token is missing")
+	ErrOrgIDInvalid    = errors.New("organization does not match")
 )
 
 // Verifier caries configuration for the various token verification
