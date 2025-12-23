@@ -31,17 +31,8 @@ func NewJWTAuth(
 
 // Authenticate validates the JWT in the request and returns the user, if valid.
 func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
-	claims := &oidc.AccessTokenClaims{}
-	err := claimsFromRequest(r, claims, ja.keySet)
+	claims, err := ClaimsFromRequest(r, ja.issuer, ja.keySet)
 	if err != nil {
-		return false, err
-	}
-
-	if err := oidc.CheckIssuer(claims, ja.issuer); err != nil {
-		return false, err
-	}
-
-	if err = oidc.CheckExpiration(claims, 0); err != nil {
 		return false, err
 	}
 
@@ -58,11 +49,11 @@ var (
 
 func ClaimsFromRequest(r *http.Request, expectedIssuer string, keySet oidc.KeySet) (*oidc.AccessTokenClaims, error) {
 	claims := &oidc.AccessTokenClaims{}
-	if err := oidc.CheckIssuer(claims, expectedIssuer); err != nil {
+	if err := claimsFromRequest(r, claims, keySet); err != nil {
 		return claims, err
 	}
 
-	if err := claimsFromRequest(r, claims, keySet); err != nil {
+	if err := oidc.CheckIssuer(claims, expectedIssuer); err != nil {
 		return claims, err
 	}
 
