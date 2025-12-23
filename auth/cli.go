@@ -35,5 +35,21 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 		ReadKeySetMaxRetries: authReadKeySetMaxRetries,
 		CheckScopes:          authCheckScopes,
 		Service:              authService,
-	})
+	}, nil)
+}
+
+func OrganizationAwareFXModuleFromFlags(cmd *cobra.Command, fn OrganizationIDGetterFn) fx.Option {
+	authEnabled, _ := cmd.Flags().GetBool(AuthEnabledFlag)
+	authIssuer, _ := cmd.Flags().GetString(AuthIssuerFlag)
+	authReadKeySetMaxRetries, _ := cmd.Flags().GetInt(AuthReadKeySetMaxRetriesFlag)
+	authCheckScopes, _ := cmd.Flags().GetBool(AuthCheckScopesFlag)
+	authService, _ := cmd.Flags().GetString(AuthServiceFlag)
+
+	return Module(ModuleConfig{
+		Enabled:              authEnabled,
+		Issuer:               authIssuer,
+		ReadKeySetMaxRetries: authReadKeySetMaxRetries,
+		CheckScopes:          authCheckScopes,
+		Service:              authService,
+	}, fn)
 }

@@ -70,7 +70,48 @@ func TestModule(t *testing.T) {
 				Issuer:      issuer,
 				Service:     "test-service",
 				CheckScopes: false,
+			}, nil),
+			fx.Provide(func() context.Context {
+				return context.Background()
 			}),
+			fx.Provide(func() logging.Logger {
+				return logging.Testing()
+			}),
+			fx.Populate(&authenticator),
+		}
+
+		if !testing.Verbose() {
+			options = append(options, fx.NopLogger)
+		}
+
+		app := fxtest.New(t, options...)
+		app.RequireStart()
+		defer app.RequireStop()
+
+		require.NotNil(t, authenticator)
+
+		// Verify that the discovery endpoint was called
+		select {
+		case called := <-discoveryCalled:
+			require.True(t, called, "Discovery endpoint should have been called")
+		default:
+			t.Fatal("Discovery endpoint was not called")
+		}
+	})
+
+	t.Run("orgID aware module calls discovery endpoint when enabled", func(t *testing.T) {
+		t.Parallel()
+		_, issuer, discoveryCalled := setupTestOIDCServer(t)
+
+		var authenticator auth.Authenticator
+
+		options := []fx.Option{
+			auth.Module(auth.ModuleConfig{
+				Enabled:     true,
+				Issuer:      issuer,
+				Service:     "test-service-with-orgId-aware-auth",
+				CheckScopes: false,
+			}, func(*http.Request) (orgID string, err error) { return "dummy", nil }),
 			fx.Provide(func() context.Context {
 				return context.Background()
 			}),
@@ -128,7 +169,7 @@ func TestModule(t *testing.T) {
 				Issuer:      issuer,
 				Service:     "test-service",
 				CheckScopes: false,
-			}),
+			}, nil),
 			fx.Provide(func() context.Context {
 				return context.Background()
 			}),
@@ -176,7 +217,7 @@ func TestModule(t *testing.T) {
 				Issuer:      issuer,
 				Service:     "test-service",
 				CheckScopes: false,
-			}),
+			}, nil),
 			fx.Populate(&authenticator),
 		}
 
