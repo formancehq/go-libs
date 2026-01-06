@@ -70,7 +70,7 @@ func TestModule(t *testing.T) {
 				Issuer:      issuer,
 				Service:     "test-service",
 				CheckScopes: false,
-			}, nil),
+			}),
 			fx.Provide(func() context.Context {
 				return context.Background()
 			}),
@@ -99,19 +99,25 @@ func TestModule(t *testing.T) {
 		}
 	})
 
-	t.Run("orgID aware module calls discovery endpoint when enabled", func(t *testing.T) {
+	t.Run("module with additional checks calls discovery endpoint when enabled", func(t *testing.T) {
 		t.Parallel()
 		_, issuer, discoveryCalled := setupTestOIDCServer(t)
 
 		var authenticator auth.Authenticator
 
+		provider := func(*http.Request) (string, error) { return "dummy", nil }
+		additionalChecks := []auth.AdditionalCheck{
+			auth.CheckOrganizationIDClaim(provider),
+		}
+
 		options := []fx.Option{
 			auth.Module(auth.ModuleConfig{
-				Enabled:     true,
-				Issuer:      issuer,
-				Service:     "test-service-with-orgId-aware-auth",
-				CheckScopes: false,
-			}, func(*http.Request) (orgID string, err error) { return "dummy", nil }),
+				Enabled:          true,
+				Issuer:           issuer,
+				Service:          "test-service-with-orgId-aware-auth",
+				CheckScopes:      false,
+				AdditionalChecks: additionalChecks,
+			}),
 			fx.Provide(func() context.Context {
 				return context.Background()
 			}),
@@ -169,7 +175,7 @@ func TestModule(t *testing.T) {
 				Issuer:      issuer,
 				Service:     "test-service",
 				CheckScopes: false,
-			}, nil),
+			}),
 			fx.Provide(func() context.Context {
 				return context.Background()
 			}),
@@ -217,7 +223,7 @@ func TestModule(t *testing.T) {
 				Issuer:      issuer,
 				Service:     "test-service",
 				CheckScopes: false,
-			}, nil),
+			}),
 			fx.Populate(&authenticator),
 		}
 

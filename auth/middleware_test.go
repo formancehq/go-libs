@@ -20,7 +20,7 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false)
+		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
@@ -45,7 +45,7 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false)
+		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

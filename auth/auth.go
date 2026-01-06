@@ -9,10 +9,11 @@ import (
 )
 
 type JWTAuth struct {
-	issuer      string
-	checkScopes bool
-	service     string
-	keySet      oidc.KeySet
+	issuer           string
+	checkScopes      bool
+	service          string
+	keySet           oidc.KeySet
+	additionalChecks []AdditionalCheck
 }
 
 func NewJWTAuth(
@@ -20,12 +21,14 @@ func NewJWTAuth(
 	issuer string,
 	service string,
 	checkScopes bool,
+	additionalChecks []AdditionalCheck,
 ) *JWTAuth {
 	return &JWTAuth{
-		issuer:      issuer,
-		checkScopes: checkScopes,
-		service:     service,
-		keySet:      keySet,
+		issuer:           issuer,
+		checkScopes:      checkScopes,
+		service:          service,
+		keySet:           keySet,
+		additionalChecks: additionalChecks,
 	}
 }
 
@@ -34,6 +37,13 @@ func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, e
 	claims, err := ClaimsFromRequest(r, ja.issuer, ja.keySet)
 	if err != nil {
 		return false, err
+	}
+
+	for _, check := range ja.additionalChecks {
+		err := check(r, claims)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	if !ja.checkScopes {
@@ -60,6 +70,7 @@ func ClaimsFromRequest(r *http.Request, expectedIssuer string, keySet oidc.KeySe
 	if err := oidc.CheckExpiration(claims, 0); err != nil {
 		return claims, err
 	}
+
 	return claims, nil
 }
 

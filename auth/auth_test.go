@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,16 +78,69 @@ func createAccessToken(t *testing.T, privateKey *rsa.PrivateKey, issuer string, 
 	return token
 }
 
+func createAccessTokenWithOrgClaims(
+	t *testing.T,
+	privateKey *rsa.PrivateKey,
+	issuer string,
+	scopes []string,
+	subject string,
+	organizationID string,
+) string {
+	now := stdtime.Now().UTC()
+	expirationTime := libtime.New(now.Add(1 * stdtime.Hour))
+
+	accessTokenClaims := oidc.NewOrganizationAwareAccessTokenClaims(
+		issuer,
+		subject,
+		[]string{"test-client"},
+		expirationTime,
+		"test-jti",
+		"test-client",
+	)
+
+	// Set scopes
+	accessTokenClaims.Scopes = scopes
+
+	privateClaims := map[string]interface{}{}
+	if organizationID != "" {
+		privateClaims[oidc.ClaimOrganizationID] = organizationID
+	}
+	accessTokenClaims.Claims = privateClaims
+
+	// Create JWT using go-jose
+	signer, err := jose.NewSigner(
+		jose.SigningKey{
+			Algorithm: jose.RS256,
+			Key:       privateKey,
+		},
+		(&jose.SignerOptions{}).WithHeader("kid", "test-key-id"),
+	)
+	require.NoError(t, err)
+
+	claimsJSON, err := accessTokenClaims.MarshalJSON()
+	require.NoError(t, err)
+
+	signed, err := signer.Sign(claimsJSON)
+	require.NoError(t, err)
+
+	token, err := signed.CompactSerialize()
+	require.NoError(t, err)
+
+	return token
+}
+
 func TestJWTAuth_Authenticate(t *testing.T) {
 	t.Parallel()
 
-	noOrgGetterFn := func(*http.Request) (string, error) { return "", nil }
+	autoPassingAdditionalChecks := []AdditionalCheck{
+		func(*http.Request, *oidc.AccessTokenClaims) error { return nil },
+	}
 
 	t.Run("success with valid token", func(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false)
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, []AdditionalCheck{})
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
@@ -110,11 +164,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false),
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, []AdditionalCheck{}),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", false, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -141,11 +195,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false),
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", false, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -172,11 +226,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false),
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", false, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -202,11 +256,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false),
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", false, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -264,11 +318,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true),
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", true, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -299,11 +353,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true),
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", true, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -333,11 +387,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true),
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", true, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -368,11 +422,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true),
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", true, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -403,11 +457,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false),
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
 			},
 			{
-				name: "JWTOrganizationAuth",
-				auth: NewJWTOrganizationAuth(keySet, issuer, "test-service", false, noOrgGetterFn),
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -427,5 +481,142 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 				assert.ErrorIs(t, err, oidc.ErrIssuerInvalid)
 			})
 		}
+	})
+
+	t.Run("failure due to additonal check", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+
+		var additionalChecksPerformed = 0
+
+		expectedErr := errors.New("expected")
+		autoFailingAdditionalChecks := []AdditionalCheck{
+			func(*http.Request, *oidc.AccessTokenClaims) error {
+				additionalChecksPerformed++
+				return nil
+			},
+			func(*http.Request, *oidc.AccessTokenClaims) error {
+				additionalChecksPerformed++
+				return expectedErr
+			},
+			func(*http.Request, *oidc.AccessTokenClaims) error {
+				additionalChecksPerformed++
+				return nil
+			},
+		}
+
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, autoFailingAdditionalChecks)
+
+		// Create access token
+		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.Error(t, err)
+		require.False(t, authenticated)
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Equal(t, 2, additionalChecksPerformed)
+	})
+
+	t.Run("CheckOrganizationIDClaim success with valid token and correct orgID", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		expectedOrgID := "abcdefghijkl"
+
+		provider := func(*http.Request) (string, error) { return expectedOrgID, nil }
+		additionalChecks := []AdditionalCheck{
+			CheckOrganizationIDClaim(provider),
+		}
+
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", expectedOrgID)
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.NoError(t, err)
+		assert.True(t, authenticated)
+	})
+
+	t.Run("CheckOrganizationIDClaim success with valid token and no expected orgID", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+
+		provider := func(*http.Request) (string, error) { return "", nil }
+		additionalChecks := []AdditionalCheck{
+			CheckOrganizationIDClaim(provider),
+		}
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", "")
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.NoError(t, err)
+		assert.True(t, authenticated)
+	})
+
+	t.Run("CheckOrganizationIDClaim failure with valid token and mismatched orgID", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		expectedOrgID := "abcdefghijkl"
+
+		provider := func(*http.Request) (string, error) { return expectedOrgID, nil }
+		additionalChecks := []AdditionalCheck{
+			CheckOrganizationIDClaim(provider),
+		}
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", "someotherorgid")
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, oidc.ErrOrgIDInvalid)
+		assert.False(t, authenticated)
+	})
+
+	t.Run("CheckOrganizationIDClaim failure with token that doesn't contain orgID", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		expectedOrgID := "abcdefghijkl"
+
+		provider := func(*http.Request) (string, error) { return expectedOrgID, nil }
+		additionalChecks := []AdditionalCheck{
+			CheckOrganizationIDClaim(provider),
+		}
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", "")
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, oidc.ErrOrgIDNotPresent)
+		assert.False(t, authenticated)
 	})
 }

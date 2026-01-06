@@ -35,15 +35,19 @@ func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
 		ReadKeySetMaxRetries: authReadKeySetMaxRetries,
 		CheckScopes:          authCheckScopes,
 		Service:              authService,
-	}, nil)
+	})
 }
 
-func OrganizationAwareFXModuleFromFlags(cmd *cobra.Command, fn OrganizationIDGetterFn) fx.Option {
+func OrganizationAwareFXModuleFromFlags(cmd *cobra.Command, fn OrganizationIDProvider) fx.Option {
 	authEnabled, _ := cmd.Flags().GetBool(AuthEnabledFlag)
 	authIssuer, _ := cmd.Flags().GetString(AuthIssuerFlag)
 	authReadKeySetMaxRetries, _ := cmd.Flags().GetInt(AuthReadKeySetMaxRetriesFlag)
 	authCheckScopes, _ := cmd.Flags().GetBool(AuthCheckScopesFlag)
 	authService, _ := cmd.Flags().GetString(AuthServiceFlag)
+
+	additionalChecks := []AdditionalCheck{
+		CheckOrganizationIDClaim(fn),
+	}
 
 	return Module(ModuleConfig{
 		Enabled:              authEnabled,
@@ -51,5 +55,6 @@ func OrganizationAwareFXModuleFromFlags(cmd *cobra.Command, fn OrganizationIDGet
 		ReadKeySetMaxRetries: authReadKeySetMaxRetries,
 		CheckScopes:          authCheckScopes,
 		Service:              authService,
-	}, fn)
+		AdditionalChecks:     additionalChecks,
+	})
 }

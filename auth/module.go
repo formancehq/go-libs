@@ -17,12 +17,11 @@ type ModuleConfig struct {
 	ReadKeySetMaxRetries int
 	CheckScopes          bool
 	Service              string
+
+	AdditionalChecks []AdditionalCheck
 }
 
-// if the authenticator needs to also check that the organizationID found in the token's claims match the orgID of a
-// given resource, OrganizationIDGetterFn can be provided as a way for the authenticator to find the resource's orgID
-// if OrganizationIDGetterFn is left nil, a standard JWT authenticator is returned instead
-func Module(cfg ModuleConfig, orgIdGetterFn OrganizationIDGetterFn) fx.Option {
+func Module(cfg ModuleConfig) fx.Option {
 	options := make([]fx.Option, 0)
 
 	if !cfg.Enabled {
@@ -54,29 +53,16 @@ func Module(cfg ModuleConfig, orgIdGetterFn OrganizationIDGetterFn) fx.Option {
 		}),
 	)
 
-	if orgIdGetterFn != nil {
-		options = append(options,
-			fx.Provide(func(keySet oidc.KeySet) Authenticator {
-				return NewJWTOrganizationAuth(
-					keySet,
-					cfg.Issuer,
-					cfg.Service,
-					cfg.CheckScopes,
-					orgIdGetterFn,
-				)
-			}),
-		)
-	} else {
-		options = append(options,
-			fx.Provide(func(keySet oidc.KeySet) Authenticator {
-				return NewJWTAuth(
-					keySet,
-					cfg.Issuer,
-					cfg.Service,
-					cfg.CheckScopes,
-				)
-			}),
-		)
-	}
+	options = append(options,
+		fx.Provide(func(keySet oidc.KeySet) Authenticator {
+			return NewJWTAuth(
+				keySet,
+				cfg.Issuer,
+				cfg.Service,
+				cfg.CheckScopes,
+				cfg.AdditionalChecks,
+			)
+		}),
+	)
 	return fx.Module("auth", options...)
 }
