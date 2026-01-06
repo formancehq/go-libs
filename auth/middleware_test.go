@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 
@@ -59,6 +60,37 @@ func TestMiddleware(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		require.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("orgID from claim is set as req header", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+
+		expectedOrgID := "mksgleiucajh"
+		provider := func(*http.Request) (orgID string, err error) {
+			return expectedOrgID, nil
+		}
+		additionalChecks := []AdditionalCheck{CheckOrganizationIDClaim(provider)}
+		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", expectedOrgID)
+
+		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		}))
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "OK", rr.Body.String())
+		assert.Equal(t, expectedOrgID, req.Header.Get(FormanceHeaderOrganizationID))
 	})
 
 	t.Run("forbidden", func(t *testing.T) {

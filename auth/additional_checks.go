@@ -7,6 +7,8 @@ import (
 	"github.com/formancehq/go-libs/v3/oidc"
 )
 
+const FormanceHeaderOrganizationID = "X-Formance-OrganizationID"
+
 type AdditionalCheck func(*http.Request, *oidc.AccessTokenClaims) error
 
 // OrganizationIDProvider should give the authorizer the ability
@@ -35,6 +37,7 @@ func CheckOrganizationIDClaim(fn OrganizationIDProvider) AdditionalCheck {
 		if orgID == "" {
 			return oidc.ErrOrgIDNotPresent
 		}
+		r.Header.Set(FormanceHeaderOrganizationID, orgID)
 
 		if expectedOrgID != "" && orgID != expectedOrgID {
 			return oidc.ErrOrgIDInvalid
