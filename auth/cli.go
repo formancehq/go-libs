@@ -22,18 +22,35 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.String(AuthServiceFlag, "", "Service")
 }
 
-func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
+func defaultModuleConfig(cmd *cobra.Command) ModuleConfig {
 	authEnabled, _ := cmd.Flags().GetBool(AuthEnabledFlag)
 	authIssuer, _ := cmd.Flags().GetString(AuthIssuerFlag)
 	authReadKeySetMaxRetries, _ := cmd.Flags().GetInt(AuthReadKeySetMaxRetriesFlag)
 	authCheckScopes, _ := cmd.Flags().GetBool(AuthCheckScopesFlag)
 	authService, _ := cmd.Flags().GetString(AuthServiceFlag)
 
-	return Module(ModuleConfig{
+	return ModuleConfig{
 		Enabled:              authEnabled,
 		Issuer:               authIssuer,
 		ReadKeySetMaxRetries: authReadKeySetMaxRetries,
 		CheckScopes:          authCheckScopes,
 		Service:              authService,
-	})
+		AdditionalChecks:     make([]AdditionalCheck, 0),
+	}
+}
+
+func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
+	return Module(defaultModuleConfig(cmd))
+}
+
+func OrganizationAwareFXModuleFromFlags(cmd *cobra.Command, fn OrganizationIDProvider) fx.Option {
+	cfg := defaultModuleConfig(cmd)
+	cfg.AdditionalChecks = append(cfg.AdditionalChecks, CheckOrganizationIDClaim(fn))
+	return Module(cfg)
+}
+
+func AdditionalChecksFXModuleFromFlags(cmd *cobra.Command, checks ...AdditionalCheck) fx.Option {
+	cfg := defaultModuleConfig(cmd)
+	cfg.AdditionalChecks = append(cfg.AdditionalChecks, checks...)
+	return Module(cfg)
 }

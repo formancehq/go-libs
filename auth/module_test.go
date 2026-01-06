@@ -99,6 +99,53 @@ func TestModule(t *testing.T) {
 		}
 	})
 
+	t.Run("module with additional checks calls discovery endpoint when enabled", func(t *testing.T) {
+		t.Parallel()
+		_, issuer, discoveryCalled := setupTestOIDCServer(t)
+
+		var authenticator auth.Authenticator
+
+		provider := func(*http.Request) (string, error) { return "dummy", nil }
+		additionalChecks := []auth.AdditionalCheck{
+			auth.CheckOrganizationIDClaim(provider),
+		}
+
+		options := []fx.Option{
+			auth.Module(auth.ModuleConfig{
+				Enabled:          true,
+				Issuer:           issuer,
+				Service:          "test-service-with-orgId-aware-auth",
+				CheckScopes:      false,
+				AdditionalChecks: additionalChecks,
+			}),
+			fx.Provide(func() context.Context {
+				return context.Background()
+			}),
+			fx.Provide(func() logging.Logger {
+				return logging.Testing()
+			}),
+			fx.Populate(&authenticator),
+		}
+
+		if !testing.Verbose() {
+			options = append(options, fx.NopLogger)
+		}
+
+		app := fxtest.New(t, options...)
+		app.RequireStart()
+		defer app.RequireStop()
+
+		require.NotNil(t, authenticator)
+
+		// Verify that the discovery endpoint was called
+		select {
+		case called := <-discoveryCalled:
+			require.True(t, called, "Discovery endpoint should have been called")
+		default:
+			t.Fatal("Discovery endpoint was not called")
+		}
+	})
+
 	t.Run("module can be overridden with fx.Decorate", func(t *testing.T) {
 		t.Parallel()
 
