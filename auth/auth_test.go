@@ -483,7 +483,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}
 	})
 
-	t.Run("failure due to additonal check", func(t *testing.T) {
+	t.Run("failure due to additional check", func(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
