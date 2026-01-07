@@ -22,7 +22,7 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.String(AuthServiceFlag, "", "Service")
 }
 
-func defaultModuleConfig(cmd *cobra.Command) ModuleConfig {
+func ModuleConfigFromFlags(cmd *cobra.Command) ModuleConfig {
 	authEnabled, _ := cmd.Flags().GetBool(AuthEnabledFlag)
 	authIssuer, _ := cmd.Flags().GetString(AuthIssuerFlag)
 	authReadKeySetMaxRetries, _ := cmd.Flags().GetInt(AuthReadKeySetMaxRetriesFlag)
@@ -40,17 +40,17 @@ func defaultModuleConfig(cmd *cobra.Command) ModuleConfig {
 }
 
 func FXModuleFromFlags(cmd *cobra.Command) fx.Option {
-	return Module(defaultModuleConfig(cmd))
+	return Module(ModuleConfigFromFlags(cmd))
 }
 
 func OrganizationAwareFXModuleFromFlags(cmd *cobra.Command, fn OrganizationIDProvider) fx.Option {
-	cfg := defaultModuleConfig(cmd)
+	cfg := ModuleConfigFromFlags(cmd)
 	cfg.AdditionalChecks = append(cfg.AdditionalChecks, CheckOrganizationIDClaim(fn))
 	return Module(cfg)
 }
 
 func AdditionalChecksFXModuleFromFlags(cmd *cobra.Command, checks ...AdditionalCheck) fx.Option {
-	cfg := defaultModuleConfig(cmd)
+	cfg := ModuleConfigFromFlags(cmd)
 	cfg.AdditionalChecks = append(cfg.AdditionalChecks, checks...)
 	return Module(cfg)
 }
