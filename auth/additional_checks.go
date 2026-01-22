@@ -3,6 +3,8 @@ package auth
 import (
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/formancehq/go-libs/v3/oidc"
 )
@@ -40,5 +42,29 @@ func CheckOrganizationIDClaim(fn OrganizationIDProvider) AdditionalCheck {
 			return oidc.ErrOrgIDInvalid
 		}
 		return nil
+	}
+}
+
+func CheckAudienceClaim(expectedAudience url.URL) AdditionalCheck {
+	return func(_ *http.Request, claims *oidc.AccessTokenClaims) error {
+		if claims == nil {
+			return fmt.Errorf("claims cannot be nil")
+		}
+
+		for _, aud := range claims.GetAudience() {
+			audienceStr := aud
+			if !strings.HasPrefix(audienceStr, "http") { // urlParse requires a scheme
+				audienceStr = "http://" + aud
+			}
+			gotAudience, err := url.Parse(audienceStr)
+			if err != nil {
+				return err
+			}
+
+			if gotAudience.Host == expectedAudience.Host {
+				return nil
+			}
+		}
+		return oidc.ErrAudience
 	}
 }

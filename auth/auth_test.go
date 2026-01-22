@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	stdtime "time"
 
@@ -40,14 +41,19 @@ func setupTestKeySet(t *testing.T) (oidc.KeySet, *rsa.PrivateKey, string) {
 	return keySet, privateKey, issuer
 }
 
-func createAccessToken(t *testing.T, privateKey *rsa.PrivateKey, issuer string, scopes []string, subject string) string {
+func createAccessToken(t *testing.T, privateKey *rsa.PrivateKey, issuer string, audience string, scopes []string, subject string) string {
 	now := stdtime.Now().UTC()
 	expirationTime := libtime.New(now.Add(1 * stdtime.Hour))
+
+	audiences := make([]string, 0, 1)
+	if audience != "" {
+		audiences = append(audiences, audience)
+	}
 
 	accessTokenClaims := oidc.NewAccessTokenClaims(
 		issuer,
 		subject,
-		[]string{"test-client"},
+		audiences,
 		expirationTime,
 		"test-jti",
 		"test-client",
@@ -82,6 +88,7 @@ func createAccessTokenWithOrgClaims(
 	t *testing.T,
 	privateKey *rsa.PrivateKey,
 	issuer string,
+	audience string,
 	scopes []string,
 	subject string,
 	organizationID string,
@@ -89,10 +96,15 @@ func createAccessTokenWithOrgClaims(
 	now := stdtime.Now().UTC()
 	expirationTime := libtime.New(now.Add(1 * stdtime.Hour))
 
+	audiences := make([]string, 0, 1)
+	if audience != "" {
+		audiences = append(audiences, audience)
+	}
+
 	accessTokenClaims := oidc.NewOrganizationAwareAccessTokenClaims(
 		issuer,
 		subject,
-		[]string{"test-client"},
+		audiences,
 		expirationTime,
 		"test-jti",
 		"test-client",
@@ -143,7 +155,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, []AdditionalCheck{})
 
 		// Create access token
-		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
+		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
 
 		// Create request with valid token
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -330,7 +342,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 
 				// Create access token with read scope
-				token := createAccessToken(t, privateKey, issuer, []string{"test-service:read"}, "test-user")
+				token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:read"}, "test-user")
 
 				req := httptest.NewRequest("GET", "/test", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
@@ -364,7 +376,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// Create access token with write scope
-				token := createAccessToken(t, privateKey, issuer, []string{"test-service:write"}, "test-user")
+				token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:write"}, "test-user")
 
 				req := httptest.NewRequest("POST", "/test", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
@@ -398,7 +410,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// Create access token with only read scope (not enough for POST)
-				token := createAccessToken(t, privateKey, issuer, []string{"test-service:read"}, "test-user")
+				token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:read"}, "test-user")
 
 				req := httptest.NewRequest("POST", "/test", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
@@ -433,7 +445,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// Create access token with write scope
-				token := createAccessToken(t, privateKey, issuer, []string{"test-service:write"}, "test-user")
+				token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:write"}, "test-user")
 
 				req := httptest.NewRequest("GET", "/test", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
@@ -468,7 +480,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// Create access token
-				token := createAccessToken(t, privateKey, unexpectedIssuer, []string{}, "test-user")
+				token := createAccessToken(t, privateKey, unexpectedIssuer, "", []string{}, "test-user")
 
 				// Create request with valid token
 				req := httptest.NewRequest("GET", "/test", nil)
@@ -508,7 +520,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, autoFailingAdditionalChecks)
 
 		// Create access token
-		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
+		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
 
 		// Create request with valid token
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -535,7 +547,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
 
 		// Create access token
-		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", expectedOrgID)
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", expectedOrgID)
 
 		// Create request with valid token
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -558,7 +570,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
 
 		// Create access token
-		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", "")
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "")
 
 		// Create request with valid token
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -582,7 +594,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
 
 		// Create access token
-		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", "someotherorgid")
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "someotherorgid")
 
 		// Create request with valid token
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -607,7 +619,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
 
 		// Create access token
-		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", "")
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "")
 
 		// Create request with valid token
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -618,5 +630,55 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, oidc.ErrOrgIDNotPresent)
 		assert.False(t, authenticated)
+	})
+
+	t.Run("CheckAudienceClaim audience mismatches", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		expectedAudience, err := url.Parse("http://expected.mydomain.com")
+		require.NoError(t, err)
+
+		additionalChecks := []AdditionalCheck{
+			CheckAudienceClaim(*expectedAudience),
+		}
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "")
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, oidc.ErrAudience)
+		assert.False(t, authenticated)
+	})
+
+	t.Run("CheckAudienceClaim audience matches", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		expectedAudience, err := url.Parse("http://expected.mydomain.com")
+		require.NoError(t, err)
+
+		additionalChecks := []AdditionalCheck{
+			CheckAudienceClaim(*expectedAudience),
+		}
+		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		tokenAudience := expectedAudience.Host
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, tokenAudience, []string{}, "test-user", "")
+
+		// Create request with valid token
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		authenticated, err := auth.Authenticate(nil, req)
+		require.NoError(t, err)
+		assert.True(t, authenticated)
 	})
 }

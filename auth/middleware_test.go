@@ -24,7 +24,7 @@ func TestMiddleware(t *testing.T) {
 		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
 
 		// Create access token
-		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
+		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -74,7 +74,7 @@ func TestMiddleware(t *testing.T) {
 		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
 
 		// Create access token
-		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, []string{}, "test-user", expectedOrgID)
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", expectedOrgID)
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, expectedOrgID, r.Context().Value(ContextKeyAuthClaimOrganizationID))
