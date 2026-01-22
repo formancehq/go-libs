@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -32,24 +33,37 @@ func NewJWTAuth(
 	}
 }
 
-// Authenticate validates the JWT in the request and returns the user, if valid.
-func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
+func (ja *JWTAuth) AuthenticateWithAgent(r *http.Request) (Agent, error) {
 	claims, err := ClaimsFromRequest(r, ja.issuer, ja.keySet)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
+	agt := NewDefaultAgent(*claims)
 	for _, check := range ja.additionalChecks {
 		err := check(r, claims)
 		if err != nil {
-			return false, err
+			return agt, err
 		}
 	}
 
 	if !ja.checkScopes {
-		return true, nil
+		return agt, nil
 	}
-	return checkScopes(ja.service, r.Method, claims.Scopes)
+	valid, err := checkScopes(ja.service, r.Method, claims.Scopes)
+	if err != nil || !valid {
+		return agt, fmt.Errorf("scopes not valid: %w", err)
+	}
+	return agt, nil
+}
+
+// Authenticate validates the JWT in the request and returns the user, if valid.
+func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
+	_, err := ja.AuthenticateWithAgent(r)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 var (
