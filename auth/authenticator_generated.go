@@ -55,17 +55,17 @@ func (mr *MockAuthenticatorMockRecorder) Authenticate(w, r any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthenticator)(nil).Authenticate), w, r)
 }
 
-// AuthenticateWithAgent mocks base method.
-func (m *MockAuthenticator) AuthenticateWithAgent(r *http.Request) (Agent, error) {
+// AuthenticateOnControlPlane mocks base method.
+func (m *MockAuthenticator) AuthenticateOnControlPlane(r *http.Request) (ControlPlaneAgent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AuthenticateWithAgent", r)
-	ret0, _ := ret[0].(Agent)
+	ret := m.ctrl.Call(m, "AuthenticateOnControlPlane", r)
+	ret0, _ := ret[0].(ControlPlaneAgent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AuthenticateWithAgent indicates an expected call of AuthenticateWithAgent.
-func (mr *MockAuthenticatorMockRecorder) AuthenticateWithAgent(r any) *gomock.Call {
+// AuthenticateOnControlPlane indicates an expected call of AuthenticateOnControlPlane.
+func (mr *MockAuthenticatorMockRecorder) AuthenticateOnControlPlane(r any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateWithAgent", reflect.TypeOf((*MockAuthenticator)(nil).AuthenticateWithAgent), r)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateOnControlPlane", reflect.TypeOf((*MockAuthenticator)(nil).AuthenticateOnControlPlane), r)
 }

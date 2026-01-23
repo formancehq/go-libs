@@ -33,13 +33,15 @@ func NewJWTAuth(
 	}
 }
 
-func (ja *JWTAuth) AuthenticateWithAgent(r *http.Request) (Agent, error) {
+func (ja *JWTAuth) authenticate(r *http.Request) (ControlPlaneAgent, error) {
 	claims, err := ClaimsFromRequest(r, ja.issuer, ja.keySet)
 	if err != nil {
 		return nil, err
 	}
 
-	agt := NewDefaultAgent(*claims)
+	// DefaultControlPlaneAgent provides access to claims that are expected to be present when authenticating via the Control Plane
+	// in the case of another issuer (eg. Stack authentication) some of these claims may not be present
+	agt := NewDefaultControlPlaneAgent(*claims)
 	for _, check := range ja.additionalChecks {
 		err := check(r, claims)
 		if err != nil {
@@ -57,9 +59,13 @@ func (ja *JWTAuth) AuthenticateWithAgent(r *http.Request) (Agent, error) {
 	return agt, nil
 }
 
+func (ja *JWTAuth) AuthenticateOnControlPlane(r *http.Request) (ControlPlaneAgent, error) {
+	return ja.authenticate(r)
+}
+
 // Authenticate validates the JWT in the request and returns the user, if valid.
 func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
-	_, err := ja.AuthenticateWithAgent(r)
+	_, err := ja.authenticate(r)
 	if err != nil {
 		return false, err
 	}

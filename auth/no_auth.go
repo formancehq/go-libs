@@ -6,7 +6,7 @@ import (
 
 type noAuth struct{}
 
-func (a noAuth) AuthenticateWithAgent(r *http.Request) (Agent, error) {
+func (a noAuth) AuthenticateOnControlPlane(r *http.Request) (ControlPlaneAgent, error) {
 	return &NoAgent{}, nil
 }
 
