@@ -24,7 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.4
 	github.com/aws/smithy-go v1.23.0
 	github.com/elgohr/go-localstack v1.0.139
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.2.4
 	github.com/go-jose/go-jose/v4 v4.0.5
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v5 v5.2.3
