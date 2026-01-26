@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/formancehq/go-libs/v3/oidc"
 )
@@ -54,6 +55,6 @@ func CheckAudienceClaim(expectedAudienceUrl string) AdditionalCheck {
 				return nil
 			}
 		}
-		return oidc.ErrAudience
+		return fmt.Errorf("%w: expected %s, got %s", oidc.ErrAudience, expectedAudienceUrl, strings.Join(claims.GetAudience(), ","))
 	}
 }
