@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/formancehq/go-libs/v3/oidc"
 )
 
@@ -37,6 +38,7 @@ func ControlPlaneMiddleware(ja Authenticator) func(handler http.Handler) http.Ha
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			agt, err := ja.AuthenticateOnControlPlane(r)
 			if err != nil {
+				logging.FromContext(r.Context()).Debugf("failed authentication: %v", err)
 				// client is authenticated but doesn't have permission to access this resource
 				if errors.Is(err, oidc.ErrOrgIDNotPresent) || errors.Is(err, oidc.ErrOrgIDInvalid) {
 					w.WriteHeader(http.StatusForbidden)
