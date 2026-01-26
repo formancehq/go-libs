@@ -245,4 +245,58 @@ func TestModule(t *testing.T) {
 			// Good, discovery was not called
 		}
 	})
+
+	t.Run("module can be annotated and used distinctly", func(t *testing.T) {
+		t.Parallel()
+
+		_, issuer1, discoveryCalled1 := setupTestOIDCServer(t)
+		_, issuer2, discoveryCalled2 := setupTestOIDCServer(t)
+
+		var authenticator auth.Authenticator
+		var authenticator2 auth.Authenticator
+
+		options := []fx.Option{
+			auth.AnnotatedModule(auth.ModuleConfig{
+				Enabled:     true,
+				Issuer:      issuer1,
+				Service:     "test-service",
+				CheckScopes: false,
+			}, "one"),
+			auth.AnnotatedModule(auth.ModuleConfig{
+				Enabled:     true,
+				Issuer:      issuer2,
+				Service:     "test-service",
+				CheckScopes: false,
+			}, "two"),
+			fx.Populate(
+				fx.Annotate(&authenticator, fx.ParamTags(`name:"one"`)),
+				fx.Annotate(&authenticator2, fx.ParamTags(`name:"two"`)),
+			),
+		}
+
+		if !testing.Verbose() {
+			options = append(options, fx.NopLogger)
+		}
+
+		app := fxtest.New(t, options...)
+		app.RequireStart()
+		defer app.RequireStop()
+
+		require.NotNil(t, authenticator)
+		require.NotNil(t, authenticator2)
+
+		select {
+		case called := <-discoveryCalled1:
+			require.True(t, called, "Discovery endpoint for issuer 1 should have been called")
+		default:
+			t.Fatal("Discovery endpoint for issuer 1 was not called")
+		}
+
+		select {
+		case called := <-discoveryCalled2:
+			require.True(t, called, "Discovery endpoint for issuer 2 should have been called")
+		default:
+			t.Fatal("Discovery endpoint for issuer 2 was not called")
+		}
+	})
 }
