@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	stdtime "time"
 
@@ -635,11 +634,10 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 	t.Run("CheckAudienceClaim audience mismatches", func(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
-		expectedAudience, err := url.Parse("http://expected.mydomain.com")
-		require.NoError(t, err)
+		expectedAudience := "http://expected.mydomain.com"
 
 		additionalChecks := []AdditionalCheck{
-			CheckAudienceClaim(*expectedAudience),
+			CheckAudienceClaim(expectedAudience),
 		}
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
 
@@ -660,16 +658,15 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 	t.Run("CheckAudienceClaim audience matches", func(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
-		expectedAudience, err := url.Parse("http://expected.mydomain.com")
-		require.NoError(t, err)
+		expectedAudience := "http://expected.mydomain.com"
 
 		additionalChecks := []AdditionalCheck{
-			CheckAudienceClaim(*expectedAudience),
+			CheckAudienceClaim(expectedAudience),
 		}
 		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
 
 		// Create access token
-		tokenAudience := expectedAudience.Host
+		tokenAudience := expectedAudience
 		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, tokenAudience, []string{}, "test-user", "")
 
 		// Create request with valid token

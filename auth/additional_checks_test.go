@@ -2,11 +2,9 @@ package auth_test
 
 import (
 	"errors"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v3/auth"
 	"github.com/formancehq/go-libs/v3/oidc"
@@ -40,26 +38,8 @@ func TestCheckAudienceClaim(t *testing.T) {
 			},
 			expectedError: oidc.ErrAudience,
 		},
-		"MatchingAudience without url scheme": {
-			expectedAudienceStr: "http://example.com",
-			claims: &oidc.AccessTokenClaims{
-				TokenClaims: oidc.TokenClaims{
-					Audience: []string{"example.com"},
-				},
-			},
-			expectedError: nil,
-		},
-		"NonMatchingAudience without url scheme": {
-			expectedAudienceStr: "http://example.com",
-			claims: &oidc.AccessTokenClaims{
-				TokenClaims: oidc.TokenClaims{
-					Audience: []string{"another.com"},
-				},
-			},
-			expectedError: oidc.ErrAudience,
-		},
 		"Multiple audiences in claim; one matches": {
-			expectedAudienceStr: "http://example.com",
+			expectedAudienceStr: "example.com",
 			claims: &oidc.AccessTokenClaims{
 				TokenClaims: oidc.TokenClaims{
 					Audience: []string{"otherdomain.com", "example.com", "123.com"},
@@ -80,11 +60,8 @@ func TestCheckAudienceClaim(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			expectedAudience, err := url.Parse(tt.expectedAudienceStr)
-			require.NoError(t, err)
-
-			check := auth.CheckAudienceClaim(*expectedAudience)
-			err = check(nil, tt.claims)
+			check := auth.CheckAudienceClaim(tt.expectedAudienceStr)
+			err := check(nil, tt.claims)
 			assert.Equal(t, tt.expectedError, err)
 		})
 	}
