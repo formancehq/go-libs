@@ -83,9 +83,9 @@ func ClaimsFromRequest(r *http.Request, expectedIssuer string, keySet oidc.KeySe
 		return claims, err
 	}
 
-	if err := oidc.CheckIssuer(claims, expectedIssuer); err != nil {
-		return claims, err
-	}
+	//if err := oidc.CheckIssuer(claims, expectedIssuer); err != nil {
+	//	return claims, err
+	//}
 
 	if err := oidc.CheckExpiration(claims, 0); err != nil {
 		return claims, err
