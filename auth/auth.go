@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -32,24 +33,43 @@ func NewJWTAuth(
 	}
 }
 
-// Authenticate validates the JWT in the request and returns the user, if valid.
-func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
+func (ja *JWTAuth) authenticate(r *http.Request) (ControlPlaneAgent, error) {
 	claims, err := ClaimsFromRequest(r, ja.issuer, ja.keySet)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
+	// DefaultControlPlaneAgent provides access to claims that are expected to be present when authenticating via the Control Plane
+	// in the case of another issuer (eg. Stack authentication) some of these claims may not be present
+	agt := NewDefaultControlPlaneAgent(*claims)
 	for _, check := range ja.additionalChecks {
 		err := check(r, claims)
 		if err != nil {
-			return false, err
+			return agt, err
 		}
 	}
 
 	if !ja.checkScopes {
-		return true, nil
+		return agt, nil
 	}
-	return checkScopes(ja.service, r.Method, claims.Scopes)
+	valid, err := checkScopes(ja.service, r.Method, claims.Scopes)
+	if err != nil || !valid {
+		return agt, fmt.Errorf("scopes not valid: %w", err)
+	}
+	return agt, nil
+}
+
+func (ja *JWTAuth) AuthenticateOnControlPlane(r *http.Request) (ControlPlaneAgent, error) {
+	return ja.authenticate(r)
+}
+
+// Authenticate validates the JWT in the request and returns the user, if valid.
+func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
+	_, err := ja.authenticate(r)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 var (

@@ -42,3 +42,18 @@ func CheckOrganizationIDClaim(fn OrganizationIDProvider) AdditionalCheck {
 		return nil
 	}
 }
+
+func CheckAudienceClaim(expectedAudienceUrl string) AdditionalCheck {
+	return func(_ *http.Request, claims *oidc.AccessTokenClaims) error {
+		if claims == nil {
+			return fmt.Errorf("claims cannot be nil")
+		}
+
+		for _, aud := range claims.GetAudience() {
+			if aud == expectedAudienceUrl {
+				return nil
+			}
+		}
+		return oidc.ErrAudience
+	}
+}

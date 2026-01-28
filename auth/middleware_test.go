@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 
@@ -23,7 +24,7 @@ func TestMiddleware(t *testing.T) {
 		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
 
 		// Create access token
-		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
+		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -60,6 +61,87 @@ func TestMiddleware(t *testing.T) {
 
 		require.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
+}
+
+func TestControlPlaneMiddleware(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success with valid token", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+
+		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
+
+		// Create access token
+		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
+
+		handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		}))
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "OK", rr.Body.String())
+	})
+
+	t.Run("failure with invalid token", func(t *testing.T) {
+		t.Parallel()
+		keySet, _, issuer := setupTestKeySet(t)
+
+		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
+
+		handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer invalid-token")
+		req = req.WithContext(logging.TestingContext())
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("values from claim are set in context", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+
+		expectedOrgID := "mksgleiucajh"
+		provider := func(*http.Request) (orgID string, err error) {
+			return expectedOrgID, nil
+		}
+		additionalChecks := []AdditionalCheck{CheckOrganizationIDClaim(provider)}
+		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+
+		// Create access token
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", expectedOrgID)
+
+		handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, expectedOrgID, r.Context().Value(ContextKeyAuthClaimOrganizationID))
+			assert.Equal(t, "test-client", r.Context().Value(ContextKeyAuthClaimClientID))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		}))
+
+		req := httptest.NewRequest("GET", "/test2", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = req.WithContext(logging.TestingContext())
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "OK", rr.Body.String())
+	})
 
 	t.Run("forbidden", func(t *testing.T) {
 		t.Parallel()
@@ -83,7 +165,7 @@ func TestMiddleware(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				authenticator := NewMockAuthenticator(ctrl)
 
-				handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
 				}))
 
@@ -91,7 +173,7 @@ func TestMiddleware(t *testing.T) {
 				req.Header.Set("Authorization", "Bearer mock-token")
 				req = req.WithContext(logging.TestingContext())
 
-				authenticator.EXPECT().Authenticate(gomock.Any(), gomock.Any()).Return(true, tt.authError)
+				authenticator.EXPECT().AuthenticateOnControlPlane(gomock.Any()).Return(nil, tt.authError)
 				rr := httptest.NewRecorder()
 				handler.ServeHTTP(rr, req)
 
