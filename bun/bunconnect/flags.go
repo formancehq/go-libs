@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -45,25 +46,46 @@ func WithRuntimeParams(params map[string]string) Option {
 	}
 }
 
+func GetAWSIAMAuthConnector(cmd *cobra.Command, opts ...Option) (func(s string) (driver.Connector, error), error) {
+	var cfg aws.Config
+	var err error
+	var ctx context.Context
+
+	if cmd != nil {
+		ctx = cmd.Context()
+		cfg, err = config.LoadDefaultConfig(ctx, iam.LoadOptionFromCommand(cmd))
+	} else {
+		ctx = context.Background()
+		cfg, err = config.LoadDefaultConfig(ctx)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	connector := func(s string) (driver.Connector, error) {
+		return &iamConnector{
+			dsn: s,
+			driver: &iamDriver{
+				awsConfig: cfg,
+			},
+			options: opts,
+			logger:  logging.FromContext(ctx),
+		}, nil
+	}
+
+	return connector, nil
+}
+
 func ConnectionOptionsFromFlags(cmd *cobra.Command, opts ...Option) (*ConnectionOptions, error) {
+	var err error
 	var connector func(string) (driver.Connector, error)
 
 	awsEnable, _ := cmd.Flags().GetBool(PostgresAWSEnableIAMFlag)
 	if awsEnable {
-		cfg, err := config.LoadDefaultConfig(context.Background(), iam.LoadOptionFromCommand(cmd))
+		connector, err = GetAWSIAMAuthConnector(cmd, opts...)
 		if err != nil {
 			return nil, err
-		}
-
-		connector = func(s string) (driver.Connector, error) {
-			return &iamConnector{
-				dsn: s,
-				driver: &iamDriver{
-					awsConfig: cfg,
-				},
-				options: opts,
-				logger:  logging.FromContext(cmd.Context()),
-			}, nil
 		}
 	} else {
 		connector = func(dsn string) (driver.Connector, error) {
