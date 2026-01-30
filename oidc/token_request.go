@@ -263,6 +263,7 @@ type ClientCredentialsRequest struct {
 	ClientSecret        string              `schema:"client_secret"`
 	ClientAssertion     string              `schema:"client_assertion"`
 	ClientAssertionType string              `schema:"client_assertion_type"`
+	Resource            string              `schema:"resource,omitempty"`
 
 	// Extends spec
 	OrganizationID string `schema:"organization_id"`
