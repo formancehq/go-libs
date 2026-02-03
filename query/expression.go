@@ -21,7 +21,7 @@ func (fn ContextFn) BuildMatcher(key, operator string, value any) (string, []any
 
 type Builder interface {
 	Build(Context) (string, []any, error)
-	Walk(f func(operator string, key string, value any) error) error
+	Walk(f func(operator string, key string, value *any) error) error
 }
 
 type set struct {
@@ -37,7 +37,7 @@ func (set set) MarshalJSON() ([]byte, error) {
 
 var _ Builder = (*set)(nil)
 
-func (set set) Walk(f func(operator string, key string, value any) error) error {
+func (set *set) Walk(f func(operator string, key string, value *any) error) error {
 	for _, item := range set.items {
 		if err := item.Walk(f); err != nil {
 			return err
@@ -47,7 +47,7 @@ func (set set) Walk(f func(operator string, key string, value any) error) error 
 	return nil
 }
 
-func (set set) Build(ctx Context) (string, []any, error) {
+func (set *set) Build(ctx Context) (string, []any, error) {
 	if len(set.items) == 0 {
 		return "1 = 1", nil, nil
 	}
@@ -76,11 +76,11 @@ type keyValue struct {
 	value    any
 }
 
-func (kv keyValue) Walk(f func(operator string, key string, value any) error) error {
-	return f(kv.operator, kv.key, kv.value)
+func (kv *keyValue) Walk(f func(operator string, key string, value *any) error) error {
+	return f(kv.operator, kv.key, &kv.value)
 }
 
-func (kv keyValue) MarshalJSON() ([]byte, error) {
+func (kv *keyValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{
 		kv.operator: map[string]any{
 			kv.key: kv.value,
@@ -90,7 +90,7 @@ func (kv keyValue) MarshalJSON() ([]byte, error) {
 
 var _ Builder = (*keyValue)(nil)
 
-func (kv keyValue) Build(ctx Context) (string, []any, error) {
+func (kv *keyValue) Build(ctx Context) (string, []any, error) {
 	return ctx.BuildMatcher(kv.key, kv.operator, kv.value)
 }
 
@@ -98,7 +98,7 @@ type not struct {
 	expression Builder
 }
 
-func (not not) Walk(f func(operator string, key string, value any) error) error {
+func (not *not) Walk(f func(operator string, key string, value *any) error) error {
 	return not.expression.Walk(f)
 }
 
@@ -110,7 +110,7 @@ func (not not) MarshalJSON() ([]byte, error) {
 
 var _ Builder = (*not)(nil)
 
-func (not not) Build(context Context) (string, []any, error) {
+func (not *not) Build(context Context) (string, []any, error) {
 	sub, args, err := not.expression.Build(context)
 	if err != nil {
 		return "", nil, err
@@ -118,84 +118,84 @@ func (not not) Build(context Context) (string, []any, error) {
 	return fmt.Sprintf("not (%s)", sub), args, nil
 }
 
-func Not(expr Builder) not {
-	return not{
+func Not(expr Builder) *not {
+	return &not{
 		expression: expr,
 	}
 }
 
-func Match(key string, value any) keyValue {
-	return keyValue{
+func Match(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$match",
 		key:      key,
 		value:    value,
 	}
 }
 
-func Like(key string, value any) keyValue {
-	return keyValue{
+func Like(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$like",
 		key:      key,
 		value:    value,
 	}
 }
 
-func Or(items ...Builder) set {
-	return set{
+func Or(items ...Builder) *set {
+	return &set{
 		operator: "or",
 		items:    items,
 	}
 }
 
-func And(items ...Builder) set {
-	return set{
+func And(items ...Builder) *set {
+	return &set{
 		operator: "and",
 		items:    items,
 	}
 }
 
-func Lt(key string, value any) keyValue {
-	return keyValue{
+func Lt(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$lt",
 		key:      key,
 		value:    value,
 	}
 }
 
-func Lte(key string, value any) keyValue {
-	return keyValue{
+func Lte(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$lte",
 		key:      key,
 		value:    value,
 	}
 }
 
-func Gt(key string, value any) keyValue {
-	return keyValue{
+func Gt(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$gt",
 		key:      key,
 		value:    value,
 	}
 }
 
-func Gte(key string, value any) keyValue {
-	return keyValue{
+func Gte(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$gte",
 		key:      key,
 		value:    value,
 	}
 }
 
-func Exists(key string, value any) keyValue {
-	return keyValue{
+func Exists(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$exists",
 		key:      key,
 		value:    value,
 	}
 }
 
-func In(key string, value any) keyValue {
-	return keyValue{
+func In(key string, value any) *keyValue {
+	return &keyValue{
 		operator: "$in",
 		key:      key,
 		value:    value,
@@ -287,19 +287,19 @@ func mapMapToExpression(m map[string]any) (Builder, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "parsing $and")
 		}
-		return and, nil
+		return &and, nil
 	case "$match", "$gte", "$lte", "$gt", "$lt", "$exists", "$like", "$in":
 		match, err := parseKeyValue(operator, value)
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing %s", operator)
 		}
-		return match, nil
+		return &match, nil
 	case "$not":
 		match, err := parseNot(value)
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing %s", operator)
 		}
-		return match, nil
+		return &match, nil
 	default:
 		return nil, fmt.Errorf("unexpected operator %s", operator)
 	}
