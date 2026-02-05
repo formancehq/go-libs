@@ -116,7 +116,7 @@ func (l *listener) handleMessage(ctx context.Context, msg *message.Message) {
 	l.logger.WithField("message_uuid", msg.UUID).Debugf("queue listener handling message")
 	err := l.callbackFn(ctx, msg.Metadata, msg.Payload)
 	if err != nil {
-		l.logger.WithField("message_uuid", msg.UUID).Errorf("queue listener failed to process message: %w", err)
+		l.logger.WithField("message_uuid", msg.UUID).WithField("err", err.Error()).Errorf("queue listener failed to process message")
 		msg.Nack()
 		return
 	}
