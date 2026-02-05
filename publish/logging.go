@@ -8,6 +8,7 @@ import (
 )
 
 type watermillLoggerAdapter struct {
+	includeTraceLogs bool
 	logging.Logger
 }
 
@@ -26,7 +27,9 @@ func (w watermillLoggerAdapter) Debug(msg string, fields watermill.LogFields) {
 }
 
 func (w watermillLoggerAdapter) Trace(msg string, fields watermill.LogFields) {
-	w.WithFields(fields).Debug(msg)
+	if w.includeTraceLogs {
+		w.WithFields(fields).Debug(msg)
+	}
 }
 
 func (w watermillLoggerAdapter) With(fields watermill.LogFields) watermill.LoggerAdapter {
@@ -35,9 +38,10 @@ func (w watermillLoggerAdapter) With(fields watermill.LogFields) watermill.Logge
 	}
 }
 
-func NewWatermillLoggerAdapter(logger logging.Logger) watermill.LoggerAdapter {
+func NewWatermillLoggerAdapter(logger logging.Logger, trace bool) watermill.LoggerAdapter {
 	return watermillLoggerAdapter{
-		Logger: logger,
+		includeTraceLogs: trace,
+		Logger:           logger,
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"io"
 )
 
+//go:generate mockgen -source logging.go -destination logging_generated.go -package logging . Logger
 type Logger interface {
 	Debugf(fmt string, args ...any)
 	Infof(fmt string, args ...any)
