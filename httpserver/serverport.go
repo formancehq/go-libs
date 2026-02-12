@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"go.uber.org/fx"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/formancehq/go-libs/v3/serverport"
@@ -30,7 +32,7 @@ func startServer(ctx context.Context, s *serverport.Server, handler http.Handler
 	}
 
 	srv := &http.Server{
-		Handler:           handler,
+		Handler:           h2c.NewHandler(handler, &http2.Server{}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	for _, option := range options {
