@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/oidc"
-	libtime "github.com/formancehq/go-libs/v3/time"
+	"github.com/formancehq/go-libs/v4/logging"
+	"github.com/formancehq/go-libs/v4/oidc"
+	libtime "github.com/formancehq/go-libs/v4/time"
 )
 
 func setupTestKeySet(t *testing.T) (oidc.KeySet, *rsa.PrivateKey, string) {

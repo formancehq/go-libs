@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/formancehq/go-libs/v3/testing/deferred"
+	"github.com/formancehq/go-libs/v4/testing/deferred"
 )
 
 func DeferMap[From, To any](d *deferred.Deferred[From], mapper func(From) To) *deferred.Deferred[To] {

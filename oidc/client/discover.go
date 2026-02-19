@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/formancehq/go-libs/v3/oidc"
-	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
+	"github.com/formancehq/go-libs/v4/oidc"
+	httphelper "github.com/formancehq/go-libs/v4/oidc/http"
 )
 
 // Discover calls the discovery endpoint of the provided issuer and returns its configuration

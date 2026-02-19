@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/require"
 
-	"github.com/formancehq/go-libs/v3/api"
-	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v4/api"
+	"github.com/formancehq/go-libs/v4/logging"
 )
 
 func TestChiLogFormatter(t *testing.T) {

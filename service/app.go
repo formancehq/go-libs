@@ -11,9 +11,9 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/errorsutils"
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/otlp/otlptraces"
+	"github.com/formancehq/go-libs/v4/errorsutils"
+	"github.com/formancehq/go-libs/v4/logging"
+	"github.com/formancehq/go-libs/v4/otlp/otlptraces"
 )
 
 const (

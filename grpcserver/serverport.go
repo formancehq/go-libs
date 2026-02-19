@@ -6,8 +6,8 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/serverport"
+	"github.com/formancehq/go-libs/v4/logging"
+	"github.com/formancehq/go-libs/v4/serverport"
 )
 
 const serverPortDiscr = "grpc"

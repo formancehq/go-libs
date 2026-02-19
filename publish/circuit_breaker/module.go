@@ -6,9 +6,9 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/publish/circuit_breaker/storage"
-	topicmapper "github.com/formancehq/go-libs/v3/publish/topic_mapper"
+	"github.com/formancehq/go-libs/v4/logging"
+	"github.com/formancehq/go-libs/v4/publish/circuit_breaker/storage"
+	topicmapper "github.com/formancehq/go-libs/v4/publish/topic_mapper"
 )
 
 func Module(schema string, openIntervalDuration time.Duration, storageLimit int, debug bool) fx.Option {

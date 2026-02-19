@@ -9,7 +9,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/crypto"
 	"golang.org/x/oauth2"
 
-	"github.com/formancehq/go-libs/v3/time"
+	"github.com/formancehq/go-libs/v4/time"
 )
 
 const (

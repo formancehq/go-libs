@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/oidc"
+	"github.com/formancehq/go-libs/v4/logging"
+	"github.com/formancehq/go-libs/v4/oidc"
 )
 
 const (

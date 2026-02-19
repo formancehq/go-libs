@@ -8,8 +8,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 
-	"github.com/formancehq/go-libs/v3/testing/deferred"
-	"github.com/formancehq/go-libs/v3/testing/testservice"
+	"github.com/formancehq/go-libs/v4/testing/deferred"
+	"github.com/formancehq/go-libs/v4/testing/testservice"
 )
 
 func DeferNew(

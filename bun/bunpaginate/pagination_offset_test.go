@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 
-	"github.com/formancehq/go-libs/v3/bun/bunconnect"
-	"github.com/formancehq/go-libs/v3/bun/bundebug"
-	bunpaginate2 "github.com/formancehq/go-libs/v3/bun/bunpaginate"
-	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v4/bun/bunconnect"
+	"github.com/formancehq/go-libs/v4/bun/bundebug"
+	bunpaginate2 "github.com/formancehq/go-libs/v4/bun/bunpaginate"
+	"github.com/formancehq/go-libs/v4/logging"
 )
 
 func TestOffsetPagination(t *testing.T) {

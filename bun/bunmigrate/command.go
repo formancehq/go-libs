@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/uptrace/bun"
 
-	"github.com/formancehq/go-libs/v3/bun/bunconnect"
+	"github.com/formancehq/go-libs/v4/bun/bunconnect"
 )
 
 type Executor func(cmd *cobra.Command, args []string, db *bun.DB) error

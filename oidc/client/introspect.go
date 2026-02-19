@@ -3,8 +3,8 @@ package client
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/v3/oidc"
-	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
+	"github.com/formancehq/go-libs/v4/oidc"
+	httphelper "github.com/formancehq/go-libs/v4/oidc/http"
 )
 
 func Introspect(ctx context.Context, relyingParty RelyingParty, token string) (*oidc.IntrospectionResponse, error) {

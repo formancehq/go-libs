@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/otlp"
+	"github.com/formancehq/go-libs/v4/otlp"
 )
 
 func TestTracesModule(t *testing.T) {

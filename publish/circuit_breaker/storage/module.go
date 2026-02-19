@@ -6,8 +6,8 @@ import (
 	"github.com/uptrace/bun"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/bun/bunconnect"
-	"github.com/formancehq/go-libs/v3/bun/bundebug"
+	"github.com/formancehq/go-libs/v4/bun/bunconnect"
+	"github.com/formancehq/go-libs/v4/bun/bundebug"
 )
 
 func Module(schema string, storageLimit int, debug bool) fx.Option {

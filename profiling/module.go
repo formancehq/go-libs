@@ -5,7 +5,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/httpserver"
+	"github.com/formancehq/go-libs/v4/httpserver"
 )
 
 // NewModule creates an HTTP server serving pprof "/debug" endpoints on bindPort

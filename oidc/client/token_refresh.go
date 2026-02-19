@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/formancehq/go-libs/v3/oidc"
+	"github.com/formancehq/go-libs/v4/oidc"
 )
 
 func (t tokenEndpointCaller) TokenEndpoint() string {
