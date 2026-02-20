@@ -3,7 +3,7 @@ package testservice
 import (
 	"context"
 
-	"github.com/formancehq/go-libs/v3/service"
+	"github.com/formancehq/go-libs/v4/service"
 )
 
 func DebugInstrumentation(debug bool) Instrumentation {

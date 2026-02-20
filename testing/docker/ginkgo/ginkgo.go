@@ -3,8 +3,8 @@ package ginkgo
 import (
 	. "github.com/onsi/ginkgo/v2"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/testing/docker"
+	"github.com/formancehq/go-libs/v4/logging"
+	"github.com/formancehq/go-libs/v4/testing/docker"
 )
 
 var pool = new(docker.Pool)

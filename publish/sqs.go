@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/service"
+	"github.com/formancehq/go-libs/v4/service"
 )
 
 func NewSqsSubscriber(cmd *cobra.Command, logger watermill.LoggerAdapter, config aws.Config, optFns []func(*sqsservice.Options)) (*sqs.Subscriber, error) {

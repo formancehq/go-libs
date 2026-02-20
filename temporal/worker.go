@@ -9,7 +9,7 @@ import (
 	temporalworkflow "go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v4/logging"
 )
 
 type Definition struct {

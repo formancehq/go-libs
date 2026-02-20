@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/formancehq/go-libs/v3/errorsutils"
+	"github.com/formancehq/go-libs/v4/errorsutils"
 )
 
 func TestErrorWithExitCode(t *testing.T) {

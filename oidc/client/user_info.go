@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	httphelper "github.com/formancehq/go-libs/v3/oidc/http"
+	httphelper "github.com/formancehq/go-libs/v4/oidc/http"
 )
 
 // Userinfo will call the OIDC [UserInfo] Endpoint with the provided token and returns

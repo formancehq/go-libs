@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/formancehq/go-libs/v3/otlp"
-	"github.com/formancehq/go-libs/v3/otlp/otlpmetrics"
-	"github.com/formancehq/go-libs/v3/testing/deferred"
+	"github.com/formancehq/go-libs/v4/otlp"
+	"github.com/formancehq/go-libs/v4/otlp/otlpmetrics"
+	"github.com/formancehq/go-libs/v4/testing/deferred"
 )
 
 func OTLPInstrumentation(otlpConfiguration *deferred.Deferred[OTLPConfig]) Instrumentation {

@@ -7,7 +7,7 @@ import (
 	flag "github.com/spf13/pflag"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/otlp"
+	"github.com/formancehq/go-libs/v4/otlp"
 )
 
 const (

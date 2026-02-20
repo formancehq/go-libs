@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/pflag"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/errorsutils"
-	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v4/errorsutils"
+	"github.com/formancehq/go-libs/v4/logging"
 )
 
 var licenceEnabled = false

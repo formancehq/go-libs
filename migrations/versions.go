@@ -1,6 +1,6 @@
 package migrations
 
-import "github.com/formancehq/go-libs/v3/time"
+import "github.com/formancehq/go-libs/v4/time"
 
 type Version struct {
 	ID            int       `bun:"id,type:serial,pk,scanonly"`

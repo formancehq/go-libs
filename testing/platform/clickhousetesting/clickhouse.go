@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
-	"github.com/formancehq/go-libs/v3/testing/docker"
+	"github.com/formancehq/go-libs/v4/testing/docker"
 )
 
 type TestingT interface {

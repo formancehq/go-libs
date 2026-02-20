@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/formancehq/go-libs/v3/oidc"
+import "github.com/formancehq/go-libs/v4/oidc"
 
 //go:generate mockgen -source control_plane_agent.go -destination control_plane_agent_generated.go -package auth . ControlPlaneAgent
 type ControlPlaneAgent interface {

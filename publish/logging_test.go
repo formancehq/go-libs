@@ -7,8 +7,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"go.uber.org/mock/gomock"
 
-	"github.com/formancehq/go-libs/v3/logging"
-	"github.com/formancehq/go-libs/v3/publish"
+	"github.com/formancehq/go-libs/v4/logging"
+	"github.com/formancehq/go-libs/v4/publish"
 )
 
 func TestWatermillLoggerAdapter_Error(t *testing.T) {

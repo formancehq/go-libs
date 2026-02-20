@@ -6,7 +6,7 @@ import (
 
 	"github.com/uptrace/bun"
 
-	"github.com/formancehq/go-libs/v3/migrations"
+	"github.com/formancehq/go-libs/v4/migrations"
 )
 
 func registerMigrations(migrator *migrations.Migrator, schema string) {

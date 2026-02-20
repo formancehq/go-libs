@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libtime "github.com/formancehq/go-libs/v3/time"
+	libtime "github.com/formancehq/go-libs/v4/time"
 )
 
 func TestNew(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v3/oidc"
-	"github.com/formancehq/go-libs/v3/oidc/client"
+	"github.com/formancehq/go-libs/v4/oidc"
+	"github.com/formancehq/go-libs/v4/oidc/client"
 )
 
 type ModuleConfig struct {

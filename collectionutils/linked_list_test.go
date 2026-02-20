@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/formancehq/go-libs/v3/collectionutils"
+	"github.com/formancehq/go-libs/v4/collectionutils"
 )
 
 func TestLinkedList(t *testing.T) {
