@@ -68,7 +68,7 @@ func TestModule(t *testing.T) {
 		options := []fx.Option{
 			authnfx.JWTModule(auth.Config{
 				Enabled:     true,
-				Issuer:      issuer,
+				Issuers:     []string{issuer},
 				Service:     "test-service",
 				CheckScopes: false,
 			}),
@@ -163,17 +163,17 @@ func TestModule(t *testing.T) {
 
 		customKeySet := oidc.NewStaticKeySet(customJWK)
 
-		_, issuer, discoveryCalled := setupTestOIDCServer(t)
+		_, issuer, _ := setupTestOIDCServer(t)
 
 		var authenticator auth.Authenticator
 
-		// Use fx.Decorate to intercept and override the KeySet provider
-		// fx.Decorate wraps the original provider and allows us to return our custom KeySet
-		// This prevents the module's provider from executing the OIDC discovery
+		// Use fx.Decorate to override the Authenticator.
+		// With multi-issuer support, discovery happens inside the Authenticator
+		// provider, so decorating the Authenticator itself is the correct pattern.
 		options := []fx.Option{
 			authnfx.JWTModule(auth.Config{
 				Enabled:     true,
-				Issuer:      issuer,
+				Issuers:     []string{issuer},
 				Service:     "test-service",
 				CheckScopes: false,
 			}),
@@ -183,11 +183,13 @@ func TestModule(t *testing.T) {
 			fx.Provide(func() logging.Logger {
 				return logging.Testing()
 			}),
-			// Decorate the KeySet provider to return our custom KeySet
-			// This intercepts the provider before it tries to discover the OIDC endpoint
-			fx.Decorate(func(ctx context.Context, httpClient *http.Client) (oidc.KeySet, error) {
-				// Return our custom KeySet instead of calling the original provider
-				return customKeySet, nil
+			fx.Decorate(func() auth.Authenticator {
+				return auth.NewJWTAuth(
+					map[string]oidc.KeySet{issuer: customKeySet},
+					"test-service",
+					false,
+					nil,
+				)
 			}),
 			fx.Populate(&authenticator),
 		}
@@ -202,13 +204,10 @@ func TestModule(t *testing.T) {
 
 		require.NotNil(t, authenticator)
 
-		// Verify that the discovery endpoint was NOT called (because we used fx.Decorate)
-		select {
-		case <-discoveryCalled:
-			t.Fatal("Discovery endpoint should NOT have been called when using fx.Decorate")
-		default:
-			// Good, discovery was not called
-		}
+		// Verify that the authenticator is using our custom key set
+		// by checking it's a *JWTAuth (not NoAuth)
+		_, ok := authenticator.(*auth.JWTAuth)
+		require.True(t, ok, "Authenticator should be a JWTAuth")
 	})
 
 	t.Run("module with disabled auth does not call discovery", func(t *testing.T) {
