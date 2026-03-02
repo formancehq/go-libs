@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v3/logging"
+	"github.com/formancehq/go-libs/v3/oidc"
 )
 
 func TestMiddleware(t *testing.T) {
@@ -17,7 +18,7 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false)
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
@@ -42,7 +43,7 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false)
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

@@ -82,7 +82,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false)
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, []string{}, "test-user")
@@ -101,7 +101,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req = req.WithContext(logging.TestingContext())
@@ -116,7 +116,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Invalid token")
@@ -132,7 +132,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Bearer invalid-token")
@@ -147,7 +147,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false)
 
 		// Create an expired token
 		now := stdtime.Now().UTC()
@@ -193,7 +193,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", true)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true)
 
 		// Create access token with read scope
 		token := createAccessToken(t, privateKey, issuer, []string{"test-service:read"}, "test-user")
@@ -211,7 +211,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", true)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true)
 
 		// Create access token with write scope
 		token := createAccessToken(t, privateKey, issuer, []string{"test-service:write"}, "test-user")
@@ -229,7 +229,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", true)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true)
 
 		// Create access token with only read scope (not enough for POST)
 		token := createAccessToken(t, privateKey, issuer, []string{"test-service:read"}, "test-user")
@@ -248,7 +248,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", true)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true)
 
 		// Create access token with write scope
 		token := createAccessToken(t, privateKey, issuer, []string{"test-service:write"}, "test-user")
