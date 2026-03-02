@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"errors"
+
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/zitadel/oidc/v2/pkg/client"
@@ -42,13 +44,17 @@ func Module(cfg ModuleConfig) fx.Option {
 
 	issuers := cfg.resolveIssuers()
 
+	if cfg.Enabled && len(issuers) == 0 {
+		return fx.Error(errors.New("auth is enabled but no issuers are configured"))
+	}
+
 	options = append(options,
 		fx.Provide(func() Authenticator {
 			return NewNoAuth()
 		}),
 	)
 
-	if cfg.Enabled && len(issuers) > 0 {
+	if cfg.Enabled {
 		options = append(options,
 			fx.Decorate(func(logger logging.Logger) (Authenticator, error) {
 				retryClient := retryablehttp.NewClient()
