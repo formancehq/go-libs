@@ -11,30 +11,27 @@ import (
 )
 
 type JWTAuth struct {
-	issuer      string
+	keySets     map[string]oidc.KeySet // issuer -> keySet
 	checkScopes bool
 	service     string
-	keySet      oidc.KeySet
 }
 
 func NewJWTAuth(
-	keySet oidc.KeySet,
-	issuer string,
+	keySets map[string]oidc.KeySet,
 	service string,
 	checkScopes bool,
 ) *JWTAuth {
 	return &JWTAuth{
-		issuer:      issuer,
+		keySets:     keySets,
 		checkScopes: checkScopes,
 		service:     service,
-		keySet:      keySet,
 	}
 }
 
 // Authenticate validates the JWT in the request and returns the user, if valid.
 func (ja *JWTAuth) Authenticate(_ http.ResponseWriter, r *http.Request) (bool, error) {
 
-	claims, err := ClaimsFromRequest(r, ja.issuer, ja.keySet)
+	claims, err := ClaimsFromRequest(r, ja.keySets)
 	if err != nil {
 		return false, err
 	}
@@ -64,7 +61,7 @@ var (
 	ErrMalformedHeader       = errors.New("malformed authorization header")
 )
 
-func ClaimsFromRequest(r *http.Request, expectedIssuer string, keySet oidc.KeySet) (*oidc.AccessTokenClaims, error) {
+func ClaimsFromRequest(r *http.Request, keySets map[string]oidc.KeySet) (*oidc.AccessTokenClaims, error) {
 
 	authHeader := r.Header.Get("authorization")
 	if authHeader == "" {
@@ -84,13 +81,23 @@ func ClaimsFromRequest(r *http.Request, expectedIssuer string, keySet oidc.KeySe
 	if err != nil {
 		return nil, err
 	}
-	payload, err := oidc.ParseToken(decrypted, &claims)
+	payload, err := oidc.ParseToken(decrypted, claims)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := oidc.CheckIssuer(claims, expectedIssuer); err != nil {
-		return claims, err
+	keySet, ok := keySets[claims.Issuer]
+	if !ok {
+		issuers := make([]string, 0, len(keySets))
+		for iss := range keySets {
+			issuers = append(issuers, iss)
+		}
+		return claims, fmt.Errorf(
+			"%w: got: %s, trusted: %v",
+			oidc.ErrIssuerInvalid,
+			claims.Issuer,
+			issuers,
+		)
 	}
 
 	if _, err = oidc.CheckSignature(
