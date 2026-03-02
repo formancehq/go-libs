@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/hashicorp/go-retryablehttp"
@@ -68,7 +69,7 @@ func Module(cfg ModuleConfig) fx.Option {
 					if err != nil {
 						return nil, err
 					}
-					keySet := rp.NewRemoteKeySet(&http.Client{}, discovery.JwksURI)
+					keySet := rp.NewRemoteKeySet(&http.Client{Timeout: 10 * time.Second}, discovery.JwksURI)
 					verifiers[issuer] = op.NewAccessTokenVerifier(issuer, keySet)
 				}
 				return newJWTAuth(
