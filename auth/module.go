@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/hashicorp/go-retryablehttp"
@@ -59,15 +60,15 @@ func Module(cfg ModuleConfig) fx.Option {
 			fx.Decorate(func(logger logging.Logger) (Authenticator, error) {
 				retryClient := retryablehttp.NewClient()
 				retryClient.RetryMax = cfg.ReadKeySetMaxRetries
-				httpClient := retryClient.StandardClient()
+				discoveryHTTPClient := retryClient.StandardClient()
 
 				verifiers := make(map[string]op.AccessTokenVerifier, len(issuers))
 				for _, issuer := range issuers {
-					discovery, err := client.Discover(issuer, httpClient)
+					discovery, err := client.Discover(issuer, discoveryHTTPClient)
 					if err != nil {
 						return nil, err
 					}
-					keySet := rp.NewRemoteKeySet(httpClient, discovery.JwksURI)
+					keySet := rp.NewRemoteKeySet(&http.Client{}, discovery.JwksURI)
 					verifiers[issuer] = op.NewAccessTokenVerifier(issuer, keySet)
 				}
 				return newJWTAuth(
