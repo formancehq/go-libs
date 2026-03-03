@@ -6,10 +6,10 @@ import (
 	"sync"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-
-	"github.com/formancehq/go-libs/v4/logging"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+
+	"github.com/formancehq/go-libs/v4/logging"
 )
 
 type (
