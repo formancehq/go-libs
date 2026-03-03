@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/formancehq/go-libs/v2/logging"
+	"github.com/formancehq/go-libs/v3/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
