@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/formancehq/go-libs/v4/logging"
 )
@@ -114,6 +116,7 @@ func (l *listener) startWorker(ctx context.Context, messages <-chan *message.Mes
 
 func (l *listener) handleMessage(ctx context.Context, msg *message.Message) {
 	l.logger.WithField("message_uuid", msg.UUID).Debugf("queue listener handling message")
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(msg.Metadata))
 	err := l.callbackFn(ctx, msg.Metadata, msg.Payload)
 	if err != nil {
 		l.logger.WithField("message_uuid", msg.UUID).WithField("err", err.Error()).Errorf("queue listener failed to process message")
