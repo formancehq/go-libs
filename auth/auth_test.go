@@ -151,7 +151,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, []AdditionalCheck{})
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, []AdditionalCheck{})
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
@@ -175,11 +175,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, []AdditionalCheck{}),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, []AdditionalCheck{}),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -206,11 +206,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -237,11 +237,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -267,11 +267,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -329,11 +329,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -364,11 +364,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -398,11 +398,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -433,11 +433,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", true, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", true, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -468,11 +468,11 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		}{
 			{
 				name: "JWTAuth",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, nil),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil),
 			},
 			{
 				name: "JWTAuth with additional checks",
-				auth: NewJWTAuth(keySet, issuer, "test-service", false, autoPassingAdditionalChecks),
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, autoPassingAdditionalChecks),
 			},
 		}
 
@@ -516,7 +516,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 			},
 		}
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, autoFailingAdditionalChecks)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, autoFailingAdditionalChecks)
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
@@ -543,7 +543,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 			CheckOrganizationIDClaim(provider),
 		}
 
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
 
 		// Create access token
 		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", expectedOrgID)
@@ -566,7 +566,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		additionalChecks := []AdditionalCheck{
 			CheckOrganizationIDClaim(provider),
 		}
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
 
 		// Create access token
 		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "")
@@ -590,7 +590,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		additionalChecks := []AdditionalCheck{
 			CheckOrganizationIDClaim(provider),
 		}
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
 
 		// Create access token
 		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "someotherorgid")
@@ -615,7 +615,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		additionalChecks := []AdditionalCheck{
 			CheckOrganizationIDClaim(provider),
 		}
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
 
 		// Create access token
 		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "")
@@ -639,7 +639,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		additionalChecks := []AdditionalCheck{
 			CheckAudienceClaim(expectedAudience),
 		}
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
 
 		// Create access token
 		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", "")
@@ -663,7 +663,7 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 		additionalChecks := []AdditionalCheck{
 			CheckAudienceClaim(expectedAudience),
 		}
-		auth := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+		auth := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
 
 		// Create access token
 		tokenAudience := expectedAudience

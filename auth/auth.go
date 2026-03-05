@@ -10,31 +10,28 @@ import (
 )
 
 type JWTAuth struct {
-	issuer           string
+	keySets          map[string]oidc.KeySet // issuer -> keySet
 	checkScopes      bool
 	service          string
-	keySet           oidc.KeySet
 	additionalChecks []AdditionalCheck
 }
 
 func NewJWTAuth(
-	keySet oidc.KeySet,
-	issuer string,
+	keySets map[string]oidc.KeySet,
 	service string,
 	checkScopes bool,
 	additionalChecks []AdditionalCheck,
 ) *JWTAuth {
 	return &JWTAuth{
-		issuer:           issuer,
+		keySets:          keySets,
 		checkScopes:      checkScopes,
 		service:          service,
-		keySet:           keySet,
 		additionalChecks: additionalChecks,
 	}
 }
 
 func (ja *JWTAuth) authenticate(r *http.Request) (ControlPlaneAgent, error) {
-	claims, err := ClaimsFromRequest(r, ja.issuer, ja.keySet)
+	claims, err := ClaimsFromRequest(r, ja.keySets)
 	if err != nil {
 		return nil, err
 	}
@@ -77,44 +74,42 @@ var (
 	ErrMalformedHeader       = errors.New("malformed authorization header")
 )
 
-func ClaimsFromRequest(r *http.Request, expectedIssuer string, keySet oidc.KeySet) (*oidc.AccessTokenClaims, error) {
-	claims := &oidc.AccessTokenClaims{}
-	if err := claimsFromRequest(r, claims, keySet); err != nil {
-		return claims, err
-	}
-
-	if err := oidc.CheckIssuer(claims, expectedIssuer); err != nil {
-		return claims, err
-	}
-
-	if err := oidc.CheckExpiration(claims, 0); err != nil {
-		return claims, err
-	}
-
-	return claims, nil
-}
-
-func claimsFromRequest[CLAIMS any](r *http.Request, claims CLAIMS, keySet oidc.KeySet) error {
+func ClaimsFromRequest(r *http.Request, keySets map[string]oidc.KeySet) (*oidc.AccessTokenClaims, error) {
 	authHeader := r.Header.Get("authorization")
 	if authHeader == "" {
-		return ErrNoAuthorizationHeader
+		return nil, ErrNoAuthorizationHeader
 	}
 
 	if !strings.HasPrefix(authHeader, "bearer") &&
 		!strings.HasPrefix(authHeader, "Bearer") {
-		return ErrMalformedHeader
+		return nil, ErrMalformedHeader
 	}
 
 	token := authHeader[6:]
 	token = strings.TrimSpace(token)
 
+	claims := &oidc.AccessTokenClaims{}
 	decrypted, err := oidc.DecryptToken(token)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	payload, err := oidc.ParseToken(decrypted, &claims)
+	payload, err := oidc.ParseToken(decrypted, claims)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	keySet, ok := keySets[claims.Issuer]
+	if !ok {
+		issuers := make([]string, 0, len(keySets))
+		for iss := range keySets {
+			issuers = append(issuers, iss)
+		}
+		return claims, fmt.Errorf(
+			"%w: got: %s, trusted: %v",
+			oidc.ErrIssuerInvalid,
+			claims.Issuer,
+			issuers,
+		)
 	}
 
 	if _, err = oidc.CheckSignature(
@@ -124,8 +119,12 @@ func claimsFromRequest[CLAIMS any](r *http.Request, claims CLAIMS, keySet oidc.K
 		[]string{}, // Default to RS256
 		keySet,
 	); err != nil {
-		return err
+		return claims, err
 	}
 
-	return nil
+	if err := oidc.CheckExpiration(claims, 0); err != nil {
+		return claims, err
+	}
+
+	return claims, nil
 }
