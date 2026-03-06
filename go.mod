@@ -1,4 +1,4 @@
-module github.com/formancehq/go-libs/v4
+module github.com/formancehq/go-libs/v5
 
 go 1.24.4
 
