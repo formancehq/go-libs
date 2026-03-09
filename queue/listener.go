@@ -117,7 +117,7 @@ func (l *listener) startWorker(ctx context.Context, messages <-chan *message.Mes
 func (l *listener) handleMessage(ctx context.Context, msg *message.Message) {
 	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(msg.Metadata))
 	ctx = logging.ContextWithLogger(ctx, l.logger)
-	logger := logging.FromContext(ctx)
+	logger := l.logger.WithContext(ctx)
 
 	logger.WithField("message_uuid", msg.UUID).Debugf("queue listener handling message")
 	err := l.callbackFn(ctx, msg.Metadata, msg.Payload)
