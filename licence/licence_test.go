@@ -2,9 +2,8 @@ package licence
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -81,11 +80,11 @@ func setEmbeddedKey(t *testing.T, key string) {
 	t.Cleanup(func() { formancePublicKey = original })
 }
 
-// generateTestKeyPair creates an ECDSA P-256 key pair and returns the private key
-// and the PEM-encoded public key.
-func generateTestKeyPair(t *testing.T) (*ecdsa.PrivateKey, string) {
+// generateTestRSAKeyPair creates an RSA key pair and returns the private key
+// and the PEM-encoded public key. Uses RSA to match production (RS256).
+func generateTestRSAKeyPair(t *testing.T) (*rsa.PrivateKey, string) {
 	t.Helper()
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	pubBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
@@ -99,9 +98,9 @@ func generateTestKeyPair(t *testing.T) (*ecdsa.PrivateKey, string) {
 	return privateKey, string(pubPEM)
 }
 
-func createTokenWithKey(t *testing.T, claims jwt.MapClaims, privateKey *ecdsa.PrivateKey) string {
+func createTokenWithRSAKey(t *testing.T, claims jwt.MapClaims, privateKey *rsa.PrivateKey) string {
 	t.Helper()
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	tokenString, err := token.SignedString(privateKey)
 	require.NoError(t, err)
 	return tokenString
@@ -128,7 +127,7 @@ func TestNewLicence(t *testing.T) {
 }
 
 func TestLicence_Start(t *testing.T) {
-	privateKey, pubPEM := generateTestKeyPair(t)
+	privateKey, pubPEM := generateTestRSAKeyPair(t)
 	setEmbeddedKey(t, pubPEM)
 
 	t.Run("invalid token", func(t *testing.T) {
@@ -156,7 +155,7 @@ func TestLicence_Start(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -183,7 +182,7 @@ func TestLicence_Start(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -206,7 +205,7 @@ func TestLicence_Start(t *testing.T) {
 }
 
 func TestLicence_validate(t *testing.T) {
-	privateKey, pubPEM := generateTestKeyPair(t)
+	privateKey, pubPEM := generateTestRSAKeyPair(t)
 	setEmbeddedKey(t, pubPEM)
 
 	t.Run("invalid token format", func(t *testing.T) {
@@ -233,7 +232,7 @@ func TestLicence_validate(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -257,7 +256,7 @@ func TestLicence_validate(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -281,7 +280,7 @@ func TestLicence_validate(t *testing.T) {
 			"iss": "wrong-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -305,7 +304,7 @@ func TestLicence_validate(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(-time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -322,7 +321,7 @@ func TestLicence_validate(t *testing.T) {
 	})
 
 	t.Run("wrong signing key", func(t *testing.T) {
-		otherKey, _ := generateTestKeyPair(t)
+		otherKey, _ := generateTestRSAKeyPair(t)
 		logger := &mockLogger{}
 		claims := jwt.MapClaims{
 			"sub": "test-cluster",
@@ -330,7 +329,7 @@ func TestLicence_validate(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, otherKey)
+		tokenString := createTokenWithRSAKey(t, claims, otherKey)
 
 		licence := NewLicence(
 			logger,
@@ -354,7 +353,7 @@ func TestLicence_validate(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -370,8 +369,39 @@ func TestLicence_validate(t *testing.T) {
 	})
 }
 
+func TestLicence_validate_with_production_key(t *testing.T) {
+	// This test does NOT override formancePublicKey — it exercises the actual
+	// embedded production RSA key from public_key.go to catch parsing regressions.
+	// The token is signed with a random key, so validation must fail with a
+	// verification error (not a key parsing error).
+	privateKey, _ := generateTestRSAKeyPair(t)
+	claims := jwt.MapClaims{
+		"sub": "test-cluster",
+		"aud": "test-service",
+		"iss": "test-issuer",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	tokenString := createTokenWithRSAKey(t, claims, privateKey)
+
+	logger := &mockLogger{}
+	licence := NewLicence(
+		logger,
+		tokenString,
+		2*time.Minute,
+		"test-service",
+		"test-cluster",
+		"test-issuer",
+	)
+
+	err := licence.validate()
+	require.Error(t, err)
+	// The production key must parse successfully — the error should be about
+	// signature verification, not about key decoding/parsing.
+	require.Contains(t, err.Error(), "verification error")
+}
+
 func TestLicence_run(t *testing.T) {
-	privateKey, pubPEM := generateTestKeyPair(t)
+	privateKey, pubPEM := generateTestRSAKeyPair(t)
 	setEmbeddedKey(t, pubPEM)
 
 	t.Run("stop on app stop", func(t *testing.T) {
@@ -382,7 +412,7 @@ func TestLicence_run(t *testing.T) {
 			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createTokenWithKey(t, claims, privateKey)
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,

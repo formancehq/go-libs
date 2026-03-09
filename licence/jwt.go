@@ -1,6 +1,7 @@
 package licence
 
 import (
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -20,11 +21,17 @@ func (l *Licence) getKeyFromEmbeddedPublicKey() (interface{}, error) {
 		return nil, errors.Wrap(err, "failed to parse embedded Formance public key")
 	}
 
-	return pub, nil
+	rsaPub, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("embedded Formance public key is not RSA")
+	}
+
+	return rsaPub, nil
 }
 
 func (l *Licence) validate() error {
 	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
 		jwt.WithAudience(l.serviceName),
 		jwt.WithExpirationRequired(),
 		jwt.WithSubject(l.clusterID),
