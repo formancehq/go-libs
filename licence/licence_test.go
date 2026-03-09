@@ -2,18 +2,18 @@ package licence
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v4/logging"
@@ -73,34 +73,38 @@ func (m *mockLogger) getMessage() string {
 	return m.lastMessage
 }
 
-// Helper function to create a JWT token
-func createToken(t *testing.T, claims jwt.MapClaims, kid string) string {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	token.Header["kid"] = kid
-	tokenString, err := token.SignedString([]byte("test-key"))
-	require.NoError(t, err)
-	return tokenString
+// setEmbeddedKey temporarily overrides the package-level formancePublicKey for testing.
+func setEmbeddedKey(t *testing.T, key string) {
+	t.Helper()
+	original := formancePublicKey
+	formancePublicKey = key
+	t.Cleanup(func() { formancePublicKey = original })
 }
 
-// Helper function to create a test JWK server
-func createTestJWKServer(t *testing.T) *httptest.Server {
-	key := jwk.NewSymmetricKey()
-	err := key.FromRaw([]byte("test-key"))
+// generateTestKeyPair creates an ECDSA P-256 key pair and returns the private key
+// and the PEM-encoded public key.
+func generateTestKeyPair(t *testing.T) (*ecdsa.PrivateKey, string) {
+	t.Helper()
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
-	err = key.Set(jwk.KeyIDKey, "test-kid")
-	require.NoError(t, err)
-	err = key.Set(jwk.AlgorithmKey, jwa.HS256)
+	pubBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 	require.NoError(t, err)
 
-	set := jwk.NewSet()
-	set.Add(key)
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubBytes,
+	})
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(set)
-	}))
+	return privateKey, string(pubPEM)
+}
 
-	return server
+func createTokenWithKey(t *testing.T, claims jwt.MapClaims, privateKey *ecdsa.PrivateKey) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	tokenString, err := token.SignedString(privateKey)
+	require.NoError(t, err)
+	return tokenString
 }
 
 func TestNewLicence(t *testing.T) {
@@ -124,8 +128,8 @@ func TestNewLicence(t *testing.T) {
 }
 
 func TestLicence_Start(t *testing.T) {
-	server := createTestJWKServer(t)
-	defer server.Close()
+	privateKey, pubPEM := generateTestKeyPair(t)
+	setEmbeddedKey(t, pubPEM)
 
 	t.Run("invalid token", func(t *testing.T) {
 		logger := &mockLogger{}
@@ -135,7 +139,7 @@ func TestLicence_Start(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
 		)
 
 		licenceError := make(chan error, 1)
@@ -149,10 +153,10 @@ func TestLicence_Start(t *testing.T) {
 		claims := jwt.MapClaims{
 			"sub": "test-cluster",
 			"aud": "test-service",
-			"iss": server.URL,
+			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createToken(t, claims, "test-kid")
+		tokenString := createTokenWithKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -160,7 +164,7 @@ func TestLicence_Start(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
 		)
 
 		licenceError := make(chan error, 1)
@@ -176,10 +180,10 @@ func TestLicence_Start(t *testing.T) {
 		claims := jwt.MapClaims{
 			"sub": "test-cluster",
 			"aud": "test-service",
-			"iss": server.URL,
+			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createToken(t, claims, "test-kid")
+		tokenString := createTokenWithKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -187,7 +191,7 @@ func TestLicence_Start(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
 		)
 
 		licenceError := make(chan error, 1)
@@ -202,8 +206,8 @@ func TestLicence_Start(t *testing.T) {
 }
 
 func TestLicence_validate(t *testing.T) {
-	server := createTestJWKServer(t)
-	defer server.Close()
+	privateKey, pubPEM := generateTestKeyPair(t)
+	setEmbeddedKey(t, pubPEM)
 
 	t.Run("invalid token format", func(t *testing.T) {
 		logger := &mockLogger{}
@@ -213,7 +217,7 @@ func TestLicence_validate(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
 		)
 
 		err := licence.validate()
@@ -221,115 +225,15 @@ func TestLicence_validate(t *testing.T) {
 		require.Equal(t, "token is malformed: token contains an invalid number of segments", err.Error())
 	})
 
-	t.Run("missing kid", func(t *testing.T) {
-		logger := &mockLogger{}
-		claims := jwt.MapClaims{
-			"sub": "test-cluster",
-			"aud": "test-service",
-			"iss": server.URL,
-			"exp": time.Now().Add(time.Hour).Unix(),
-		}
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		tokenString, err := token.SignedString([]byte("test-key"))
-		require.NoError(t, err)
-
-		licence := NewLicence(
-			logger,
-			tokenString,
-			2*time.Minute,
-			"test-service",
-			"test-cluster",
-			server.URL,
-		)
-
-		err = licence.validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "missing kid")
-	})
-
-	t.Run("missing issuer", func(t *testing.T) {
-		logger := &mockLogger{}
-		claims := jwt.MapClaims{
-			"sub": "test-cluster",
-			"aud": "test-service",
-			"exp": time.Now().Add(time.Hour).Unix(),
-		}
-		tokenString := createToken(t, claims, "test-kid")
-
-		licence := NewLicence(
-			logger,
-			tokenString,
-			2*time.Minute,
-			"test-service",
-			"test-cluster",
-			server.URL,
-		)
-
-		err := licence.validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "missing issuer")
-	})
-
-	t.Run("invalid issuer", func(t *testing.T) {
-		logger := &mockLogger{}
-		claims := jwt.MapClaims{
-			"sub": "test-cluster",
-			"aud": "test-service",
-			"iss": "invalid-issuer",
-			"exp": time.Now().Add(time.Hour).Unix(),
-		}
-		tokenString := createToken(t, claims, "test-kid")
-
-		licence := NewLicence(
-			logger,
-			tokenString,
-			2*time.Minute,
-			"test-service",
-			"test-cluster",
-			server.URL,
-		)
-
-		err := licence.validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to fetch remote JWK")
-	})
-
-	t.Run("invalid key", func(t *testing.T) {
-		logger := &mockLogger{}
-		claims := jwt.MapClaims{
-			"sub": "test-cluster",
-			"aud": "test-service",
-			"iss": server.URL,
-			"exp": time.Now().Add(time.Hour).Unix(),
-		}
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		token.Header["kid"] = "test-kid"
-		tokenString, err := token.SignedString([]byte("wrong-key"))
-		require.NoError(t, err)
-
-		licence := NewLicence(
-			logger,
-			tokenString,
-			2*time.Minute,
-			"test-service",
-			"test-cluster",
-			server.URL,
-		)
-
-		err = licence.validate()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "signature is invalid")
-	})
-
 	t.Run("invalid audience", func(t *testing.T) {
 		logger := &mockLogger{}
 		claims := jwt.MapClaims{
 			"sub": "test-cluster",
 			"aud": "invalid-service",
-			"iss": server.URL,
+			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createToken(t, claims, "test-kid")
+		tokenString := createTokenWithKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -337,7 +241,7 @@ func TestLicence_validate(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
 		)
 
 		err := licence.validate()
@@ -350,10 +254,10 @@ func TestLicence_validate(t *testing.T) {
 		claims := jwt.MapClaims{
 			"sub": "invalid-cluster",
 			"aud": "test-service",
-			"iss": server.URL,
+			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createToken(t, claims, "test-kid")
+		tokenString := createTokenWithKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -361,7 +265,7 @@ func TestLicence_validate(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
 		)
 
 		err := licence.validate()
@@ -369,15 +273,15 @@ func TestLicence_validate(t *testing.T) {
 		require.Contains(t, err.Error(), "token has invalid subject")
 	})
 
-	t.Run("expired token", func(t *testing.T) {
+	t.Run("invalid issuer", func(t *testing.T) {
 		logger := &mockLogger{}
 		claims := jwt.MapClaims{
 			"sub": "test-cluster",
 			"aud": "test-service",
-			"iss": server.URL,
-			"exp": time.Now().Add(-time.Hour).Unix(),
+			"iss": "wrong-issuer",
+			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createToken(t, claims, "test-kid")
+		tokenString := createTokenWithKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -385,7 +289,31 @@ func TestLicence_validate(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
+		)
+
+		err := licence.validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "token has invalid issuer")
+	})
+
+	t.Run("expired token", func(t *testing.T) {
+		logger := &mockLogger{}
+		claims := jwt.MapClaims{
+			"sub": "test-cluster",
+			"aud": "test-service",
+			"iss": "test-issuer",
+			"exp": time.Now().Add(-time.Hour).Unix(),
+		}
+		tokenString := createTokenWithKey(t, claims, privateKey)
+
+		licence := NewLicence(
+			logger,
+			tokenString,
+			2*time.Minute,
+			"test-service",
+			"test-cluster",
+			"test-issuer",
 		)
 
 		err := licence.validate()
@@ -393,15 +321,16 @@ func TestLicence_validate(t *testing.T) {
 		require.Contains(t, err.Error(), "token has invalid claims: token is expired")
 	})
 
-	t.Run("valid token", func(t *testing.T) {
+	t.Run("wrong signing key", func(t *testing.T) {
+		otherKey, _ := generateTestKeyPair(t)
 		logger := &mockLogger{}
 		claims := jwt.MapClaims{
 			"sub": "test-cluster",
 			"aud": "test-service",
-			"iss": server.URL,
+			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createToken(t, claims, "test-kid")
+		tokenString := createTokenWithKey(t, claims, otherKey)
 
 		licence := NewLicence(
 			logger,
@@ -409,7 +338,31 @@ func TestLicence_validate(t *testing.T) {
 			2*time.Minute,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
+		)
+
+		err := licence.validate()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "verification error")
+	})
+
+	t.Run("valid token", func(t *testing.T) {
+		logger := &mockLogger{}
+		claims := jwt.MapClaims{
+			"sub": "test-cluster",
+			"aud": "test-service",
+			"iss": "test-issuer",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}
+		tokenString := createTokenWithKey(t, claims, privateKey)
+
+		licence := NewLicence(
+			logger,
+			tokenString,
+			2*time.Minute,
+			"test-service",
+			"test-cluster",
+			"test-issuer",
 		)
 
 		err := licence.validate()
@@ -417,74 +370,19 @@ func TestLicence_validate(t *testing.T) {
 	})
 }
 
-func TestLicence_getKey(t *testing.T) {
-	server := createTestJWKServer(t)
-	defer server.Close()
-
-	t.Run("invalid issuer", func(t *testing.T) {
-		logger := &mockLogger{}
-		licence := NewLicence(
-			logger,
-			"test-token",
-			2*time.Minute,
-			"test-service",
-			"test-cluster",
-			server.URL,
-		)
-
-		key, err := licence.getKey("invalid-issuer", "test-kid")
-		require.Error(t, err)
-		require.Nil(t, key)
-		require.Contains(t, err.Error(), "failed to fetch remote JWK")
-	})
-
-	t.Run("missing key", func(t *testing.T) {
-		logger := &mockLogger{}
-		licence := NewLicence(
-			logger,
-			"test-token",
-			2*time.Minute,
-			"test-service",
-			"test-cluster",
-			server.URL,
-		)
-
-		key, err := licence.getKey(server.URL, "missing-kid")
-		require.Error(t, err)
-		require.Nil(t, key)
-		require.Contains(t, err.Error(), "key not found")
-	})
-
-	t.Run("valid key", func(t *testing.T) {
-		logger := &mockLogger{}
-		licence := NewLicence(
-			logger,
-			"test-token",
-			2*time.Minute,
-			"test-service",
-			"test-cluster",
-			server.URL,
-		)
-
-		key, err := licence.getKey(server.URL, "test-kid")
-		require.NoError(t, err)
-		require.NotNil(t, key)
-	})
-}
-
 func TestLicence_run(t *testing.T) {
-	server := createTestJWKServer(t)
-	defer server.Close()
+	privateKey, pubPEM := generateTestKeyPair(t)
+	setEmbeddedKey(t, pubPEM)
 
 	t.Run("stop on app stop", func(t *testing.T) {
 		logger := &mockLogger{}
 		claims := jwt.MapClaims{
 			"sub": "test-cluster",
 			"aud": "test-service",
-			"iss": server.URL,
+			"iss": "test-issuer",
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
-		tokenString := createToken(t, claims, "test-kid")
+		tokenString := createTokenWithKey(t, claims, privateKey)
 
 		licence := NewLicence(
 			logger,
@@ -492,7 +390,7 @@ func TestLicence_run(t *testing.T) {
 			100*time.Millisecond,
 			"test-service",
 			"test-cluster",
-			server.URL,
+			"test-issuer",
 		)
 
 		licenceError := make(chan error, 1)
