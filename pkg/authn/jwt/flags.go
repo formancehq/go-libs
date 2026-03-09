@@ -20,14 +20,14 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.String(AuthServiceFlag, "", "Service")
 }
 
-func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
+func ConfigFromFlags(flags *flag.FlagSet) Config {
 	authEnabled, _ := flags.GetBool(AuthEnabledFlag)
 	authIssuer, _ := flags.GetString(AuthIssuerFlag)
 	authReadKeySetMaxRetries, _ := flags.GetInt(AuthReadKeySetMaxRetriesFlag)
 	authCheckScopes, _ := flags.GetBool(AuthCheckScopesFlag)
 	authService, _ := flags.GetString(AuthServiceFlag)
 
-	return ModuleConfig{
+	return Config{
 		Enabled:              authEnabled,
 		Issuer:               authIssuer,
 		ReadKeySetMaxRetries: authReadKeySetMaxRetries,

@@ -10,7 +10,7 @@ import (
 	"github.com/formancehq/go-libs/v5/pkg/authn/oidc/client"
 )
 
-type ModuleConfig struct {
+type Config struct {
 	Enabled              bool
 	Issuer               string
 	ReadKeySetMaxRetries int
@@ -20,7 +20,7 @@ type ModuleConfig struct {
 	AdditionalChecks []AdditionalCheck
 }
 
-func NewKeySet(cfg ModuleConfig, httpClient *http.Client) (oidc.KeySet, error) {
+func NewKeySet(cfg Config, httpClient *http.Client) (oidc.KeySet, error) {
 	if !cfg.Enabled {
 		return oidc.NewStaticKeySet(), nil
 	}
@@ -40,7 +40,7 @@ func NewKeySet(cfg ModuleConfig, httpClient *http.Client) (oidc.KeySet, error) {
 	return client.NewRemoteKeySet(httpClient, discovery.JwksURI), nil
 }
 
-func NewAuthenticatorFromConfig(cfg ModuleConfig, keySet oidc.KeySet) Authenticator {
+func NewAuthenticatorFromConfig(cfg Config, keySet oidc.KeySet) Authenticator {
 	if !cfg.Enabled {
 		return NewNoAuth()
 	}

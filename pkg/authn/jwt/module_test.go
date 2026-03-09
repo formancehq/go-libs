@@ -66,7 +66,7 @@ func TestModule(t *testing.T) {
 		var authenticator auth.Authenticator
 
 		options := []fx.Option{
-			authnfx.JWTModule(auth.ModuleConfig{
+			authnfx.JWTModule(auth.Config{
 				Enabled:     true,
 				Issuer:      issuer,
 				Service:     "test-service",
@@ -112,7 +112,7 @@ func TestModule(t *testing.T) {
 		}
 
 		options := []fx.Option{
-			authnfx.JWTModule(auth.ModuleConfig{
+			authnfx.JWTModule(auth.Config{
 				Enabled:          true,
 				Issuer:           issuer,
 				Service:          "test-service-with-orgId-aware-auth",
@@ -171,7 +171,7 @@ func TestModule(t *testing.T) {
 		// fx.Decorate wraps the original provider and allows us to return our custom KeySet
 		// This prevents the module's provider from executing the OIDC discovery
 		options := []fx.Option{
-			authnfx.JWTModule(auth.ModuleConfig{
+			authnfx.JWTModule(auth.Config{
 				Enabled:     true,
 				Issuer:      issuer,
 				Service:     "test-service",
@@ -219,7 +219,7 @@ func TestModule(t *testing.T) {
 		var authenticator auth.Authenticator
 
 		options := []fx.Option{
-			authnfx.JWTModule(auth.ModuleConfig{
+			authnfx.JWTModule(auth.Config{
 				Enabled:     false,
 				Issuer:      issuer,
 				Service:     "test-service",
@@ -257,13 +257,13 @@ func TestModule(t *testing.T) {
 		var authenticator2 auth.Authenticator
 
 		options := []fx.Option{
-			authnfx.AnnotatedJWTModule(auth.ModuleConfig{
+			authnfx.AnnotatedJWTModule(auth.Config{
 				Enabled:     true,
 				Issuer:      issuer1,
 				Service:     "test-service",
 				CheckScopes: false,
 			}, "one"),
-			authnfx.AnnotatedJWTModule(auth.ModuleConfig{
+			authnfx.AnnotatedJWTModule(auth.Config{
 				Enabled:     true,
 				Issuer:      issuer2,
 				Service:     "test-service",
