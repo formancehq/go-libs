@@ -74,8 +74,8 @@ func (l *listener) Listen(ctx context.Context, ch <-chan *message.Message) {
 
 	go func() {
 		l.wg.Wait()
-		close(l.done)
 		l.logger.Infof("queue listener closed")
+		close(l.done)
 	}()
 	return
 }
@@ -115,11 +115,14 @@ func (l *listener) startWorker(ctx context.Context, messages <-chan *message.Mes
 }
 
 func (l *listener) handleMessage(ctx context.Context, msg *message.Message) {
-	l.logger.WithField("message_uuid", msg.UUID).Debugf("queue listener handling message")
 	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(msg.Metadata))
+	logger := l.logger.WithContext(ctx)
+	ctx = logging.ContextWithLogger(ctx, logger)
+
+	logger.WithField("message_uuid", msg.UUID).Debugf("queue listener handling message")
 	err := l.callbackFn(ctx, msg.Metadata, msg.Payload)
 	if err != nil {
-		l.logger.WithField("message_uuid", msg.UUID).WithField("err", err.Error()).Errorf("queue listener failed to process message")
+		logger.WithField("message_uuid", msg.UUID).WithField("err", err.Error()).Errorf("queue listener failed to process message")
 		msg.Nack()
 		return
 	}
