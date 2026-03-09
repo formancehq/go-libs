@@ -15,7 +15,7 @@ import (
 	s3bucket "github.com/formancehq/go-libs/v5/pkg/storage/s3"
 )
 
-func S3ModuleFromFlags(cmd *cobra.Command, debug bool) fx.Option {
+func S3ModuleFromFlags(cmd *cobra.Command) fx.Option {
 	options := make([]fx.Option, 0)
 
 	awsEnabled, _ := cmd.Flags().GetBool(s3bucket.S3BucketAWSEnabledFlag)
@@ -35,6 +35,7 @@ func s3AWSModule(cmd *cobra.Command, s3EndpointOverride string) fx.Option {
 			fx.Annotate(func(optFn func(*config.LoadOptions) error) []func(*config.LoadOptions) error {
 				loadOptions := []func(*config.LoadOptions) error{optFn}
 				if s3EndpointOverride != "" {
+					// if we are overriding the endpoint assume we are in a dev context
 					loadOptions = append(loadOptions, config.WithCredentialsProvider(
 						credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
 					))
