@@ -7,7 +7,6 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/formancehq/go-libs/v5/pkg/authn/jwt"
-	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 )
 
 func JWTModule(cfg jwt.ModuleConfig) fx.Option {
@@ -67,7 +66,3 @@ func AdditionalChecksJWTModuleFromFlags(cmd *cobra.Command, checks ...jwt.Additi
 	cfg.AdditionalChecks = append(cfg.AdditionalChecks, checks...)
 	return JWTModule(cfg)
 }
-
-// Compatibility: re-export the Authenticator type
-type Authenticator = jwt.Authenticator
-type KeySet = oidc.KeySet
