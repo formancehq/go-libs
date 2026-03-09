@@ -35,42 +35,7 @@ func TestNewListenerInvalidCallback(t *testing.T) {
 	assert.Nil(t, listener)
 }
 
-func TestHandleMessageInjectsLoggerInContext(t *testing.T) {
-	// Create a logger that writes to a buffer so we can verify it's the one in context
-	var buf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&buf)
-	l.SetLevel(logrus.DebugLevel)
-	logger := logging.NewLogrus(l)
-
-	done := make(chan struct{})
-	callback := func(ctx context.Context, meta map[string]string, msg []byte) error {
-		// Log using the logger from context — if ContextWithLogger was called,
-		// this writes to our buffer; if not, it writes to stderr (default fallback)
-		logging.FromContext(ctx).Infof("hello from callback")
-		close(done)
-		return nil
-	}
-
-	listener, err := queue.NewListener(logger, callback, 1)
-	require.NoError(t, err)
-
-	ch := make(chan *message.Message, 1)
-	ch <- message.NewMessage("test-uuid", []byte("test-payload"))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	listener.Listen(ctx, ch)
-
-	<-done
-	cancel()
-	<-listener.Done()
-
-	// The injected logger writes to buf; the default fallback writes to stderr.
-	// If our buffer contains the callback message, the logger was properly injected.
-	assert.Contains(t, buf.String(), "hello from callback")
-}
-
-func TestHandleMessagePropagatesTraceContext(t *testing.T) {
+func TestHandleMessageInjectsLoggerAndPropagatesTraceContext(t *testing.T) {
 	// Register W3C TraceContext propagator so Extract parses traceparent from metadata
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
@@ -85,7 +50,10 @@ func TestHandleMessagePropagatesTraceContext(t *testing.T) {
 
 	done := make(chan struct{})
 	callback := func(ctx context.Context, meta map[string]string, msg []byte) error {
-		// Verify Extract() populated the context with the trace/span from the message metadata
+		// Verify logger injection: logging.FromContext(ctx) should return our buffered logger
+		logging.FromContext(ctx).Infof("hello from callback")
+
+		// Verify trace propagation: Extract() should populate ctx with trace/span from metadata
 		sc := trace.SpanFromContext(ctx).SpanContext()
 		logging.FromContext(ctx).Infof(
 			fmt.Sprintf("trace_id=%s span_id=%s", sc.TraceID().String(), sc.SpanID().String()),
@@ -110,6 +78,7 @@ func TestHandleMessagePropagatesTraceContext(t *testing.T) {
 	<-listener.Done()
 
 	output := buf.String()
+	assert.Contains(t, output, "hello from callback", "logger should be injected into context")
 	assert.Contains(t, output, expectedTraceID, "trace ID should be propagated from message metadata via Extract")
 	assert.Contains(t, output, expectedSpanID, "span ID should be propagated from message metadata via Extract")
 }

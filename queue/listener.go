@@ -74,8 +74,8 @@ func (l *listener) Listen(ctx context.Context, ch <-chan *message.Message) {
 
 	go func() {
 		l.wg.Wait()
-		close(l.done)
 		l.logger.Infof("queue listener closed")
+		close(l.done)
 	}()
 	return
 }
