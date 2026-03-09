@@ -9,18 +9,18 @@ import (
 	"github.com/formancehq/go-libs/v5/pkg/authn/jwt"
 )
 
-func JWTModule(cfg jwt.ModuleConfig) fx.Option {
+func JWTModule(cfg jwt.Config) fx.Option {
 	options := jwtModuleOptions("")
-	options = append(options, fx.Provide(func() jwt.ModuleConfig {
+	options = append(options, fx.Provide(func() jwt.Config {
 		return cfg
 	}))
 	return fx.Module("auth", options...)
 }
 
-func AnnotatedJWTModule(cfg jwt.ModuleConfig, annotationTag string) fx.Option {
+func AnnotatedJWTModule(cfg jwt.Config, annotationTag string) fx.Option {
 	nameAnnotation := `name:"` + annotationTag + `"`
 	options := jwtModuleOptions(nameAnnotation)
-	options = append(options, fx.Provide(fx.Annotate(func() jwt.ModuleConfig {
+	options = append(options, fx.Provide(fx.Annotate(func() jwt.Config {
 		return cfg
 	}, fx.ResultTags(nameAnnotation))))
 	return fx.Module("auth", options...)
