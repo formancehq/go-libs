@@ -1,39 +1,37 @@
 package licence
 
 import (
-	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/pkg/errors"
 )
 
-func (l *Licence) getKey(issuer, kid string) (interface{}, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func (l *Licence) getKeyFromEmbeddedPublicKey() (interface{}, error) {
+	block, _ := pem.Decode([]byte(formancePublicKey))
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode embedded Formance public key")
+	}
 
-	set, err := jwk.Fetch(ctx, issuer)
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to parse embedded Formance public key")
 	}
 
-	key, ok := set.LookupKeyID(kid)
+	rsaPub, ok := pub.(*rsa.PublicKey)
 	if !ok {
-		return nil, errors.Wrap(jwt.ErrInvalidKey, "key not found")
+		return nil, fmt.Errorf("embedded Formance public key is not RSA")
 	}
 
-	var rawKey interface{}
-	if err := key.Raw(&rawKey); err != nil {
-		return nil, errors.Wrap(err, "failed to get raw key")
-	}
-
-	return rawKey, nil
+	return rsaPub, nil
 }
 
 func (l *Licence) validate() error {
 	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
 		jwt.WithAudience(l.serviceName),
 		jwt.WithExpirationRequired(),
 		jwt.WithSubject(l.clusterID),
@@ -41,17 +39,7 @@ func (l *Licence) validate() error {
 	)
 
 	token, err := parser.Parse(l.jwtToken, func(token *jwt.Token) (interface{}, error) {
-		kid, ok := token.Header["kid"].(string)
-		if !ok {
-			return nil, errors.Wrap(jwt.ErrTokenInvalidId, "missing kid")
-		}
-
-		issuer, ok := token.Claims.(jwt.MapClaims)["iss"].(string)
-		if !ok {
-			return nil, errors.Wrap(jwt.ErrTokenInvalidIssuer, "missing issuer")
-		}
-
-		return l.getKey(issuer, kid)
+		return l.getKeyFromEmbeddedPublicKey()
 	})
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {

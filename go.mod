@@ -36,7 +36,6 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jackc/pgxlisten v0.0.0-20250802141604-12b92425684c
-	github.com/lestrrat-go/jwx v1.2.31
 	github.com/muhlemmer/gu v0.3.1
 	github.com/nats-io/nats-server/v2 v2.11.12
 	github.com/nats-io/nats.go v1.48.0
@@ -137,7 +136,6 @@ require (
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dnwe/otelsarama v0.0.0-20240308230250-9388d9d40bc0 // indirect
 	github.com/docker/cli v29.2.0+incompatible // indirect
@@ -160,7 +158,6 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.7.0-rc.1 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
@@ -187,11 +184,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
-	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
-	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
-	github.com/lestrrat-go/httpcc v1.0.1 // indirect
-	github.com/lestrrat-go/iter v1.0.2 // indirect
-	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
