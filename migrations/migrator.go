@@ -298,7 +298,7 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 	logging.FromContext(ctx).Debugf("Detected last version: %d", lastVersion)
 
 	// At this point, there is no pending migration occurring
-	if len(m.migrations) == lastVersion {
+	if len(m.migrations) <= lastVersion {
 		logging.FromContext(ctx).Debug("All migrations done!")
 		// no more migration to play
 		return ErrAlreadyUpToDate
