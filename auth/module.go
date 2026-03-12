@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -13,12 +14,32 @@ import (
 
 type ModuleConfig struct {
 	Enabled              bool
-	Issuer               string
+	Issuers              []string
 	ReadKeySetMaxRetries int
 	CheckScopes          bool
 	Service              string
 
+	// Deprecated: use Issuers instead.
+	Issuer string
+
 	AdditionalChecks []AdditionalCheck
+}
+
+func (cfg ModuleConfig) resolveIssuers() []string {
+	issuers := cfg.Issuers
+	if cfg.Issuer != "" {
+		found := false
+		for _, iss := range issuers {
+			if iss == cfg.Issuer {
+				found = true
+				break
+			}
+		}
+		if !found {
+			issuers = append(issuers, cfg.Issuer)
+		}
+	}
+	return issuers
 }
 
 func Module(cfg ModuleConfig) fx.Option {
@@ -45,7 +66,7 @@ func ModuleOptions(nameAnnotation string) []fx.Option {
 	if nameAnnotation == "" {
 		options = append(options,
 			fx.Supply(http.DefaultClient),
-			fx.Provide(newKeySet),
+			fx.Provide(newKeySets),
 			fx.Provide(newAuthenticator),
 		)
 		return options
@@ -57,7 +78,7 @@ func ModuleOptions(nameAnnotation string) []fx.Option {
 		}, fx.ResultTags(nameAnnotation)),
 	))
 	options = append(options, fx.Provide(
-		fx.Annotate(newKeySet, fx.ParamTags(nameAnnotation, nameAnnotation), fx.ResultTags(nameAnnotation, ``)),
+		fx.Annotate(newKeySets, fx.ParamTags(nameAnnotation, nameAnnotation), fx.ResultTags(nameAnnotation, ``)),
 	))
 	options = append(options, fx.Provide(
 		fx.Annotate(newAuthenticator, fx.ParamTags(nameAnnotation, nameAnnotation), fx.ResultTags(nameAnnotation)),
@@ -65,35 +86,46 @@ func ModuleOptions(nameAnnotation string) []fx.Option {
 	return options
 }
 
-func newKeySet(cfg ModuleConfig, httpClient *http.Client) (oidc.KeySet, error) {
+func newKeySets(cfg ModuleConfig, httpClient *http.Client) (map[string]oidc.KeySet, error) {
+	issuers := cfg.resolveIssuers()
+
 	if !cfg.Enabled {
 		// this won't be used by the NoAuth
-		return oidc.NewStaticKeySet(), nil
+		return make(map[string]oidc.KeySet), nil
 	}
+
+	if len(issuers) == 0 {
+		return nil, errors.New("auth is enabled but no issuers are configured")
+	}
+
 	retryableHttpClient := retryablehttp.NewClient()
 	retryableHttpClient.RetryMax = cfg.ReadKeySetMaxRetries
 	retryableHttpClient.HTTPClient = httpClient
+	discoveryHTTPClient := retryableHttpClient.StandardClient()
 
-	discovery, err := client.Discover[oidc.DiscoveryConfiguration](
-		context.Background(),
-		cfg.Issuer,
-		retryableHttpClient.StandardClient(),
-	)
-	if err != nil {
-		return nil, err
+	keySets := make(map[string]oidc.KeySet, len(issuers))
+	for _, issuer := range issuers {
+		discovery, err := client.Discover[oidc.DiscoveryConfiguration](
+			context.Background(),
+			issuer,
+			discoveryHTTPClient,
+		)
+		if err != nil {
+			return nil, err
+		}
+		keySets[issuer] = client.NewRemoteKeySet(httpClient, discovery.JwksURI)
 	}
 
-	return client.NewRemoteKeySet(httpClient, discovery.JwksURI), nil
+	return keySets, nil
 }
 
-func newAuthenticator(cfg ModuleConfig, keySet oidc.KeySet) Authenticator {
+func newAuthenticator(cfg ModuleConfig, keySets map[string]oidc.KeySet) Authenticator {
 	if !cfg.Enabled {
 		return NewNoAuth()
 	}
 
 	return NewJWTAuth(
-		keySet,
-		cfg.Issuer,
+		keySets,
 		cfg.Service,
 		cfg.CheckScopes,
 		cfg.AdditionalChecks,
