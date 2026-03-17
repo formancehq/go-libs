@@ -26,7 +26,27 @@ type ConnectionOptions struct {
 
 func (opts ConnectionOptions) String() string {
 	return fmt.Sprintf("dsn=%s, max-idle-conns=%d, max-open-conns=%d, conn-max-idle-time=%s, conn-max-lifetime=%s",
-		opts.DatabaseSourceName, opts.MaxIdleConns, opts.MaxOpenConns, opts.ConnMaxIdleTime, opts.ConnMaxLifetime)
+		obfuscateDSN(opts.DatabaseSourceName), opts.MaxIdleConns, opts.MaxOpenConns, opts.ConnMaxIdleTime, opts.ConnMaxLifetime)
+}
+
+var sensitiveQueryKeys = []string{"password", "pass", "pwd", "token", "secret"}
+
+func obfuscateDSN(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "***"
+	}
+	if u.User != nil {
+		u.User = url.UserPassword(u.User.Username(), "****")
+	}
+	q := u.Query()
+	for _, key := range sensitiveQueryKeys {
+		if q.Has(key) {
+			q.Set(key, "****")
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.QueryHook) (*bun.DB, error) {
@@ -35,13 +55,13 @@ func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.Quer
 		err   error
 	)
 	if options.Connector == nil {
-		logging.FromContext(ctx).Debugf("Opening database with default connector and dsn: '%s'", options.DatabaseSourceName)
+		logging.FromContext(ctx).Debugf("Opening database with default connector and dsn: '%s'", obfuscateDSN(options.DatabaseSourceName))
 		sqldb, err = sql.Open("pgx", options.DatabaseSourceName)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		logging.FromContext(ctx).Debugf("Opening database with connector and dsn: '%s'", options.DatabaseSourceName)
+		logging.FromContext(ctx).Debugf("Opening database with connector and dsn: '%s'", obfuscateDSN(options.DatabaseSourceName))
 		connector, err := options.Connector(options.DatabaseSourceName)
 		if err != nil {
 			return nil, err
