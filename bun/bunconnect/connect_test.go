@@ -31,6 +31,16 @@ func TestObfuscateDSN(t *testing.T) {
 			expected: "postgres://user:%2A%2A%2A%2A@localhost:5432/mydb?sslmode=disable",
 		},
 		{
+			name:     "with password in query params",
+			dsn:      "postgres://localhost:5432/mydb?password=secret&sslmode=disable",
+			expected: "postgres://localhost:5432/mydb?password=%2A%2A%2A%2A&sslmode=disable",
+		},
+		{
+			name:     "with both userinfo and query param password",
+			dsn:      "postgres://user:secret@localhost:5432/mydb?password=secret2",
+			expected: "postgres://user:%2A%2A%2A%2A@localhost:5432/mydb?password=%2A%2A%2A%2A",
+		},
+		{
 			name:     "invalid dsn",
 			dsn:      "://invalid",
 			expected: "***",

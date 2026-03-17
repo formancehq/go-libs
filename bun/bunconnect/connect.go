@@ -29,6 +29,8 @@ func (opts ConnectionOptions) String() string {
 		obfuscateDSN(opts.DatabaseSourceName), opts.MaxIdleConns, opts.MaxOpenConns, opts.ConnMaxIdleTime, opts.ConnMaxLifetime)
 }
 
+var sensitiveQueryKeys = []string{"password", "pass", "pwd", "token", "secret"}
+
 func obfuscateDSN(dsn string) string {
 	u, err := url.Parse(dsn)
 	if err != nil {
@@ -37,6 +39,13 @@ func obfuscateDSN(dsn string) string {
 	if u.User != nil {
 		u.User = url.UserPassword(u.User.Username(), "****")
 	}
+	q := u.Query()
+	for _, key := range sensitiveQueryKeys {
+		if q.Has(key) {
+			q.Set(key, "****")
+		}
+	}
+	u.RawQuery = q.Encode()
 	return u.String()
 }
 
