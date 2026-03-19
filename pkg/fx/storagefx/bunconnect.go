@@ -6,14 +6,14 @@ import (
 	"github.com/uptrace/bun"
 	"go.uber.org/fx"
 
-	"github.com/formancehq/go-libs/v5/pkg/observe/log"
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 	"github.com/formancehq/go-libs/v5/pkg/storage/bun/connect"
 	"github.com/formancehq/go-libs/v5/pkg/storage/bun/debug"
 )
 
 func BunConnectModule(connectionOptions connect.ConnectionOptions, debugMode bool) fx.Option {
 	return fx.Options(
-		fx.Provide(func(logger log.Logger) (*bun.DB, error) {
+		fx.Provide(func(logger logging.Logger) (*bun.DB, error) {
 			hooks := make([]bun.QueryHook, 0)
 			debugHook := debug.NewQueryHook()
 			debugHook.Debug = debugMode
@@ -28,9 +28,9 @@ func BunConnectModule(connectionOptions connect.ConnectionOptions, debugMode boo
 				}).
 				Infof("opening database connection")
 
-			return connect.OpenSQLDB(log.ContextWithLogger(context.Background(), logger), connectionOptions, hooks...)
+			return connect.OpenSQLDB(logging.ContextWithLogger(context.Background(), logger), connectionOptions, hooks...)
 		}),
-		fx.Invoke(func(lc fx.Lifecycle, db *bun.DB, logger log.Logger) {
+		fx.Invoke(func(lc fx.Lifecycle, db *bun.DB, logger logging.Logger) {
 			lc.Append(fx.Hook{
 				OnStop: func(ctx context.Context) error {
 					logger.Info("closing database connection...")

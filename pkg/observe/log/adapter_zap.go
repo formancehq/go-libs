@@ -1,4 +1,4 @@
-package log
+package logging
 
 // https://github.com/garsue/watermillzap/blob/master/adapter.go
 import (

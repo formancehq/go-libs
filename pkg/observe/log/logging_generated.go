@@ -7,7 +7,7 @@
 //
 
 // Package logging is a generated GoMock package.
-package log
+package logging
 
 import (
 	context "context"

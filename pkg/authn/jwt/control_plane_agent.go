@@ -2,7 +2,7 @@ package jwt
 
 import "github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 
-//go:generate mockgen -source control_plane_agent.go -destination control_plane_agent_generated.go -package auth . ControlPlaneAgent
+//go:generate mockgen -source control_plane_agent.go -destination control_plane_agent_generated.go -package jwt . ControlPlaneAgent
 type ControlPlaneAgent interface {
 	GetOrganizationID() string
 	HasScope(scope string) bool

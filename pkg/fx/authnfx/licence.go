@@ -8,7 +8,7 @@ import (
 
 	"github.com/formancehq/go-libs/v5/pkg/authn/licence"
 	"github.com/formancehq/go-libs/v5/pkg/errors"
-	"github.com/formancehq/go-libs/v5/pkg/observe/log"
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
 func LicenceModuleFromFlags(
@@ -29,7 +29,7 @@ func LicenceModuleFromFlags(
 	licenceExpectedIssuer, _ := cmd.Flags().GetString(licence.LicenceExpectedIssuerFlag)
 
 	return fx.Options(
-		fx.Provide(func(logger log.Logger) *licence.Licence {
+		fx.Provide(func(logger logging.Logger) *licence.Licence {
 			return licence.NewLicence(
 				logger,
 				licenceToken,
