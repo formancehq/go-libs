@@ -1,4 +1,4 @@
-package bunconnect
+package connect
 
 import (
 	"testing"
