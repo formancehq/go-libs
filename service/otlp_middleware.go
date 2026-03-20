@@ -26,6 +26,9 @@ func (w *responseWriter) finalize() {
 	if w.Header().Get("Content-Type") == "application/octet-stream" {
 		return
 	}
+	if len(w.data) == 0 {
+		return
+	}
 	_, err := w.ResponseWriter.Write(w.data)
 	if err != nil {
 		panic(err)
