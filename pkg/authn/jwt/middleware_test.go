@@ -21,7 +21,7 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
@@ -46,7 +46,7 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -70,7 +70,7 @@ func TestControlPlaneMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
 
 		// Create access token
 		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
@@ -95,7 +95,7 @@ func TestControlPlaneMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
 
 		handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -120,7 +120,7 @@ func TestControlPlaneMiddleware(t *testing.T) {
 			return expectedOrgID, nil
 		}
 		additionalChecks := []AdditionalCheck{CheckOrganizationIDClaim(provider)}
-		authenticator := NewJWTAuth(keySet, issuer, "test-service", false, additionalChecks)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
 
 		// Create access token
 		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", expectedOrgID)
