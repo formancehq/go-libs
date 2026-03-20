@@ -41,7 +41,7 @@ func NotFound(w http.ResponseWriter, err error) {
 }
 
 func NoContent(w http.ResponseWriter) {
-	writeJSON(w, http.StatusNoContent, nil)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func Forbidden(w http.ResponseWriter, code string, err error) {
