@@ -1,0 +1,108 @@
+package connect
+
+import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"fmt"
+	"net/url"
+	"time"
+
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/extra/bunotel"
+
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
+)
+
+type ConnectionOptions struct {
+	DatabaseSourceName string
+	MaxIdleConns       int
+	MaxOpenConns       int
+	ConnMaxIdleTime    time.Duration
+	ConnMaxLifetime    time.Duration
+	Connector          func(dsn string) (driver.Connector, error) `json:",omitempty"`
+}
+
+func (opts ConnectionOptions) String() string {
+	return fmt.Sprintf("dsn=%s, max-idle-conns=%d, max-open-conns=%d, conn-max-idle-time=%s, conn-max-lifetime=%s",
+		obfuscateDSN(opts.DatabaseSourceName), opts.MaxIdleConns, opts.MaxOpenConns, opts.ConnMaxIdleTime, opts.ConnMaxLifetime)
+}
+
+var sensitiveQueryKeys = []string{"password", "pass", "pwd", "token", "secret"}
+
+func obfuscateDSN(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "***"
+	}
+	if u.User != nil {
+		u.User = url.UserPassword(u.User.Username(), "****")
+	}
+	q := u.Query()
+	for _, key := range sensitiveQueryKeys {
+		if q.Has(key) {
+			q.Set(key, "****")
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.QueryHook) (*bun.DB, error) {
+	var (
+		sqldb *sql.DB
+		err   error
+	)
+	if options.Connector == nil {
+		logging.FromContext(ctx).Debugf("Opening database with default connector and dsn: '%s'", obfuscateDSN(options.DatabaseSourceName))
+		sqldb, err = sql.Open("pgx", options.DatabaseSourceName)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		logging.FromContext(ctx).Debugf("Opening database with connector and dsn: '%s'", obfuscateDSN(options.DatabaseSourceName))
+		connector, err := options.Connector(options.DatabaseSourceName)
+		if err != nil {
+			return nil, err
+		}
+		sqldb = sql.OpenDB(connector)
+	}
+	sqldb.SetMaxIdleConns(options.MaxIdleConns)
+	if options.ConnMaxIdleTime != 0 {
+		sqldb.SetConnMaxIdleTime(options.ConnMaxIdleTime)
+	}
+	if options.ConnMaxLifetime != 0 {
+		sqldb.SetConnMaxLifetime(options.ConnMaxLifetime)
+	}
+	if options.MaxOpenConns != 0 {
+		sqldb.SetMaxOpenConns(options.MaxOpenConns)
+	}
+
+	db := bun.NewDB(sqldb, pgdialect.New(), bun.WithDiscardUnknownColumns())
+	db.AddQueryHook(bunotel.NewQueryHook(bunotel.WithFormattedQueries(true)))
+	for _, hook := range hooks {
+		db.AddQueryHook(hook)
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func OpenDBWithSchema(ctx context.Context, connectionOptions ConnectionOptions, schema string, hooks ...bun.QueryHook) (*bun.DB, error) {
+	parsedConnectionParams, err := url.Parse(connectionOptions.DatabaseSourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	query := parsedConnectionParams.Query()
+	query.Set("search_path", fmt.Sprintf(`"%s"`, schema))
+	parsedConnectionParams.RawQuery = query.Encode()
+
+	connectionOptions.DatabaseSourceName = parsedConnectionParams.String()
+
+	return OpenSQLDB(ctx, connectionOptions, hooks...)
+}

@@ -1,0 +1,47 @@
+package publish
+
+import (
+	"github.com/ThreeDotsLabs/watermill"
+
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
+)
+
+type watermillLoggerAdapter struct {
+	includeTraceLogs bool
+	logging.Logger
+}
+
+func (w watermillLoggerAdapter) Error(msg string, err error, fields watermill.LogFields) {
+	w.WithFields(fields).WithFields(map[string]any{
+		"err": err,
+	}).Error(msg)
+}
+
+func (w watermillLoggerAdapter) Info(msg string, fields watermill.LogFields) {
+	w.WithFields(fields).Info(msg)
+}
+
+func (w watermillLoggerAdapter) Debug(msg string, fields watermill.LogFields) {
+	w.WithFields(fields).Debug(msg)
+}
+
+func (w watermillLoggerAdapter) Trace(msg string, fields watermill.LogFields) {
+	if w.includeTraceLogs {
+		w.WithFields(fields).Debug(msg)
+	}
+}
+
+func (w watermillLoggerAdapter) With(fields watermill.LogFields) watermill.LoggerAdapter {
+	return watermillLoggerAdapter{
+		Logger: w.Logger.WithFields(fields),
+	}
+}
+
+func NewWatermillLoggerAdapter(logger logging.Logger, trace bool) watermill.LoggerAdapter {
+	return watermillLoggerAdapter{
+		includeTraceLogs: trace,
+		Logger:           logger,
+	}
+}
+
+var _ watermill.LoggerAdapter = &watermillLoggerAdapter{}
