@@ -91,7 +91,7 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 			Tag:        cfg.Version,
 			Env:        env,
 			PortBindings: map[oryDocker.Port][]oryDocker.PortBinding{
-				oryDocker.Port(bindPortString): {{HostIP: defaultHostIP, HostPort: fmt.Sprintf("%d", defaultBindPort)}},
+				oryDocker.Port(bindPortString): {{HostIP: defaultHostIP}},
 			},
 		},
 		CheckFn: func(ctx context.Context, resource *dockertest.Resource) error {
