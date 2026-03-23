@@ -10,11 +10,9 @@ import (
 	"github.com/ThreeDotsLabs/watermill-aws/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/elgohr/go-localstack"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,7 +20,22 @@ import (
 
 	"github.com/formancehq/go-libs/v5/pkg/messaging/queue"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
+	"github.com/formancehq/go-libs/v5/pkg/testing/docker"
+	"github.com/formancehq/go-libs/v5/pkg/testing/platform/localstacktesting"
+	"github.com/formancehq/go-libs/v5/pkg/testing/utils"
 )
+
+var srv *localstacktesting.LocalstackServer
+
+func TestMain(m *testing.M) {
+	utils.WithTestMain(func(t *utils.TestingTForMain) int {
+		pool := docker.NewPool(t, logging.Testing())
+		srv = localstacktesting.CreateLocalstackServer(t, pool,
+			localstacktesting.WithService("sqs"),
+		)
+		return m.Run()
+	})
+}
 
 func TestListener(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -31,37 +44,13 @@ func TestListener(t *testing.T) {
 
 func initClient() (client *sqsservice.Client, queueURL string, ch <-chan *message.Message, err error) {
 	ctx := logging.TestingContext()
-	fromEnvOpt, err := localstack.WithClientFromEnv()
-	if err != nil {
-		return nil, "", ch, fmt.Errorf("Could not connect to Docker %w", err)
-	}
-	l, err := localstack.NewInstance(fromEnvOpt)
-	if err != nil {
-		return nil, "", ch, fmt.Errorf("Could not connect to Docker %w", err)
-	}
-	if err := l.Start(); err != nil {
-		return nil, "", ch, fmt.Errorf("Could not start localstack %w", err)
-	}
-	DeferCleanup(l.Stop)
 
-	region := "us-east-1"
-	endpoint := l.EndpointV2(localstack.SQS)
-
-	//nolint: staticcheck
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(region),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{
-					URL:           l.EndpointV2(localstack.SQS),
-					SigningRegion: region,
-				}, nil
-			},
-		)),
-	)
+	cfg, err := srv.GetAWSConfig(ctx)
 	if err != nil {
 		return nil, "", ch, fmt.Errorf("Could not load config %w", err)
 	}
+
+	endpoint := srv.Endpoint()
 	optFns := []func(o *sqsservice.Options){
 		func(o *sqsservice.Options) {
 			o.BaseEndpoint = &endpoint

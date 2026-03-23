@@ -74,6 +74,7 @@ func CreateLocalstackServer(t LocalstackT, pool *docker.Pool, opts ...Option) *L
 	env := []string{
 		"PERSISTENCE=0",
 		"SKIP_SSL_CERT_DOWNLOAD=1",
+		"LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT=1",
 		fmt.Sprintf("SERVICES=%s", strings.Join(cfg.Services, ",")),
 		fmt.Sprintf("AWS_DEFAULT_REGION=%s", cfg.DefaultRegion),
 		fmt.Sprintf("GATEWAY_LISTEN=%s:%d", defaultHostIP, defaultBindPort),
