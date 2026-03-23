@@ -31,7 +31,7 @@ func jwtModuleOptions(nameAnnotation string) []fx.Option {
 	if nameAnnotation == "" {
 		options = append(options,
 			fx.Supply(http.DefaultClient),
-			fx.Provide(jwt.NewKeySet),
+			fx.Provide(jwt.NewKeySets),
 			fx.Provide(jwt.NewAuthenticatorFromConfig),
 		)
 		return options
@@ -43,7 +43,7 @@ func jwtModuleOptions(nameAnnotation string) []fx.Option {
 		}, fx.ResultTags(nameAnnotation)),
 	))
 	options = append(options, fx.Provide(
-		fx.Annotate(jwt.NewKeySet, fx.ParamTags(nameAnnotation, nameAnnotation), fx.ResultTags(nameAnnotation, ``)),
+		fx.Annotate(jwt.NewKeySets, fx.ParamTags(nameAnnotation, nameAnnotation), fx.ResultTags(nameAnnotation, ``)),
 	))
 	options = append(options, fx.Provide(
 		fx.Annotate(jwt.NewAuthenticatorFromConfig, fx.ParamTags(nameAnnotation, nameAnnotation), fx.ResultTags(nameAnnotation)),
