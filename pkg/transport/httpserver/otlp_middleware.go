@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,13 +12,24 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+const maxDebugBodySize = 64 * 1024 // 64KB
+
 type responseWriter struct {
 	http.ResponseWriter
-	data []byte
+	data       []byte
+	statusCode int
+	debug      bool
+}
+
+func (w *responseWriter) WriteHeader(code int) {
+	w.statusCode = code
+	if !w.debug {
+		w.ResponseWriter.WriteHeader(code)
+	}
 }
 
 func (w *responseWriter) Write(data []byte) (int, error) {
-	if w.Header().Get("Content-Type") == "application/octet-stream" {
+	if !w.debug || w.Header().Get("Content-Type") == "application/octet-stream" {
 		return w.ResponseWriter.Write(data)
 	}
 	w.data = append(w.data, data...)
@@ -27,6 +39,9 @@ func (w *responseWriter) Write(data []byte) (int, error) {
 func (w *responseWriter) finalize() {
 	if w.Header().Get("Content-Type") == "application/octet-stream" {
 		return
+	}
+	if w.statusCode != 0 {
+		w.ResponseWriter.WriteHeader(w.statusCode)
 	}
 	if len(w.data) == 0 {
 		return
@@ -41,58 +56,63 @@ func OTLPMiddleware(serverName string, debug bool) func(h http.Handler) http.Han
 	m := otelchi.Middleware(serverName)
 	return func(h http.Handler) http.Handler {
 		return m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			span := trace.SpanFromContext(r.Context())
+
+			// Always log basic request metadata
+			span.SetAttributes(
+				attribute.String("http.request.method", r.Method),
+				attribute.String("http.request.url", r.URL.String()),
+				attribute.String("http.request.host", r.Host),
+				attribute.String("http.request.proto", r.Proto),
+			)
+
 			if debug {
-				span := trace.SpanFromContext(r.Context())
-
-				// Request sub-attributes
-				attrs := []attribute.KeyValue{
-					attribute.String("http.request.method", r.Method),
-					attribute.String("http.request.url", r.URL.String()),
-					attribute.String("http.request.host", r.Host),
-					attribute.String("http.request.proto", r.Proto),
-				}
-
-				// Headers
+				// Debug: request headers
 				headerParts := make([]string, 0, len(r.Header))
 				for name, values := range r.Header {
 					headerParts = append(headerParts, fmt.Sprintf("%s: %s", name, strings.Join(values, ", ")))
 				}
-				attrs = append(attrs, attribute.String("http.request.headers", strings.Join(headerParts, "\n")))
+				span.SetAttributes(attribute.String("http.request.headers", strings.Join(headerParts, "\n")))
 
-				// Body
+				// Debug: request body (limited to 64KB)
 				if r.Body != nil {
-					body, err := io.ReadAll(r.Body)
+					body, err := io.ReadAll(io.LimitReader(r.Body, maxDebugBodySize))
 					if err == nil {
-						attrs = append(attrs, attribute.String("http.request.body", string(body)))
-						r.Body = io.NopCloser(strings.NewReader(string(body)))
+						span.SetAttributes(attribute.String("http.request.body", string(body)))
+						r.Body = io.NopCloser(bytes.NewReader(body))
 					}
 				}
+			}
 
-				span.SetAttributes(attrs...)
+			rw := &responseWriter{
+				ResponseWriter: w,
+				data:           make([]byte, 0, 1024),
+				debug:          debug,
+			}
+			defer func() {
+				rw.finalize()
 
-				rw := &responseWriter{w, make([]byte, 0, 1024)}
-				defer func() {
-					rw.finalize()
+				// Always log status code
+				statusCode := rw.statusCode
+				if statusCode == 0 {
+					statusCode = http.StatusOK
+				}
+				span.SetAttributes(attribute.Int("http.response.status_code", statusCode))
 
-					respAttrs := []attribute.KeyValue{
-						attribute.String("http.response.body", string(rw.data)),
-					}
-
-					// Response headers
+				if debug {
+					// Debug: response headers
 					respHeaderParts := make([]string, 0, len(rw.Header()))
 					for name, values := range rw.Header() {
 						respHeaderParts = append(respHeaderParts, fmt.Sprintf("%s: %s", name, strings.Join(values, ", ")))
 					}
-					respAttrs = append(respAttrs, attribute.String("http.response.headers", strings.Join(respHeaderParts, "\n")))
+					span.SetAttributes(
+						attribute.String("http.response.headers", strings.Join(respHeaderParts, "\n")),
+						attribute.String("http.response.body", string(rw.data)),
+					)
+				}
+			}()
 
-					trace.SpanFromContext(r.Context()).SetAttributes(respAttrs...)
-				}()
-
-				h.ServeHTTP(rw, r)
-				return
-			}
-
-			h.ServeHTTP(w, r)
+			h.ServeHTTP(rw, r)
 		}))
 	}
 }
