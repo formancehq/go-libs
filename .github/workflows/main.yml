@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  Ci:
+  Dirty:
     runs-on: "shipfox-4vcpu-ubuntu-2404"
     steps:
       - uses: 'actions/checkout@v6'
@@ -27,31 +27,28 @@ jobs:
         uses: ./.github/actions/env
       - run: >
           nix develop --impure --command just pre-commit
-      - name: Get changed files
-        id: changed-files
+      - name: Check for uncommitted changes
         shell: bash
         run: |
-          hasChanged=$(git status --porcelain) 
+          hasChanged=$(git status --porcelain)
           if (( $(echo ${#hasChanged}) != 0 )); then
             git status
+            git diff
             echo "There are changes in the repository"
             exit 1
           fi
+
+  Tests:
+    runs-on: "shipfox-4vcpu-ubuntu-2404"
+    steps:
+      - uses: 'actions/checkout@v6'
+        with:
+          fetch-depth: 0
+      - name: Setup Env
+        uses: ./.github/actions/env
       - run: >
           nix develop --impure --command just tests
       - name: Upload coverage reports to Codecov with GitHub Action
         uses: codecov/codecov-action@v5.5.3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      - name: Validate Dependabot PR
-        if: github.event.pull_request.user.login == 'dependabot[bot]'
-        run: gh pr review $PR_URL --approve -b "Auto approve dependencies bump PR"
-        env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      - name: Merge Dependabot PR
-        if: github.event.pull_request.user.login == 'dependabot[bot]'
-        run: gh pr merge $PR_URL
-        env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GH_TOKEN: ${{secrets.NUMARY_GITHUB_TOKEN}}
