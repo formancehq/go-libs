@@ -111,3 +111,20 @@ func (l *HcLogLoggerAdapter) fireHooks() hclog.Logger {
 func (l *HcLogLoggerAdapter) Writer() io.Writer {
 	return l.backend.StandardWriter(&hclog.StandardLoggerOptions{})
 }
+
+func toHcLogLevel(level Level) hclog.Level {
+	switch level {
+	case DebugLevel:
+		return hclog.Debug
+	case InfoLevel:
+		return hclog.Info
+	case ErrorLevel:
+		return hclog.Error
+	default:
+		return hclog.Debug
+	}
+}
+
+func (l *HcLogLoggerAdapter) Enabled(level Level) bool {
+	return l.backend.GetLevel() <= toHcLogLevel(level)
+}
