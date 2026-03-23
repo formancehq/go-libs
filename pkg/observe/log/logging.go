@@ -5,6 +5,15 @@ import (
 	"io"
 )
 
+// Level represents a logging severity level.
+type Level int
+
+const (
+	DebugLevel Level = iota
+	InfoLevel
+	ErrorLevel
+)
+
 //go:generate mockgen -source logging.go -destination logging_generated.go -package logging . Logger
 type Logger interface {
 	Debugf(fmt string, args ...any)
@@ -17,6 +26,13 @@ type Logger interface {
 	WithField(key string, value any) Logger
 	WithContext(ctx context.Context) Logger
 	Writer() io.Writer
+	// Enabled reports whether the logger will emit logs at the given level.
+	// Use this to guard expensive log calls and avoid unnecessary allocations:
+	//
+	//   if logger.Enabled(logging.DebugLevel) {
+	//       logger.WithFields(map[string]any{...}).Debugf("...")
+	//   }
+	Enabled(level Level) bool
 }
 
 func Debugf(fmt string, args ...any) {

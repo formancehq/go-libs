@@ -22,6 +22,7 @@ type LogrusLogger struct {
 		WithContext(ctx context.Context) *logrus.Entry
 		Writer() *io.PipeWriter
 	}
+	logger *logrus.Logger
 }
 
 func (l *LogrusLogger) Writer() io.Writer {
@@ -30,7 +31,8 @@ func (l *LogrusLogger) Writer() io.Writer {
 
 func (l *LogrusLogger) WithContext(ctx context.Context) Logger {
 	return &LogrusLogger{
-		l.entry.WithContext(ctx),
+		entry:  l.entry.WithContext(ctx),
+		logger: l.logger,
 	}
 }
 
@@ -54,7 +56,8 @@ func (l *LogrusLogger) Error(args ...any) {
 }
 func (l *LogrusLogger) WithFields(fields map[string]any) Logger {
 	return &LogrusLogger{
-		entry: l.entry.WithFields(fields),
+		entry:  l.entry.WithFields(fields),
+		logger: l.logger,
 	}
 }
 
@@ -64,11 +67,29 @@ func (l *LogrusLogger) WithField(key string, value any) Logger {
 	})
 }
 
+func toLogrusLevel(level Level) logrus.Level {
+	switch level {
+	case DebugLevel:
+		return logrus.DebugLevel
+	case InfoLevel:
+		return logrus.InfoLevel
+	case ErrorLevel:
+		return logrus.ErrorLevel
+	default:
+		return logrus.DebugLevel
+	}
+}
+
+func (l *LogrusLogger) Enabled(level Level) bool {
+	return l.logger.IsLevelEnabled(toLogrusLevel(level))
+}
+
 var _ Logger = &LogrusLogger{}
 
 func NewLogrus(logger *logrus.Logger) *LogrusLogger {
 	return &LogrusLogger{
-		entry: logger,
+		entry:  logger,
+		logger: logger,
 	}
 }
 
