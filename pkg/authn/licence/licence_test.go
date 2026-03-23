@@ -65,6 +65,7 @@ func (m *mockLogger) Warn(args ...any)                                {}
 func (m *mockLogger) Warnf(format string, args ...any)                {}
 func (m *mockLogger) Debug(args ...any)                               {}
 func (m *mockLogger) Debugf(format string, args ...any)               {}
+func (m *mockLogger) Enabled(level logging.Level) bool                { return true }
 
 func (m *mockLogger) getMessage() string {
 	m.mu.Lock()
