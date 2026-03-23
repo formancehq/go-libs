@@ -12,24 +12,22 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const maxDebugBodySize = 64 * 1024 // 64KB
-
 type responseWriter struct {
 	http.ResponseWriter
-	data       []byte
-	statusCode int
-	debug      bool
+	data        []byte
+	statusCode  int
+	captureBody bool
 }
 
 func (w *responseWriter) WriteHeader(code int) {
 	w.statusCode = code
-	if !w.debug {
+	if !w.captureBody {
 		w.ResponseWriter.WriteHeader(code)
 	}
 }
 
 func (w *responseWriter) Write(data []byte) (int, error) {
-	if !w.debug || w.Header().Get("Content-Type") == "application/octet-stream" {
+	if !w.captureBody {
 		return w.ResponseWriter.Write(data)
 	}
 	w.data = append(w.data, data...)
@@ -37,7 +35,7 @@ func (w *responseWriter) Write(data []byte) (int, error) {
 }
 
 func (w *responseWriter) finalize() {
-	if w.Header().Get("Content-Type") == "application/octet-stream" {
+	if !w.captureBody {
 		return
 	}
 	if w.statusCode != 0 {
@@ -50,6 +48,10 @@ func (w *responseWriter) finalize() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func isJSONContent(contentType string) bool {
+	return strings.Contains(strings.ToLower(contentType), "application/json")
 }
 
 func OTLPMiddleware(serverName string, debug bool) func(h http.Handler) http.Handler {
@@ -66,6 +68,8 @@ func OTLPMiddleware(serverName string, debug bool) func(h http.Handler) http.Han
 				attribute.String("http.request.proto", r.Proto),
 			)
 
+			captureBody := debug && isJSONContent(r.Header.Get("Content-Type"))
+
 			if debug {
 				// Debug: request headers
 				headerParts := make([]string, 0, len(r.Header))
@@ -74,9 +78,9 @@ func OTLPMiddleware(serverName string, debug bool) func(h http.Handler) http.Han
 				}
 				span.SetAttributes(attribute.String("http.request.headers", strings.Join(headerParts, "\n")))
 
-				// Debug: request body (limited to 64KB)
-				if r.Body != nil {
-					body, err := io.ReadAll(io.LimitReader(r.Body, maxDebugBodySize))
+				// Debug: request body (JSON only)
+				if captureBody && r.Body != nil {
+					body, err := io.ReadAll(r.Body)
 					if err == nil {
 						span.SetAttributes(attribute.String("http.request.body", string(body)))
 						r.Body = io.NopCloser(bytes.NewReader(body))
@@ -87,7 +91,7 @@ func OTLPMiddleware(serverName string, debug bool) func(h http.Handler) http.Han
 			rw := &responseWriter{
 				ResponseWriter: w,
 				data:           make([]byte, 0, 1024),
-				debug:          debug,
+				captureBody:    captureBody,
 			}
 			defer func() {
 				rw.finalize()
@@ -105,10 +109,12 @@ func OTLPMiddleware(serverName string, debug bool) func(h http.Handler) http.Han
 					for name, values := range rw.Header() {
 						respHeaderParts = append(respHeaderParts, fmt.Sprintf("%s: %s", name, strings.Join(values, ", ")))
 					}
-					span.SetAttributes(
-						attribute.String("http.response.headers", strings.Join(respHeaderParts, "\n")),
-						attribute.String("http.response.body", string(rw.data)),
-					)
+					span.SetAttributes(attribute.String("http.response.headers", strings.Join(respHeaderParts, "\n")))
+
+					// Debug: response body (only if we captured it, i.e. JSON content)
+					if captureBody && len(rw.data) > 0 {
+						span.SetAttributes(attribute.String("http.response.body", string(rw.data)))
+					}
 				}
 			}()
 
