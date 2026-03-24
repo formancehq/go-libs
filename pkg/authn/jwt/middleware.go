@@ -5,6 +5,9 @@ import (
 	"errors"
 	"net/http"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
@@ -37,8 +40,14 @@ func Middleware(ja Authenticator) func(handler http.Handler) http.Handler {
 func ControlPlaneMiddleware(ja Authenticator) func(handler http.Handler) http.Handler {
 	return func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			span := trace.SpanFromContext(r.Context())
 			agt, err := ja.AuthenticateOnControlPlane(r)
 			if err != nil {
+				if agt != nil {
+					span.SetAttributes(attribute.String("clientID", agt.GetClientID()))
+					span.SetAttributes(attribute.String("organizationID", agt.GetOrganizationID()))
+				}
+
 				logging.FromContext(r.Context()).Debugf("failed authentication: %v", err)
 				// client is authenticated but doesn't have permission to access this resource
 				if errors.Is(err, oidc.ErrOrgIDNotPresent) || errors.Is(err, oidc.ErrOrgIDInvalid) || errors.Is(err, ErrMissingScope) {
