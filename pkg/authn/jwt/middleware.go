@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	// will be set by control plane middleware
 	ContextKeyAuthClaimOrganizationID = "AuthClaim-OrganizationID"
 	ContextKeyAuthClaimClientID       = "AuthClaim-ClientID"
 )
@@ -40,7 +41,7 @@ func ControlPlaneMiddleware(ja Authenticator) func(handler http.Handler) http.Ha
 			if err != nil {
 				logging.FromContext(r.Context()).Debugf("failed authentication: %v", err)
 				// client is authenticated but doesn't have permission to access this resource
-				if errors.Is(err, oidc.ErrOrgIDNotPresent) || errors.Is(err, oidc.ErrOrgIDInvalid) {
+				if errors.Is(err, oidc.ErrOrgIDNotPresent) || errors.Is(err, oidc.ErrOrgIDInvalid) || errors.Is(err, ErrMissingScope) {
 					w.WriteHeader(http.StatusForbidden)
 					return
 				}

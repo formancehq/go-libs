@@ -10,7 +10,10 @@ import (
 )
 
 type JWTAuth struct {
-	keySets          map[string]oidc.KeySet // issuer -> keySet
+	keySets map[string]oidc.KeySet // issuer -> keySet
+
+	// this flag toggles a very basic scope check that assumes 'service:read' or 'service:write' as the only scopes
+	// for scope checks that give the user more control over which endpoints use which scopes see additional_checks.go
 	checkScopes      bool
 	service          string
 	additionalChecks []AdditionalCheck
