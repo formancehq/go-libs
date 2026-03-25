@@ -86,7 +86,7 @@ func TestCheckEndpointSpecificScopesClaim(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 		err := check(req, claimsWithScopes())
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "error finding route")
+		assert.Contains(t, err.Error(), auth.ErrUndocumentedRoute.Error())
 	})
 
 	t.Run("route with no scope requirement succeeds regardless of token scopes", func(t *testing.T) {

@@ -291,5 +291,23 @@ components:
 
 			require.Equal(t, http.StatusOK, rr.Code)
 		})
+
+		t.Run("unauthorized when route is not defined in spec", func(t *testing.T) {
+			t.Parallel()
+
+			token := createAccessToken(t, privateKey, issuer, "", []string{"someappname:ReadChannel"}, "test-user")
+			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest("GET", "/not-in-spec", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req = req.WithContext(logging.TestingContext())
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			require.Equal(t, http.StatusForbidden, rr.Code)
+		})
 	})
 }

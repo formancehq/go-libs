@@ -11,7 +11,10 @@ import (
 	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 )
 
-var ErrMissingScope = errors.New("missing scope")
+var (
+	ErrMissingScope      = errors.New("missing scope")
+	ErrUndocumentedRoute = errors.New("route is not documented in apispec")
+)
 
 type AdditionalCheck func(*http.Request, *oidc.AccessTokenClaims) error
 
@@ -78,7 +81,7 @@ func CheckEndpointSpecificScopesClaim(router routers.Router) AdditionalCheck {
 		route, _, err := router.FindRoute(r)
 		if err != nil {
 			// if the service is misconfigured it's better to deny access
-			return fmt.Errorf("error finding route: %w", err)
+			return fmt.Errorf("%w: %v", ErrUndocumentedRoute, err)
 		}
 
 		if neededScope := scopeFromOperation(route.Operation); neededScope != "" {

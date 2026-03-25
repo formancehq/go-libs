@@ -48,7 +48,15 @@ func ControlPlaneMiddleware(ja Authenticator) func(handler http.Handler) http.Ha
 					span.SetAttributes(attribute.String("organizationID", agt.GetOrganizationID()))
 				}
 
+				// an app using CheckEndpointSpecificScopesClaim checks should ensure all endpoints are documented
+				// even if they do not require particular scopes
+				if errors.Is(err, ErrUndocumentedRoute) {
+					logging.FromContext(r.Context()).WithField("path", r.URL.Path).Errorf("requested route is not public: %v", err)
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 				logging.FromContext(r.Context()).Debugf("failed authentication: %v", err)
+
 				// client is authenticated but doesn't have permission to access this resource
 				if errors.Is(err, oidc.ErrOrgIDNotPresent) || errors.Is(err, oidc.ErrOrgIDInvalid) || errors.Is(err, ErrMissingScope) {
 					w.WriteHeader(http.StatusForbidden)
