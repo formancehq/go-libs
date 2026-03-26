@@ -47,7 +47,7 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 
 	if lengthParts == 1 {
 		// No dot, which means it's an integer
-		for p := 0; p < precision; p++ {
+		for range precision {
 			amountString += "0"
 		}
 		res, ok := new(big.Int).SetString(amountString, 10)
@@ -95,12 +95,20 @@ func GetStringAmountFromBigIntWithPrecision(amount *big.Int, precision int) (str
 		return "", errors.Wrap(ErrInvalidPrecision, fmt.Sprintf("precision is negative: %d", precision))
 	}
 
-	amountString := amount.String()
+	// Handle negative numbers: work with absolute value then prepend sign
+	prefix := ""
+	abs := new(big.Int).Set(amount)
+	if abs.Sign() < 0 {
+		prefix = "-"
+		abs.Neg(abs)
+	}
+
+	amountString := abs.String()
 	amountStringLength := len(amountString)
 
 	if precision == 0 {
 		// Nothing to do
-		return amountString, nil
+		return prefix + amountString, nil
 	}
 
 	decimalPart := bytes.NewBufferString("")
@@ -113,10 +121,10 @@ func GetStringAmountFromBigIntWithPrecision(amount *big.Int, precision int) (str
 	}
 
 	if amountStringLength < precision || amountStringLength == precision {
-		return "0." + decimalPart.String(), nil
+		return prefix + "0." + decimalPart.String(), nil
 	}
 
 	// Here we are in the case where the amount has more digits than the
 	// precision, we need to add a dot at the right place
-	return amountString[:amountStringLength-precision] + "." + decimalPart.String(), nil
+	return prefix + amountString[:amountStringLength-precision] + "." + decimalPart.String(), nil
 }
