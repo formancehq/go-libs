@@ -36,6 +36,8 @@ func (a *Audience) UnmarshalJSON(text []byte) error {
 		*a = out
 	case string:
 		*a = []string{aud}
+	case nil:
+		*a = nil
 	default:
 		return fmt.Errorf("oidc.Audience: unsupported JSON type %T", i)
 	}
