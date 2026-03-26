@@ -16,6 +16,7 @@ type Router struct {
 	mux        *chi.Mux
 	doc        *openapi3.T
 	operations map[string]map[string]*openapi3.Operation // openapi path → METHOD → operation
+	methods    map[string]struct{}                       // all HTTP methods registered in the spec
 }
 
 // NewRouter builds a Router from a parsed OpenAPI document
@@ -23,29 +24,19 @@ type Router struct {
 func NewRouter(doc *openapi3.T) *Router {
 	mux := chi.NewRouter()
 	ops := map[string]map[string]*openapi3.Operation{}
+	methods := map[string]struct{}{}
 
 	for path, item := range doc.Paths.Map() {
 		ops[path] = map[string]*openapi3.Operation{}
 		for method, op := range item.Operations() {
 			method = strings.ToUpper(method)
 			ops[path][method] = op
+			methods[method] = struct{}{}
 			mux.Method(method, path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 		}
 	}
 
-	return &Router{mux: mux, doc: doc, operations: ops}
-}
-
-// allMethods lists the HTTP methods registered against the chi Mux so that
-// FindRoute can distinguish "path not found" from "method not allowed"
-var allMethods = []string{
-	http.MethodGet,
-	http.MethodPost,
-	http.MethodPut,
-	http.MethodPatch,
-	http.MethodDelete,
-	http.MethodHead,
-	http.MethodOptions,
+	return &Router{mux: mux, doc: doc, operations: ops, methods: methods}
 }
 
 // FindRoute implements routers.Router interface
@@ -53,7 +44,7 @@ func (r *Router) FindRoute(req *http.Request) (*routers.Route, map[string]string
 	rctx := chi.NewRouteContext()
 	if !r.mux.Match(rctx, req.Method, req.URL.Path) {
 		// Determine whether the path itself exists under a different method
-		for _, m := range allMethods {
+		for m := range r.methods {
 			if m == req.Method {
 				continue
 			}
