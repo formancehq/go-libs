@@ -6,12 +6,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
 
 	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
+	"github.com/formancehq/go-libs/v5/pkg/service/apispec"
 )
 
 func TestMiddleware(t *testing.T) {
@@ -180,5 +182,132 @@ func TestControlPlaneMiddleware(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, rr.Code)
 			})
 		}
+	})
+
+	t.Run("scope check from openapi spec", func(t *testing.T) {
+		t.Parallel()
+
+		loader := openapi3.NewLoader()
+		doc, err := loader.LoadFromData([]byte(`
+openapi: "3.0.0"
+info:
+  title: Test API
+  version: "1.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      security:
+        - oauth2: [someappname:ReadChannel]
+      responses:
+        "200":
+          description: OK
+  /items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: updateItem
+      security:
+        - oauth2: [someappname:WriteChannel]
+      responses:
+        "200":
+          description: OK
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://example.com/token
+          scopes:
+            someappname:ReadChannel: Read access
+            someappname:WriteChannel: Write access
+`))
+		require.NoError(t, err)
+
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		router := apispec.NewRouter(doc)
+		authenticator := NewJWTAuth(
+			map[string]oidc.KeySet{issuer: keySet},
+			"test-service",
+			false,
+			[]AdditionalCheck{CheckEndpointSpecificScopesClaim(router)},
+		)
+
+		t.Run("allowed when token has required scope", func(t *testing.T) {
+			t.Parallel()
+
+			token := createAccessToken(t, privateKey, issuer, "", []string{"someappname:ReadChannel"}, "test-user")
+			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest("GET", "/items", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req = req.WithContext(logging.TestingContext())
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			require.Equal(t, http.StatusOK, rr.Code)
+		})
+
+		t.Run("forbidden when token is missing required scope", func(t *testing.T) {
+			t.Parallel()
+
+			token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
+			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest("GET", "/items", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req = req.WithContext(logging.TestingContext())
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			require.Equal(t, http.StatusForbidden, rr.Code)
+		})
+
+		t.Run("path with parameter matched correctly", func(t *testing.T) {
+			t.Parallel()
+
+			token := createAccessToken(t, privateKey, issuer, "", []string{"someappname:WriteChannel"}, "test-user")
+			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest("POST", "/items/42", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req = req.WithContext(logging.TestingContext())
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			require.Equal(t, http.StatusOK, rr.Code)
+		})
+
+		t.Run("unauthorized when route is not defined in spec", func(t *testing.T) {
+			t.Parallel()
+
+			token := createAccessToken(t, privateKey, issuer, "", []string{"someappname:ReadChannel"}, "test-user")
+			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest("GET", "/not-in-spec", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req = req.WithContext(logging.TestingContext())
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			require.Equal(t, http.StatusForbidden, rr.Code)
+		})
 	})
 }
