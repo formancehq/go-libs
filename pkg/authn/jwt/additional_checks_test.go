@@ -33,13 +33,21 @@ paths:
     get:
       operationId: secured
       security:
-        - oauth2: [ledger:read]
+        - oauth2: [ledger:ReadResource]
       responses:
         "200":
           description: OK
   /open:
     get:
       operationId: open
+      responses:
+        "200":
+          description: OK
+  /multi-scope:
+    get:
+      operationId: multiScope
+      security:
+        - oauth2: [ledger:ReadResource, ledger:WriteResource]
       responses:
         "200":
           description: OK
@@ -102,7 +110,7 @@ func TestCheckEndpointSpecificScopesClaim(t *testing.T) {
 		router := newScopeCheckRouter(t)
 		check := auth.CheckEndpointSpecificScopesClaim(router)
 		req := httptest.NewRequest(http.MethodGet, "/secured", nil)
-		assert.NoError(t, check(req, claimsWithScopes("ledger:read")))
+		assert.NoError(t, check(req, claimsWithScopes("ledger:ReadResource")))
 	})
 
 	t.Run("token has required scope among many succeeds", func(t *testing.T) {
@@ -110,7 +118,7 @@ func TestCheckEndpointSpecificScopesClaim(t *testing.T) {
 		router := newScopeCheckRouter(t)
 		check := auth.CheckEndpointSpecificScopesClaim(router)
 		req := httptest.NewRequest(http.MethodGet, "/secured", nil)
-		assert.NoError(t, check(req, claimsWithScopes("ledger:write", "ledger:read", "admin")))
+		assert.NoError(t, check(req, claimsWithScopes("ledger:WriteResource", "ledger:ReadResource", "admin")))
 	})
 
 	t.Run("token missing required scope returns ErrMissingScope", func(t *testing.T) {
@@ -128,7 +136,25 @@ func TestCheckEndpointSpecificScopesClaim(t *testing.T) {
 		router := newScopeCheckRouter(t)
 		check := auth.CheckEndpointSpecificScopesClaim(router)
 		req := httptest.NewRequest(http.MethodGet, "/secured", nil)
-		err := check(req, claimsWithScopes("ledger:write", "admin"))
+		err := check(req, claimsWithScopes("ledger:WriteResource", "admin"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, auth.ErrMissingScope)
+	})
+
+	t.Run("token has all required scopes for multi-scope endpoint succeeds", func(t *testing.T) {
+		t.Parallel()
+		router := newScopeCheckRouter(t)
+		check := auth.CheckEndpointSpecificScopesClaim(router)
+		req := httptest.NewRequest(http.MethodGet, "/multi-scope", nil)
+		assert.NoError(t, check(req, claimsWithScopes("ledger:ReadResource", "ledger:WriteResource")))
+	})
+
+	t.Run("token missing one scope for multi-scope endpoint returns ErrMissingScope", func(t *testing.T) {
+		t.Parallel()
+		router := newScopeCheckRouter(t)
+		check := auth.CheckEndpointSpecificScopesClaim(router)
+		req := httptest.NewRequest(http.MethodGet, "/multi-scope", nil)
+		err := check(req, claimsWithScopes("ledger:ReadResource"))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, auth.ErrMissingScope)
 	})

@@ -84,8 +84,9 @@ func CheckEndpointSpecificScopesClaim(router routers.Router) AdditionalCheck {
 			return fmt.Errorf("%w: %v", ErrUndocumentedRoute, err)
 		}
 
-		if neededScope := scopeFromOperation(route.Operation); neededScope != "" {
-			if !NewDefaultControlPlaneAgent(*claims).HasScope(neededScope) {
+		agent := NewDefaultControlPlaneAgent(*claims)
+		for _, neededScope := range scopesFromOperation(route.Operation) {
+			if !agent.HasScope(neededScope) {
 				return fmt.Errorf("%w: %q", ErrMissingScope, neededScope)
 			}
 		}
@@ -93,18 +94,17 @@ func CheckEndpointSpecificScopesClaim(router routers.Router) AdditionalCheck {
 	}
 }
 
-// scopeFromOperation returns the first OAuth2/OIDC scope listed in the
-// operation's security requirements, or an empty string if none is found.
-func scopeFromOperation(op *openapi3.Operation) string {
+// scopesFromOperation returns all OAuth2/OIDC scopes listed in the
+// operation's security requirements.
+func scopesFromOperation(op *openapi3.Operation) []string {
 	if op == nil || op.Security == nil {
-		return ""
+		return nil
 	}
+	var result []string
 	for _, secReq := range *op.Security {
 		for _, scopes := range secReq {
-			if len(scopes) > 0 {
-				return scopes[0]
-			}
+			result = append(result, scopes...)
 		}
 	}
-	return ""
+	return result
 }
