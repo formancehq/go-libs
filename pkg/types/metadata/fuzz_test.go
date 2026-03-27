@@ -83,13 +83,11 @@ func FuzzUnmarshalValue(f *testing.F) {
 	f.Add(`{"a":"b"}`)
 
 	f.Fuzz(func(t *testing.T, input string) {
-		// UnmarshalValue panics on invalid JSON — we catch that
-		defer func() {
-			if r := recover(); r != nil {
-				// Expected for invalid JSON — this is a known behavior
-				// but the fuzzer documents inputs that trigger it
-			}
-		}()
+		// UnmarshalValue panics on invalid JSON by design.
+		// Only allow json-related panics; re-panic on unexpected errors.
+		if !json.Valid([]byte(input)) {
+			return
+		}
 
 		_ = UnmarshalValue[any](input)
 	})
