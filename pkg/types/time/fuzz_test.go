@@ -27,6 +27,11 @@ func FuzzParseTime(f *testing.F) {
 			return
 		}
 
+		// Negative years are not representable in RFC3339, skip round-trip check
+		if parsed.Year() < 0 {
+			return
+		}
+
 		// Round-trip: marshal and reparse
 		formatted := parsed.Format(DateFormat)
 		reparsed, err := ParseTime(formatted)
