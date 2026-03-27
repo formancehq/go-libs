@@ -3,6 +3,7 @@ package fuzz
 import (
 	"encoding/base64"
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/formancehq/go-libs/v5/pkg/storage/bun/paginate"
@@ -36,6 +37,15 @@ func FuzzUnmarshalCursor(f *testing.F) {
 		err := paginate.UnmarshalCursor(cursor, &target)
 		if err != nil {
 			return
+		}
+
+		// Semantic validation: independently decode and compare
+		decoded, decErr := base64.RawURLEncoding.DecodeString(cursor)
+		if decErr == nil {
+			var expected map[string]any
+			if json.Unmarshal(decoded, &expected) == nil && !reflect.DeepEqual(target, expected) {
+				t.Fatalf("decoded cursor mismatch: got=%v expected=%v", target, expected)
+			}
 		}
 
 		// Round-trip: encode back and re-decode

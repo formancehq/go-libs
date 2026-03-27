@@ -27,8 +27,8 @@ func FuzzParseTime(f *testing.F) {
 			return
 		}
 
-		// Negative years are not representable in RFC3339, skip round-trip check
-		if parsed.Year() < 0 {
+		// Years <= 0 or > 9999 are not representable in RFC3339, skip round-trip check
+		if parsed.Year() <= 0 || parsed.Year() > 9999 {
 			return
 		}
 

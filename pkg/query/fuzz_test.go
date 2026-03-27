@@ -55,7 +55,7 @@ func FuzzParseJSON(f *testing.F) {
 		// If parsing succeeded, MarshalJSON must not panic
 		marshaled, err := json.Marshal(builder)
 		if err != nil {
-			return
+			t.Fatalf("marshal failed after successful parse for input %q: %v", data, err)
 		}
 
 		// Round-trip: re-parse the marshaled output

@@ -94,6 +94,9 @@ func GetStringAmountFromBigIntWithPrecision(amount *big.Int, precision int) (str
 	if precision < 0 {
 		return "", errors.Wrap(ErrInvalidPrecision, fmt.Sprintf("precision is negative: %d", precision))
 	}
+	if amount == nil {
+		return "", fmt.Errorf("amount is nil")
+	}
 
 	// Handle negative numbers: work with absolute value then prepend sign
 	prefix := ""
