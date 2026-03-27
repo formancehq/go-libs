@@ -30,8 +30,12 @@ type set struct {
 }
 
 func (set set) MarshalJSON() ([]byte, error) {
+	items := set.items
+	if items == nil {
+		items = []Builder{}
+	}
 	return json.Marshal(map[string]any{
-		"$" + set.operator: set.items,
+		"$" + set.operator: items,
 	})
 }
 
