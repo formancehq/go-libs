@@ -6,7 +6,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
@@ -33,14 +32,7 @@ func s3AWSModule(cmd *cobra.Command, s3EndpointOverride string) fx.Option {
 	return fx.Options(
 		fx.Provide(
 			fx.Annotate(func(optFn func(*config.LoadOptions) error) []func(*config.LoadOptions) error {
-				loadOptions := []func(*config.LoadOptions) error{optFn}
-				if s3EndpointOverride != "" {
-					// if we are overriding the endpoint assume we are in a dev context
-					loadOptions = append(loadOptions, config.WithCredentialsProvider(
-						credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
-					))
-				}
-				return loadOptions
+				return []func(*config.LoadOptions) error{optFn}
 			}, fx.ParamTags(`name:"s3-bucket-aws-enabled"`), fx.ResultTags(`name:"s3-bucket-load-opts"`)),
 		),
 		fx.Provide(
