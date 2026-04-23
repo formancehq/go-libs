@@ -149,6 +149,7 @@ func TestS3ModuleFromFlags_WithMinioCredentials(t *testing.T) {
 
 	require.NoError(t, cmd.Flags().Set("s3-bucket-aws-enabled", "true"))
 	require.NoError(t, cmd.Flags().Set("s3-bucket-endpoint-override", srv.Endpoint))
+	require.NoError(t, cmd.Flags().Set("s3-bucket-path-style", "true"))
 	require.NoError(t, cmd.Flags().Set("aws-access-key-id", srv.AccessKey))
 	require.NoError(t, cmd.Flags().Set("aws-secret-access-key", srv.SecretKey))
 	require.NoError(t, cmd.Flags().Set("aws-region", srv.Region))
