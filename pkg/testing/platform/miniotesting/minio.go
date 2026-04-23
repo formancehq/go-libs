@@ -9,15 +9,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/formancehq/go-libs/v5/pkg/testing/docker"
 	"github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v5/pkg/testing/docker"
 )
 
 const (
 	DefaultAccessKey = "minioadmin"
 	DefaultSecretKey = "minioadmin"
 	DefaultRegion    = "us-east-1"
+	DefaultTag       = "RELEASE.2025-04-22T22-12-26Z"
 )
 
 type T interface {
@@ -84,7 +86,7 @@ func CreateMinioServer(t T, pool *docker.Pool, opts ...Option) *MinioServer {
 	cfg := &config{
 		accessKey: DefaultAccessKey,
 		secretKey: DefaultSecretKey,
-		tag:       "latest",
+		tag:       DefaultTag,
 	}
 	for _, opt := range opts {
 		opt(cfg)

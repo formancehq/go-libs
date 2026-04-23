@@ -8,17 +8,18 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
+
 	"github.com/formancehq/go-libs/v5/pkg/cloud/aws/iam"
 	"github.com/formancehq/go-libs/v5/pkg/fx/storagefx"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 	s3bucket "github.com/formancehq/go-libs/v5/pkg/storage/s3"
 	"github.com/formancehq/go-libs/v5/pkg/testing/docker"
 	"github.com/formancehq/go-libs/v5/pkg/testing/utils"
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 )
 
 var srv *MinioServer
@@ -35,12 +36,12 @@ func TestDefaultConfig(t *testing.T) {
 	cfg := &config{
 		accessKey: DefaultAccessKey,
 		secretKey: DefaultSecretKey,
-		tag:       "latest",
+		tag:       DefaultTag,
 	}
 
 	assert.Equal(t, "minioadmin", cfg.accessKey)
 	assert.Equal(t, "minioadmin", cfg.secretKey)
-	assert.Equal(t, "latest", cfg.tag)
+	assert.Equal(t, DefaultTag, cfg.tag)
 }
 
 func TestWithCredentials(t *testing.T) {
