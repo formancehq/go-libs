@@ -164,6 +164,28 @@ func TestMigrationsNominal(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestTwoMigratorsSameSchema reproduces a bug where two migrators using
+// different table names but sharing the same schema could not coexist:
+// the version_id unique index name was hardcoded ("idx_version_id"), and
+// since index names are scoped per-schema in PostgreSQL, the second
+// migrator's CREATE UNIQUE INDEX IF NOT EXISTS was silently skipped,
+// leaving its INSERT ... ON CONFLICT (version_id) without a matching
+// unique constraint (SQLSTATE 42P10).
+func TestTwoMigratorsSameSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := logging.TestingContext()
+	schema := uuid.NewString()[:8]
+
+	first := NewMigrator(bunDB, WithSchema(schema), WithTableName("first_migrations"))
+	first.RegisterMigrations(Migration{Up: func(ctx context.Context, db bun.IDB) error { return nil }})
+	require.NoError(t, first.Up(ctx))
+
+	second := NewMigrator(bunDB, WithSchema(schema), WithTableName("second_migrations"))
+	second.RegisterMigrations(Migration{Up: func(ctx context.Context, db bun.IDB) error { return nil }})
+	require.NoError(t, second.Up(ctx))
+}
+
 func TestAddFlags(t *testing.T) {
 	t.Parallel()
 
