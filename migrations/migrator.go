@@ -93,8 +93,8 @@ func (m *Migrator) initSchema(ctx context.Context, db bun.IDB) error {
 		add column if not exists actual_counter numeric,
 		add column if not exists terminated_at timestamp;
 	
-		create unique index if not exists 
-		idx_version_id on ` + m.tableName + ` (version_id);
+		create unique index if not exists
+		"idx_` + m.tableName + `_version_id" on ` + m.tableName + ` (version_id);
 	`
 
 	_, err := db.ExecContext(ctx, query)
