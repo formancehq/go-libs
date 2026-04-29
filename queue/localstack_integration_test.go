@@ -35,7 +35,7 @@ func initClient() (client *sqsservice.Client, queueURL string, ch <-chan *messag
 	if err != nil {
 		return nil, "", ch, fmt.Errorf("Could not connect to Docker %w", err)
 	}
-	l, err := localstack.NewInstance(fromEnvOpt)
+	l, err := localstack.NewInstance(fromEnvOpt, localstack.WithVersion("4.14"))
 	if err != nil {
 		return nil, "", ch, fmt.Errorf("Could not connect to Docker %w", err)
 	}
