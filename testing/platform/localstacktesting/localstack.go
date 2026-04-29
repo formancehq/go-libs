@@ -23,7 +23,7 @@ var (
 	defaultHostIP   = "0.0.0.0"
 	defaultBindPort = 4566
 
-	defaultVersion = "community-archive"
+	defaultVersion = "4.14"
 	defaultOptions = []Option{
 		WithService("s3"),
 		WithDefaultRegion("us-east-1"),
