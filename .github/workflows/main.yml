@@ -20,7 +20,7 @@ jobs:
   Dirty:
     runs-on: "namespace-profile-linux-amd64-4vcpu"
     steps:
-      - uses: 'namespacelabs/nscloud-checkout-action@v7'
+      - uses: 'namespacelabs/nscloud-checkout-action@v8'
         with:
           fetch-depth: 0
       - name: Setup Env
@@ -41,7 +41,7 @@ jobs:
   Tests:
     runs-on: "namespace-profile-linux-amd64-4vcpu"
     steps:
-      - uses: 'namespacelabs/nscloud-checkout-action@v7'
+      - uses: 'namespacelabs/nscloud-checkout-action@v8'
         with:
           fetch-depth: 0
       - name: Setup Env
