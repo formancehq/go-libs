@@ -29,6 +29,8 @@ func ResolveError(err error) error {
 				return newErrTooManyClient(err)
 			case pgerrcode.DeadlockDetected:
 				return ErrDeadlockDetected
+			case pgerrcode.ReadOnlySQLTransaction:
+				return ErrReadOnlyTransaction
 			case pgerrcode.SerializationFailure:
 				return ErrSerialization
 			case pgerrcode.UndefinedTable:
@@ -49,11 +51,12 @@ func ResolveError(err error) error {
 }
 
 var (
-	ErrNotFound         = errors.New("not found")
-	ErrDeadlockDetected = errors.New("deadlock detected")
-	ErrSerialization    = errors.New("serialization error")
-	ErrMissingTable     = errors.New("missing table")
-	ErrMissingSchema    = errors.New("missing schema")
+	ErrNotFound            = errors.New("not found")
+	ErrDeadlockDetected    = errors.New("deadlock detected")
+	ErrReadOnlyTransaction = errors.New("read-only transaction")
+	ErrSerialization       = errors.New("serialization error")
+	ErrMissingTable        = errors.New("missing table")
+	ErrMissingSchema       = errors.New("missing schema")
 )
 
 func IsNotFoundError(err error) bool {

@@ -1,7 +1,11 @@
 package connect
 
 import (
+	"reflect"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestObfuscateDSN(t *testing.T) {
@@ -59,5 +63,26 @@ func TestObfuscateDSN(t *testing.T) {
 				t.Errorf("obfuscateDSN(%q) = %q, want %q", tt.dsn, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestBuildPGXConnectorDefaultsToReadWriteTargetSessionAttrs(t *testing.T) {
+	config, err := pgx.ParseConfig("postgres://localhost:5432/mydb?sslmode=disable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.ValidateConnect != nil {
+		t.Fatal("expected parsed config without target_session_attrs to have no ValidateConnect")
+	}
+
+	_ = buildPGXConnector(config)
+
+	if config.ValidateConnect == nil {
+		t.Fatal("expected connector builder to set ValidateConnect")
+	}
+	got := reflect.ValueOf(config.ValidateConnect).Pointer()
+	want := reflect.ValueOf(pgconn.ValidateConnectTargetSessionAttrsReadWrite).Pointer()
+	if got != want {
+		t.Fatalf("unexpected ValidateConnect func pointer: got %x, want %x", got, want)
 	}
 }

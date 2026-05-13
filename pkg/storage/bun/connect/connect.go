@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/extra/bunotel"
@@ -52,14 +53,14 @@ func obfuscateDSN(dsn string) string {
 func OpenSQLDB(ctx context.Context, options ConnectionOptions, hooks ...bun.QueryHook) (*bun.DB, error) {
 	var (
 		sqldb *sql.DB
-		err   error
 	)
 	if options.Connector == nil {
 		logging.FromContext(ctx).Debugf("Opening database with default connector and dsn: '%s'", obfuscateDSN(options.DatabaseSourceName))
-		sqldb, err = sql.Open("pgx", options.DatabaseSourceName)
+		parseConfig, err := pgx.ParseConfig(options.DatabaseSourceName)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse dsn: %w", err)
 		}
+		sqldb = sql.OpenDB(buildPGXConnector(parseConfig))
 	} else {
 		logging.FromContext(ctx).Debugf("Opening database with connector and dsn: '%s'", obfuscateDSN(options.DatabaseSourceName))
 		connector, err := options.Connector(options.DatabaseSourceName)

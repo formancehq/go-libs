@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
@@ -94,9 +93,7 @@ func ConnectionOptionsFromFlags(flags *pflag.FlagSet, ctx context.Context, opts 
 				opt(parseConfig)
 			}
 
-			parseConfig.Tracer = newPgxTracer()
-
-			return stdlib.GetConnector(*parseConfig), nil
+			return buildPGXConnector(parseConfig), nil
 		}
 	}
 

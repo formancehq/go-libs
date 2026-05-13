@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pkg/errors"
 	"github.com/xo/dburl"
 	"go.opentelemetry.io/otel"
@@ -100,9 +99,7 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		opt(config)
 	}
 
-	config.Tracer = newPgxTracer()
-
-	return stdlib.GetConnector(*config).Connect(ctx)
+	return buildPGXConnector(config).Connect(ctx)
 }
 
 func (i iamConnector) Driver() driver.Driver {
