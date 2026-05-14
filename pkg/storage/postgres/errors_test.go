@@ -113,6 +113,16 @@ func TestResolveError(t *testing.T) {
 		require.ErrorIs(t, err, postgres.ErrDeadlockDetected)
 	})
 
+	t.Run("ReadOnlyTransactionError", func(t *testing.T) {
+		t.Parallel()
+		pgErr := &pgconn.PgError{
+			Code:    "25006",
+			Message: "cannot execute CREATE TABLE in a read-only transaction",
+		}
+		err := postgres.ResolveError(pgErr)
+		require.ErrorIs(t, err, postgres.ErrReadOnlyTransaction)
+	})
+
 	t.Run("SerializationError", func(t *testing.T) {
 		t.Parallel()
 		pgErr := &pgconn.PgError{
