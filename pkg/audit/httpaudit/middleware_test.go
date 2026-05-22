@@ -1,4 +1,4 @@
-package audit
+package httpaudit
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/formancehq/go-libs/v5/pkg/audit"
 	"github.com/formancehq/go-libs/v5/pkg/messaging/publish"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
@@ -21,7 +22,7 @@ func TestMiddleware_BasicCapture(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -46,12 +47,12 @@ func TestMiddleware_BasicCapture(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	assert.Equal(t, "test-app", event.App)
-	assert.Equal(t, EventVersion, event.Version)
-	assert.Equal(t, EventTypeAudit, event.Type)
+	assert.Equal(t, audit.EventVersion, event.Version)
+	assert.Equal(t, audit.EventTypeAudit, event.Type)
 
 	payloadBytes, err := json.Marshal(event.Payload)
 	require.NoError(t, err)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.NotEmpty(t, payload.ID)
@@ -68,7 +69,7 @@ func TestMiddleware_AuthorizationHeaderStripped(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -88,7 +89,7 @@ func TestMiddleware_AuthorizationHeaderStripped(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	payloadBytes, _ := json.Marshal(event.Payload)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Empty(t, payload.HTTP.Request.Header.Get("Authorization"))
@@ -100,7 +101,7 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app",
+	handler := Middleware(pub, topic, "test-app", nil,
 		WithSensitivePaths("/api/auth/oauth/token"),
 	)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +116,6 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	// The actual response is still returned to the client
 	require.Equal(t, `{"access_token":"secret"}`, rr.Body.String())
 
 	messages := pub.AllMessages()[topic]
@@ -125,7 +125,7 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	payloadBytes, _ := json.Marshal(event.Payload)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Empty(t, payload.HTTP.Response.Body)
@@ -137,7 +137,7 @@ func TestMiddleware_StreamRequestSkipsBodyCapture(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("stream-data"))
@@ -158,7 +158,7 @@ func TestMiddleware_StreamRequestSkipsBodyCapture(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	payloadBytes, _ := json.Marshal(event.Payload)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Empty(t, payload.HTTP.Request.Body)
@@ -170,7 +170,7 @@ func TestMiddleware_OctetStreamResponseNotCaptured(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/octet-stream")
 			w.WriteHeader(http.StatusOK)
@@ -191,7 +191,7 @@ func TestMiddleware_OctetStreamResponseNotCaptured(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	payloadBytes, _ := json.Marshal(event.Payload)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Empty(t, payload.HTTP.Response.Body)
@@ -203,10 +203,10 @@ func TestMiddleware_OrganizationAndStackID(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app",
-		WithOrganizationID("org-123"),
-		WithStackID("stack-456"),
-	)(
+	handler := Middleware(pub, topic, "test-app", []audit.Option{
+		audit.WithOrganizationID("org-123"),
+		audit.WithStackID("stack-456"),
+	})(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -225,7 +225,7 @@ func TestMiddleware_OrganizationAndStackID(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	payloadBytes, _ := json.Marshal(event.Payload)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Equal(t, "org-123", payload.Actor.OrganizationID)
@@ -268,7 +268,7 @@ func TestMiddleware_IPAddressExtraction(t *testing.T) {
 			pub := publish.InMemory()
 			topic := "audit-events"
 
-			handler := Middleware(pub, topic, "test-app")(
+			handler := Middleware(pub, topic, "test-app", nil)(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
 				}),
@@ -291,7 +291,7 @@ func TestMiddleware_IPAddressExtraction(t *testing.T) {
 			require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 			payloadBytes, _ := json.Marshal(event.Payload)
-			var payload Payload
+			var payload audit.Payload
 			require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 			assert.Equal(t, tt.expectedIP, payload.Actor.IPAddress)
@@ -311,7 +311,7 @@ func TestMiddleware_StatusCodeCapture(t *testing.T) {
 			pub := publish.InMemory()
 			topic := "audit-events"
 
-			handler := Middleware(pub, topic, "test-app")(
+			handler := Middleware(pub, topic, "test-app", nil)(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(code)
 				}),
@@ -330,7 +330,7 @@ func TestMiddleware_StatusCodeCapture(t *testing.T) {
 			require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 			payloadBytes, _ := json.Marshal(event.Payload)
-			var payload Payload
+			var payload audit.Payload
 			require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 			assert.Equal(t, code, payload.HTTP.Response.StatusCode)
@@ -345,7 +345,7 @@ func TestMiddleware_RequestBodyPassedThrough(t *testing.T) {
 	topic := "audit-events"
 
 	var receivedBody string
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
@@ -370,7 +370,7 @@ func TestMiddleware_NoAuthByDefault(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -383,7 +383,6 @@ func TestMiddleware_NoAuthByDefault(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	// Without WithAuth, the middleware should not attempt claims extraction
 	messages := pub.AllMessages()[topic]
 	require.Len(t, messages, 1)
 
@@ -391,7 +390,7 @@ func TestMiddleware_NoAuthByDefault(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	payloadBytes, _ := json.Marshal(event.Payload)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Nil(t, payload.Actor.Claims)
@@ -404,7 +403,7 @@ func TestMiddleware_SkipsWhenHeaderPresent(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
@@ -412,7 +411,7 @@ func TestMiddleware_SkipsWhenHeaderPresent(t *testing.T) {
 	)
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
-	req.Header.Set(HandledHeader, "true")
+	req.Header.Set(audit.HandledHeader, "true")
 	req = req.WithContext(logging.TestingContext())
 
 	rr := httptest.NewRecorder()
@@ -421,7 +420,6 @@ func TestMiddleware_SkipsWhenHeaderPresent(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "ok", rr.Body.String())
 
-	// No audit event should have been published
 	messages := pub.AllMessages()[topic]
 	assert.Empty(t, messages)
 }
@@ -433,9 +431,9 @@ func TestMiddleware_SetsHeaderForDownstream(t *testing.T) {
 	topic := "audit-events"
 
 	var downstreamHeaderValue string
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			downstreamHeaderValue = r.Header.Get(HandledHeader)
+			downstreamHeaderValue = r.Header.Get(audit.HandledHeader)
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
@@ -446,10 +444,8 @@ func TestMiddleware_SetsHeaderForDownstream(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	// Downstream handler should see the header
 	assert.Equal(t, "true", downstreamHeaderValue)
 
-	// Audit event should have been published
 	messages := pub.AllMessages()[topic]
 	require.Len(t, messages, 1)
 }
@@ -460,7 +456,7 @@ func TestMiddleware_HeaderNotInAuditPayload(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app")(
+	handler := Middleware(pub, topic, "test-app", nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -479,9 +475,8 @@ func TestMiddleware_HeaderNotInAuditPayload(t *testing.T) {
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
 
 	payloadBytes, _ := json.Marshal(event.Payload)
-	var payload Payload
+	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
-	// The audit header should not leak into the captured request headers
-	assert.Empty(t, payload.HTTP.Request.Header.Get(HandledHeader))
+	assert.Empty(t, payload.HTTP.Request.Header.Get(audit.HandledHeader))
 }

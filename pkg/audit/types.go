@@ -11,6 +11,11 @@ const (
 	EventTypeAudit = "AUDIT"
 )
 
+// HandledHeader is set by the audit middleware after processing a request.
+// When present on an incoming request, the middleware skips audit to avoid
+// duplicate events (e.g. gateway already audited, upstream service sees this header).
+const HandledHeader = "X-Formance-Audit"
+
 type Payload struct {
 	ID      string `json:"id"`
 	TraceID string `json:"trace_id"`
