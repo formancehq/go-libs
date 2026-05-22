@@ -2,6 +2,7 @@ package audit
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -345,7 +346,8 @@ func TestMiddleware_RequestBodyPassedThrough(t *testing.T) {
 	var receivedBody string
 	handler := Middleware(pub, topic, "test-app")(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			body, _ := readAll(r.Body)
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
 			receivedBody = string(body)
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -359,19 +361,6 @@ func TestMiddleware_RequestBodyPassedThrough(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, `{"hello":"world"}`, receivedBody)
-}
-
-func readAll(r interface{ Read([]byte) (int, error) }) ([]byte, error) {
-	var buf strings.Builder
-	b := make([]byte, 512)
-	for {
-		n, err := r.Read(b)
-		buf.Write(b[:n])
-		if err != nil {
-			break
-		}
-	}
-	return []byte(buf.String()), nil
 }
 
 func TestMiddleware_NoAuthByDefault(t *testing.T) {
@@ -406,4 +395,92 @@ func TestMiddleware_NoAuthByDefault(t *testing.T) {
 
 	assert.Nil(t, payload.Actor.Claims)
 	assert.Empty(t, payload.Actor.TokenValidationError)
+}
+
+func TestMiddleware_SkipsWhenHeaderPresent(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	handler := Middleware(pub, topic, "test-app")(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set(HandledHeader, "true")
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "ok", rr.Body.String())
+
+	// No audit event should have been published
+	messages := pub.AllMessages()[topic]
+	assert.Empty(t, messages)
+}
+
+func TestMiddleware_SetsHeaderForDownstream(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	var downstreamHeaderValue string
+	handler := Middleware(pub, topic, "test-app")(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			downstreamHeaderValue = r.Header.Get(HandledHeader)
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Downstream handler should see the header
+	assert.Equal(t, "true", downstreamHeaderValue)
+
+	// Audit event should have been published
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+}
+
+func TestMiddleware_HeaderNotInAuditPayload(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	handler := Middleware(pub, topic, "test-app")(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+
+	var event publish.EventMessage
+	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
+
+	payloadBytes, _ := json.Marshal(event.Payload)
+	var payload Payload
+	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
+
+	// The audit header should not leak into the captured request headers
+	assert.Empty(t, payload.HTTP.Request.Header.Get(HandledHeader))
 }

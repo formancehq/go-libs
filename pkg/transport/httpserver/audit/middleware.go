@@ -1,9 +1,11 @@
 package audit
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"strings"
@@ -18,6 +20,11 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// HandledHeader is set by the audit middleware after processing a request.
+// When present on an incoming request, the middleware skips audit to avoid
+// duplicate events (e.g. gateway already audited, upstream service sees this header).
+const HandledHeader = "X-Formance-Audit"
 
 type options struct {
 	keySets        map[string]oidc.KeySet
@@ -76,6 +83,11 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get(HandledHeader) != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			var (
 				body []byte
 				err  error
@@ -92,6 +104,12 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 					r.Body = io.NopCloser(bytes.NewBuffer(body))
 				}
 			}
+
+			requestHeaders := r.Header.Clone()
+			requestHeaders.Del("Authorization")
+			requestHeaders.Del(HandledHeader)
+
+			r.Header.Set(HandledHeader, "true")
 
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
@@ -117,9 +135,6 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 			if o.keySets != nil {
 				claims, tokenValidationError = jwt.ClaimsFromRequest(r, o.keySets)
 			}
-
-			requestHeaders := r.Header.Clone()
-			requestHeaders.Del("Authorization")
 
 			payload := Payload{
 				ID:      uuid.New().String(),
@@ -211,13 +226,13 @@ func extractTraceID(r *http.Request) string {
 
 type responseWriterWrapper struct {
 	http.ResponseWriter
-	body           *bytes.Buffer
-	statusCode     int
-	headersFlushed bool
+	body       *bytes.Buffer
+	statusCode int
 }
 
 func (rww *responseWriterWrapper) Write(buf []byte) (int, error) {
-	if rww.Header().Get("Content-Type") != "application/octet-stream" {
+	mediaType, _, _ := mime.ParseMediaType(rww.Header().Get("Content-Type"))
+	if mediaType != "application/octet-stream" {
 		rww.body.Write(buf)
 	}
 	return rww.ResponseWriter.Write(buf)
@@ -226,4 +241,21 @@ func (rww *responseWriterWrapper) Write(buf []byte) (int, error) {
 func (rww *responseWriterWrapper) WriteHeader(statusCode int) {
 	rww.statusCode = statusCode
 	rww.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (rww *responseWriterWrapper) Flush() {
+	if f, ok := rww.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (rww *responseWriterWrapper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := rww.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, errors.New("hijack not supported")
+}
+
+func (rww *responseWriterWrapper) Unwrap() http.ResponseWriter {
+	return rww.ResponseWriter
 }
