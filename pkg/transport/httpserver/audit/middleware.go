@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/formancehq/go-libs/v5/pkg/authn/jwt"
-	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
-	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
-	"github.com/formancehq/go-libs/v5/pkg/messaging/publish"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/formancehq/go-libs/v5/pkg/authn/jwt"
+	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
+	"github.com/formancehq/go-libs/v5/pkg/messaging/publish"
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
 // HandledHeader is set by the audit middleware after processing a request.

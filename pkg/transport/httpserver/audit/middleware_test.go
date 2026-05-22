@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/formancehq/go-libs/v5/pkg/messaging/publish"
-	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/formancehq/go-libs/v5/pkg/messaging/publish"
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
 func TestMiddleware_BasicCapture(t *testing.T) {
