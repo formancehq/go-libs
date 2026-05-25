@@ -10,7 +10,29 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (l *Licence) getKeyFromEmbeddedPublicKey() (interface{}, error) {
+type validateTokenOptions struct {
+	audience string
+	subject  string
+}
+
+// ValidateTokenOption configures optional licence JWT claim checks.
+type ValidateTokenOption func(*validateTokenOptions)
+
+// WithAudience requires the licence JWT audience to contain audience.
+func WithAudience(audience string) ValidateTokenOption {
+	return func(options *validateTokenOptions) {
+		options.audience = audience
+	}
+}
+
+// WithSubject requires the licence JWT subject to equal subject.
+func WithSubject(subject string) ValidateTokenOption {
+	return func(options *validateTokenOptions) {
+		options.subject = subject
+	}
+}
+
+func getKeyFromEmbeddedPublicKey() (interface{}, error) {
 	block, _ := pem.Decode([]byte(formancePublicKey))
 	if block == nil {
 		return nil, fmt.Errorf("failed to decode embedded Formance public key")
@@ -29,17 +51,32 @@ func (l *Licence) getKeyFromEmbeddedPublicKey() (interface{}, error) {
 	return rsaPub, nil
 }
 
-func (l *Licence) validate() error {
-	parser := jwt.NewParser(
-		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
-		jwt.WithAudience(l.serviceName),
-		jwt.WithExpirationRequired(),
-		jwt.WithSubject(l.clusterID),
-		jwt.WithIssuer(l.expectedIssuer),
-	)
+// ValidateToken validates a licence JWT against the embedded Formance public key.
+//
+// By default it verifies the signing method, signature, issuer, and expiration.
+// Audience and subject checks can be enabled with WithAudience and WithSubject.
+func ValidateToken(jwtToken string, expectedIssuer string, opts ...ValidateTokenOption) error {
+	options := validateTokenOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
 
-	token, err := parser.Parse(l.jwtToken, func(token *jwt.Token) (interface{}, error) {
-		return l.getKeyFromEmbeddedPublicKey()
+	parserOptions := []jwt.ParserOption{
+		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuer(expectedIssuer),
+	}
+	if options.audience != "" {
+		parserOptions = append(parserOptions, jwt.WithAudience(options.audience))
+	}
+	if options.subject != "" {
+		parserOptions = append(parserOptions, jwt.WithSubject(options.subject))
+	}
+
+	parser := jwt.NewParser(parserOptions...)
+
+	token, err := parser.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+		return getKeyFromEmbeddedPublicKey()
 	})
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -53,4 +90,13 @@ func (l *Licence) validate() error {
 	}
 
 	return nil
+}
+
+func (l *Licence) validate() error {
+	return ValidateToken(
+		l.jwtToken,
+		l.expectedIssuer,
+		WithAudience(l.serviceName),
+		WithSubject(l.clusterID),
+	)
 }

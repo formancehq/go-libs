@@ -205,6 +205,95 @@ func TestLicence_Start(t *testing.T) {
 	})
 }
 
+func TestValidateToken(t *testing.T) {
+	privateKey, pubPEM := generateTestRSAKeyPair(t)
+	setEmbeddedKey(t, pubPEM)
+
+	t.Run("valid token without audience or subject checks", func(t *testing.T) {
+		claims := jwt.MapClaims{
+			"sub": "another-cluster",
+			"aud": "another-service",
+			"iss": "test-issuer",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
+
+		err := ValidateToken(tokenString, "test-issuer")
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid audience when audience check is enabled", func(t *testing.T) {
+		claims := jwt.MapClaims{
+			"sub": "test-cluster",
+			"aud": "another-service",
+			"iss": "test-issuer",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
+
+		err := ValidateToken(tokenString, "test-issuer", WithAudience("test-service"))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "token has invalid audience")
+	})
+
+	t.Run("invalid subject when subject check is enabled", func(t *testing.T) {
+		claims := jwt.MapClaims{
+			"sub": "another-cluster",
+			"aud": "test-service",
+			"iss": "test-issuer",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
+
+		err := ValidateToken(tokenString, "test-issuer", WithSubject("test-cluster"))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "token has invalid subject")
+	})
+
+	t.Run("invalid issuer", func(t *testing.T) {
+		claims := jwt.MapClaims{
+			"sub": "test-cluster",
+			"aud": "test-service",
+			"iss": "wrong-issuer",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
+
+		err := ValidateToken(tokenString, "test-issuer")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "token has invalid issuer")
+	})
+
+	t.Run("expired token", func(t *testing.T) {
+		claims := jwt.MapClaims{
+			"sub": "test-cluster",
+			"aud": "test-service",
+			"iss": "test-issuer",
+			"exp": time.Now().Add(-time.Hour).Unix(),
+		}
+		tokenString := createTokenWithRSAKey(t, claims, privateKey)
+
+		err := ValidateToken(tokenString, "test-issuer")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "token has invalid claims: token is expired")
+	})
+
+	t.Run("wrong signing key", func(t *testing.T) {
+		otherKey, _ := generateTestRSAKeyPair(t)
+		claims := jwt.MapClaims{
+			"sub": "test-cluster",
+			"aud": "test-service",
+			"iss": "test-issuer",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}
+		tokenString := createTokenWithRSAKey(t, claims, otherKey)
+
+		err := ValidateToken(tokenString, "test-issuer")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "verification error")
+	})
+}
+
 func TestLicence_validate(t *testing.T) {
 	privateKey, pubPEM := generateTestRSAKeyPair(t)
 	setEmbeddedKey(t, pubPEM)

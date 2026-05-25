@@ -6,7 +6,7 @@ package licence
 //
 // It can be overridden at build time via ldflags for staging or key rotation:
 //
-//	go build -ldflags "-X github.com/formancehq/go-libs/v4/licence.formancePublicKey=$(cat custom_key.pem)"
+//	go build -ldflags "-X github.com/formancehq/go-libs/v5/pkg/authn/licence.formancePublicKey=$(cat custom_key.pem)"
 
 //nolint:lll
 var formancePublicKey = `-----BEGIN PUBLIC KEY-----
