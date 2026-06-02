@@ -154,6 +154,39 @@ func (mr *MockLoggerMockRecorder) Infof(fmt any, args ...any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Infof", reflect.TypeOf((*MockLogger)(nil).Infof), varargs...)
 }
 
+// Trace mocks base method.
+func (m *MockLogger) Trace(args ...any) {
+	m.ctrl.T.Helper()
+	varargs := []any{}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "Trace", varargs...)
+}
+
+// Trace indicates an expected call of Trace.
+func (mr *MockLoggerMockRecorder) Trace(args ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trace", reflect.TypeOf((*MockLogger)(nil).Trace), args...)
+}
+
+// Tracef mocks base method.
+func (m *MockLogger) Tracef(fmt string, args ...any) {
+	m.ctrl.T.Helper()
+	varargs := []any{fmt}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "Tracef", varargs...)
+}
+
+// Tracef indicates an expected call of Tracef.
+func (mr *MockLoggerMockRecorder) Tracef(fmt any, args ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{fmt}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tracef", reflect.TypeOf((*MockLogger)(nil).Tracef), varargs...)
+}
+
 // WithContext mocks base method.
 func (m *MockLogger) WithContext(ctx context.Context) Logger {
 	m.ctrl.T.Helper()

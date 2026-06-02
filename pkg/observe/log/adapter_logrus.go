@@ -11,6 +11,8 @@ import (
 
 type LogrusLogger struct {
 	entry interface {
+		Tracef(format string, args ...any)
+		Trace(args ...any)
 		Debugf(format string, args ...any)
 		Debug(args ...any)
 		Infof(format string, args ...any)
@@ -36,6 +38,12 @@ func (l *LogrusLogger) WithContext(ctx context.Context) Logger {
 	}
 }
 
+func (l *LogrusLogger) Trace(args ...any) {
+	l.entry.Trace(args...)
+}
+func (l *LogrusLogger) Tracef(fmt string, args ...any) {
+	l.entry.Tracef(fmt, args...)
+}
 func (l *LogrusLogger) Debug(args ...any) {
 	l.entry.Debug(args...)
 }
@@ -69,6 +77,8 @@ func (l *LogrusLogger) WithField(key string, value any) Logger {
 
 func toLogrusLevel(level Level) logrus.Level {
 	switch level {
+	case TraceLevel:
+		return logrus.TraceLevel
 	case DebugLevel:
 		return logrus.DebugLevel
 	case InfoLevel:
@@ -116,11 +126,24 @@ func NewDefaultLogger(
 	formatJSON bool,
 	otelTraces bool,
 ) *LogrusLogger {
+	level := InfoLevel
+	if debug {
+		level = DebugLevel
+	}
+	return NewDefaultLoggerWithLevel(w, level, formatJSON, otelTraces)
+}
+
+// NewDefaultLoggerWithLevel builds a LogrusLogger configured at the given level.
+// Prefer this constructor over NewDefaultLogger when callers need Trace verbosity.
+func NewDefaultLoggerWithLevel(
+	w io.Writer,
+	level Level,
+	formatJSON bool,
+	otelTraces bool,
+) *LogrusLogger {
 	l := logrus.New()
 	l.SetOutput(w)
-	if debug {
-		l.Level = logrus.DebugLevel
-	}
+	l.Level = toLogrusLevel(level)
 
 	var formatter logrus.Formatter
 	if formatJSON {
