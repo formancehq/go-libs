@@ -53,6 +53,9 @@ func NewListener(
 		WorkerCount: defaultWorkerCount,
 	}
 	for _, fn := range optFns {
+		if fn == nil {
+			continue
+		}
 		fn(&opts)
 	}
 	if opts.WorkerCount < 0 {

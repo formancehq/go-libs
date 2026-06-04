@@ -107,12 +107,15 @@ func TestCallbackDeadlineForcesCancels(t *testing.T) {
 	ch <- msg
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	listener.Listen(ctx, ch)
 
 	select {
 	case <-msg.Nacked():
 	case <-time.After(2 * time.Second):
+		cancel()
 		t.Fatal("callback was not nacked after deadline expired")
 	}
+
+	cancel()
+	<-listener.Done()
 }
