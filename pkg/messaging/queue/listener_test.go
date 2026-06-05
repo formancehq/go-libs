@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/sirupsen/logrus"
@@ -19,9 +20,16 @@ import (
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
-func TestNewListenerWorkerCount(t *testing.T) {
+func TestNewListenerDefaultsWorkerCount(t *testing.T) {
 	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
-	listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error { return nil }, 0)
+	listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error { return nil })
+	require.NoError(t, err)
+	assert.NotNil(t, listener)
+}
+
+func TestNewListenerNegativeWorkerCount(t *testing.T) {
+	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
+	listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error { return nil }, queue.WithWorkerCount(-1))
 	require.NotNil(t, err)
 	assert.ErrorContains(t, err, "workerCount")
 	assert.Nil(t, listener)
@@ -29,7 +37,7 @@ func TestNewListenerWorkerCount(t *testing.T) {
 
 func TestNewListenerInvalidCallback(t *testing.T) {
 	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
-	listener, err := queue.NewListener(logger, nil, 1)
+	listener, err := queue.NewListener(logger, nil)
 	require.NotNil(t, err)
 	assert.ErrorContains(t, err, "callback")
 	assert.Nil(t, listener)
@@ -62,7 +70,7 @@ func TestHandleMessageInjectsLoggerAndPropagatesTraceContext(t *testing.T) {
 		return nil
 	}
 
-	listener, err := queue.NewListener(logger, callback, 1)
+	listener, err := queue.NewListener(logger, callback)
 	require.NoError(t, err)
 
 	ch := make(chan *message.Message, 1)
@@ -81,4 +89,33 @@ func TestHandleMessageInjectsLoggerAndPropagatesTraceContext(t *testing.T) {
 	assert.Contains(t, output, "hello from callback", "logger should be injected into context")
 	assert.Contains(t, output, expectedTraceID, "trace ID should be propagated from message metadata via Extract")
 	assert.Contains(t, output, expectedSpanID, "span ID should be propagated from message metadata via Extract")
+}
+
+func TestCallbackDeadlineForcesCancels(t *testing.T) {
+	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
+
+	callback := func(ctx context.Context, meta map[string]string, msg []byte) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	listener, err := queue.NewListener(logger, callback, queue.WithCallbackDeadline(50*time.Millisecond))
+	require.NoError(t, err)
+
+	ch := make(chan *message.Message, 1)
+	msg := message.NewMessage("test-uuid", []byte("test-payload"))
+	ch <- msg
+
+	ctx, cancel := context.WithCancel(context.Background())
+	listener.Listen(ctx, ch)
+
+	select {
+	case <-msg.Nacked():
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("callback was not nacked after deadline expired")
+	}
+
+	cancel()
+	<-listener.Done()
 }

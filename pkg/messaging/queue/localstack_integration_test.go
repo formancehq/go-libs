@@ -114,7 +114,7 @@ var _ = Describe("SQS Listener", func() {
 				out <- string(msg)
 				return nil
 			}
-			listener, err := queue.NewListener(logger, fn, 2)
+			listener, err := queue.NewListener(logger, fn, queue.WithWorkerCount(2))
 			Expect(err).To(BeNil())
 			DeferCleanup(listener.Done)
 			listener.Listen(ctx, ch)
@@ -141,7 +141,7 @@ var _ = Describe("SQS Listener", func() {
 			fn := func(ctx context.Context, meta map[string]string, msg []byte) error {
 				return nil
 			}
-			listener, err := queue.NewListener(logger, fn, 2)
+			listener, err := queue.NewListener(logger, fn, queue.WithWorkerCount(2))
 			Expect(err).To(BeNil())
 			DeferCleanup(listener.Done)
 		})
