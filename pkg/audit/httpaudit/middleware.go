@@ -20,7 +20,9 @@ import (
 type HTTPOption func(*httpOptions)
 
 type httpOptions struct {
+	enabled        bool
 	sensitivePaths map[string]struct{}
+	eventPublisher auditEventPublisher
 }
 
 // WithSensitivePaths sets paths for which the response body should not be captured.
@@ -30,6 +32,34 @@ func WithSensitivePaths(paths ...string) HTTPOption {
 			o.sensitivePaths[p] = struct{}{}
 		}
 	}
+}
+
+// WithEnabled enables or disables HTTP audit event capture and publication.
+func WithEnabled(enabled bool) HTTPOption {
+	return func(o *httpOptions) {
+		o.enabled = enabled
+	}
+}
+
+// WithConfig configures HTTP audit event capture from audit.Config.
+func WithConfig(config audit.Config) HTTPOption {
+	return WithEnabled(config.Enabled)
+}
+
+// WithAsyncPublishing enables async publishing using a caller-managed AsyncPublisher.
+// Callers should close the publisher during shutdown to drain queued audit events.
+func WithAsyncPublishing(publisher *AsyncPublisher) HTTPOption {
+	return func(o *httpOptions) {
+		if publisher != nil {
+			o.eventPublisher = publisher
+		}
+	}
+}
+
+// WithAsyncPublisher enables async publishing using a caller-managed AsyncPublisher.
+// Use this option when the caller needs explicit lifecycle control via AsyncPublisher.Close.
+func WithAsyncPublisher(publisher *AsyncPublisher) HTTPOption {
+	return WithAsyncPublishing(publisher)
 }
 
 var bufPool = sync.Pool{
@@ -50,8 +80,25 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 		opt(ho)
 	}
 
+	var eventPublisher auditEventPublisher
+	if ho.enabled {
+		eventPublisher = auditEventPublisher(syncAuditEventPublisher{
+			publisher: publisher,
+			topicName: topicName,
+			appName:   appName,
+		})
+		if ho.eventPublisher != nil {
+			eventPublisher = ho.eventPublisher
+		}
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !ho.enabled {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if r.Header.Get(audit.HandledHeader) != "" {
 				next.ServeHTTP(w, r)
 				return
@@ -124,7 +171,7 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 				},
 			}
 
-			audit.PublishEvent(r.Context(), publisher, topicName, appName, payload)
+			eventPublisher.Publish(r.Context(), payload)
 		})
 	}
 }
