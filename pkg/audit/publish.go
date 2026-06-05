@@ -17,21 +17,31 @@ import (
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
+// NewEventMessage builds the Watermill message used for audit events.
+func NewEventMessage(ctx context.Context, appName string, payload Payload) *message.Message {
+	return publish.NewMessage(
+		ctx,
+		publish.EventMessage{
+			Date:    time.Now().UTC(),
+			App:     appName,
+			Version: EventVersion,
+			Type:    EventTypeAudit,
+			Payload: payload,
+		},
+	)
+}
+
+// PublishEventWithError publishes an audit event to the configured publisher.
+func PublishEventWithError(ctx context.Context, publisher message.Publisher, topicName string, appName string, payload Payload) error {
+	return publisher.Publish(
+		topicName,
+		NewEventMessage(ctx, appName, payload),
+	)
+}
+
 // PublishEvent publishes an audit event to the configured publisher.
 func PublishEvent(ctx context.Context, publisher message.Publisher, topicName string, appName string, payload Payload) {
-	if err := publisher.Publish(
-		topicName,
-		publish.NewMessage(
-			ctx,
-			publish.EventMessage{
-				Date:    time.Now().UTC(),
-				App:     appName,
-				Version: EventVersion,
-				Type:    EventTypeAudit,
-				Payload: payload,
-			},
-		),
-	); err != nil {
+	if err := PublishEventWithError(ctx, publisher, topicName, appName, payload); err != nil {
 		logging.FromContext(ctx).Errorf("failed to publish audit message: %v", err)
 	}
 }

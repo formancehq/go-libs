@@ -1,13 +1,21 @@
 package httpaudit
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,13 +24,69 @@ import (
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
+func TestMiddleware_DisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	var downstreamHeaderValue string
+	handler := Middleware(pub, topic, "test-app", nil)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			downstreamHeaderValue = r.Header.Get(audit.HandledHeader)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}),
+	)
+
+	req := httptest.NewRequest("POST", "/api/test", strings.NewReader(`{"key":"value"}`))
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "ok", rr.Body.String())
+	assert.Empty(t, downstreamHeaderValue)
+	assert.Empty(t, pub.AllMessages()[topic])
+}
+
+func TestMiddleware_WithConfigFromFlagsEnablesAudit(t *testing.T) {
+	t.Parallel()
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	audit.AddFlags(flags)
+	require.NoError(t, flags.Set(audit.AuditEnabledFlag, "true"))
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	cfg, err := audit.ConfigFromFlags(flags)
+	require.NoError(t, err)
+
+	handler := Middleware(pub, topic, "test-app", nil, WithConfig(cfg))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Len(t, pub.AllMessages()[topic], 1)
+}
+
 func TestMiddleware_BasicCapture(t *testing.T) {
 	t.Parallel()
 
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -69,7 +133,7 @@ func TestMiddleware_AuthorizationHeaderStripped(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -102,6 +166,7 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 	topic := "audit-events"
 
 	handler := Middleware(pub, topic, "test-app", nil,
+		WithEnabled(true),
 		WithSensitivePaths("/api/auth/oauth/token"),
 	)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +202,7 @@ func TestMiddleware_StreamRequestSkipsBodyCapture(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("stream-data"))
@@ -170,7 +235,7 @@ func TestMiddleware_OctetStreamResponseNotCaptured(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/octet-stream")
 			w.WriteHeader(http.StatusOK)
@@ -206,7 +271,7 @@ func TestMiddleware_OrganizationAndStackID(t *testing.T) {
 	handler := Middleware(pub, topic, "test-app", []audit.Option{
 		audit.WithOrganizationID("org-123"),
 		audit.WithStackID("stack-456"),
-	})(
+	}, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -268,7 +333,7 @@ func TestMiddleware_IPAddressExtraction(t *testing.T) {
 			pub := publish.InMemory()
 			topic := "audit-events"
 
-			handler := Middleware(pub, topic, "test-app", nil)(
+			handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
 				}),
@@ -311,7 +376,7 @@ func TestMiddleware_StatusCodeCapture(t *testing.T) {
 			pub := publish.InMemory()
 			topic := "audit-events"
 
-			handler := Middleware(pub, topic, "test-app", nil)(
+			handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(code)
 				}),
@@ -345,7 +410,7 @@ func TestMiddleware_RequestBodyPassedThrough(t *testing.T) {
 	topic := "audit-events"
 
 	var receivedBody string
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
@@ -370,7 +435,7 @@ func TestMiddleware_NoAuthByDefault(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -403,7 +468,7 @@ func TestMiddleware_SkipsWhenHeaderPresent(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
@@ -431,7 +496,7 @@ func TestMiddleware_SetsHeaderForDownstream(t *testing.T) {
 	topic := "audit-events"
 
 	var downstreamHeaderValue string
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			downstreamHeaderValue = r.Header.Get(audit.HandledHeader)
 			w.WriteHeader(http.StatusOK)
@@ -456,7 +521,7 @@ func TestMiddleware_HeaderNotInAuditPayload(t *testing.T) {
 	pub := publish.InMemory()
 	topic := "audit-events"
 
-	handler := Middleware(pub, topic, "test-app", nil)(
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}),
@@ -479,4 +544,485 @@ func TestMiddleware_HeaderNotInAuditPayload(t *testing.T) {
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Empty(t, payload.HTTP.Request.Header.Get(audit.HandledHeader))
+}
+
+func TestMiddleware_DefaultPublishesSynchronously(t *testing.T) {
+	pub := newBlockingPublisher()
+	topic := "audit-events"
+
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		close(done)
+	}()
+
+	pub.waitStarted(t)
+
+	select {
+	case <-done:
+		t.Fatal("handler returned before synchronous publish completed")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	pub.release()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handler did not return after publisher completed")
+	}
+}
+
+func TestMiddleware_AsyncPublishingReturnsBeforeSlowPublisherCompletes(t *testing.T) {
+	pub := newBlockingPublisher()
+	topic := "audit-events"
+	asyncPublisher := NewAsyncPublisher(pub, topic, "test-app",
+		WithAsyncPublishingQueueCapacity(1),
+		WithAsyncPublishingWorkerCount(1),
+	)
+	defer func() {
+		pub.release()
+		require.NoError(t, asyncPublisher.Close(context.Background()))
+	}()
+
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true), WithAsyncPublisher(asyncPublisher))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	start := time.Now()
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	elapsed := time.Since(start)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Less(t, elapsed, 50*time.Millisecond)
+
+	pub.waitStarted(t)
+}
+
+func TestMiddleware_AsyncPublishingQueueIsBoundedAndDropsWhenFull(t *testing.T) {
+	pub := newBlockingPublisher()
+	topic := "audit-events"
+	var dropped atomic.Uint64
+	asyncPublisher := NewAsyncPublisher(pub, topic, "test-app",
+		WithAsyncPublishingQueueCapacity(1),
+		WithAsyncPublishingWorkerCount(1),
+		WithAsyncPublishingDropCallback(func(context.Context, audit.Payload) {
+			dropped.Add(1)
+		}),
+	)
+	defer func() {
+		pub.release()
+		require.NoError(t, asyncPublisher.Close(context.Background()))
+	}()
+
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true), WithAsyncPublisher(asyncPublisher))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	serveAuditRequest(t, handler)
+	pub.waitStarted(t)
+
+	serveAuditRequest(t, handler)
+	require.Eventually(t, func() bool {
+		return asyncPublisher.Stats().Enqueued == 2
+	}, time.Second, time.Millisecond)
+
+	serveAuditRequest(t, handler)
+	require.Eventually(t, func() bool {
+		return asyncPublisher.Stats().Dropped == 1
+	}, time.Second, time.Millisecond)
+
+	stats := asyncPublisher.Stats()
+	assert.Equal(t, uint64(2), stats.Enqueued)
+	assert.Equal(t, uint64(1), stats.Dropped)
+	assert.Equal(t, uint64(1), dropped.Load())
+}
+
+func TestMiddleware_AsyncPublishingWorkerCountIsBounded(t *testing.T) {
+	pub := newConcurrentBlockingPublisher()
+	topic := "audit-events"
+	asyncPublisher := NewAsyncPublisher(pub, topic, "test-app",
+		WithAsyncPublishingQueueCapacity(2),
+		WithAsyncPublishingWorkerCount(2),
+	)
+	defer func() {
+		pub.release()
+		require.NoError(t, asyncPublisher.Close(context.Background()))
+	}()
+
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true), WithAsyncPublisher(asyncPublisher))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	serveAuditRequest(t, handler)
+	serveAuditRequest(t, handler)
+	pub.waitCalls(t, 2)
+
+	serveAuditRequest(t, handler)
+	serveAuditRequest(t, handler)
+	require.Eventually(t, func() bool {
+		return asyncPublisher.Stats().Enqueued == 4
+	}, time.Second, time.Millisecond)
+
+	serveAuditRequest(t, handler)
+	require.Eventually(t, func() bool {
+		return asyncPublisher.Stats().Dropped == 1
+	}, time.Second, time.Millisecond)
+
+	assert.LessOrEqual(t, pub.maxInFlight.Load(), int64(2))
+}
+
+func TestMiddleware_AsyncPublishingLogsAndCountsPublishErrors(t *testing.T) {
+	var logBuffer bytes.Buffer
+	logger := logging.NewDefaultLogger(&logBuffer, true, false, false)
+	errPublisher := &errorPublisher{err: errors.New("publisher failed")}
+	topic := "audit-events"
+	asyncPublisher := NewAsyncPublisher(errPublisher, topic, "test-app",
+		WithAsyncPublishingQueueCapacity(1),
+		WithAsyncPublishingWorkerCount(1),
+	)
+
+	handler := Middleware(errPublisher, topic, "test-app", nil, WithEnabled(true), WithAsyncPublisher(asyncPublisher))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.ContextWithLogger(context.Background(), logger))
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	require.Eventually(t, func() bool {
+		return asyncPublisher.Stats().PublishErrors == 1
+	}, time.Second, time.Millisecond)
+	require.NoError(t, asyncPublisher.Close(context.Background()))
+
+	stats := asyncPublisher.Stats()
+	assert.Equal(t, uint64(1), stats.Enqueued)
+	assert.Equal(t, uint64(0), stats.Published)
+	assert.Equal(t, uint64(1), stats.PublishErrors)
+	assert.Contains(t, logBuffer.String(), "failed to publish audit message asynchronously")
+	assert.Contains(t, logBuffer.String(), "publisher failed")
+}
+
+func TestMiddleware_PublishLatencyRegression(t *testing.T) {
+	topic := "audit-events"
+	publishDelay := 100 * time.Millisecond
+
+	t.Run("synchronous response includes publish delay", func(t *testing.T) {
+		pub := &delayedPublisher{delay: publishDelay}
+		handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}),
+		)
+
+		start := time.Now()
+		serveAuditRequest(t, handler)
+
+		assert.GreaterOrEqual(t, time.Since(start), publishDelay)
+		assert.Equal(t, uint64(1), pub.calls.Load())
+	})
+
+	t.Run("async response does not include publish delay", func(t *testing.T) {
+		pub := &delayedPublisher{delay: publishDelay}
+		asyncPublisher := NewAsyncPublisher(pub, topic, "test-app",
+			WithAsyncPublishingQueueCapacity(1),
+			WithAsyncPublishingWorkerCount(1),
+		)
+		defer func() {
+			require.NoError(t, asyncPublisher.Close(context.Background()))
+		}()
+
+		handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true), WithAsyncPublisher(asyncPublisher))(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}),
+		)
+
+		start := time.Now()
+		serveAuditRequest(t, handler)
+
+		assert.Less(t, time.Since(start), publishDelay/2)
+		require.Eventually(t, func() bool {
+			return asyncPublisher.Stats().Published == 1
+		}, time.Second, time.Millisecond)
+		assert.Equal(t, uint64(1), pub.calls.Load())
+	})
+}
+
+func TestMiddleware_WithAsyncPublishingUsesCallerManagedPublisher(t *testing.T) {
+	pub := &delayedPublisher{}
+	topic := "audit-events"
+	asyncPublisher := NewAsyncPublisher(pub, topic, "test-app",
+		WithAsyncPublishingQueueCapacity(1),
+		WithAsyncPublishingWorkerCount(1),
+	)
+	defer func() {
+		require.NoError(t, asyncPublisher.Close(context.Background()))
+	}()
+
+	handler := Middleware(pub, topic, "test-app", nil,
+		WithEnabled(true),
+		WithAsyncPublishing(asyncPublisher),
+	)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	serveAuditRequest(t, handler)
+
+	require.Eventually(t, func() bool {
+		return pub.calls.Load() == 1
+	}, time.Second, time.Millisecond)
+}
+
+func TestAsyncPublisher_CapturesEventDateBeforeQueueDelay(t *testing.T) {
+	pub := newSequentialBlockingRecorderPublisher()
+	asyncPublisher := NewAsyncPublisher(pub, "audit-events", "test-app",
+		WithAsyncPublishingQueueCapacity(1),
+		WithAsyncPublishingWorkerCount(1),
+	)
+	defer func() {
+		pub.release()
+		require.NoError(t, asyncPublisher.Close(context.Background()))
+	}()
+
+	asyncPublisher.Publish(logging.TestingContext(), audit.Payload{ID: "first"})
+	pub.waitCalls(t, 1)
+
+	beforeSecondEnqueue := time.Now().UTC()
+	asyncPublisher.Publish(logging.TestingContext(), audit.Payload{ID: "second"})
+	time.Sleep(50 * time.Millisecond)
+	releaseTime := time.Now().UTC()
+	pub.release()
+	pub.waitCalls(t, 2)
+
+	msgs := pub.messages()
+	require.Len(t, msgs, 2)
+
+	var event publish.EventMessage
+	require.NoError(t, json.Unmarshal(msgs[1].Payload, &event))
+	assert.GreaterOrEqual(t, event.Date.UnixNano(), beforeSecondEnqueue.UnixNano())
+	assert.Less(t, event.Date.UnixNano(), releaseTime.UnixNano())
+}
+
+func TestAsyncPublisher_CloseRespectsContextTimeout(t *testing.T) {
+	pub := newBlockingPublisher()
+	asyncPublisher := NewAsyncPublisher(pub, "audit-events", "test-app",
+		WithAsyncPublishingQueueCapacity(1),
+		WithAsyncPublishingWorkerCount(1),
+	)
+
+	asyncPublisher.Publish(logging.TestingContext(), audit.Payload{ID: "payload-id"})
+	pub.waitStarted(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	require.ErrorIs(t, asyncPublisher.Close(ctx), context.DeadlineExceeded)
+
+	pub.release()
+	require.NoError(t, asyncPublisher.Close(context.Background()))
+}
+
+func serveAuditRequest(t *testing.T, handler http.Handler) {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+}
+
+type blockingPublisher struct {
+	started     chan struct{}
+	released    chan struct{}
+	startedOnce sync.Once
+	releaseOnce sync.Once
+	calls       atomic.Uint64
+}
+
+func newBlockingPublisher() *blockingPublisher {
+	return &blockingPublisher{
+		started:  make(chan struct{}),
+		released: make(chan struct{}),
+	}
+}
+
+func (p *blockingPublisher) Publish(string, ...*message.Message) error {
+	p.calls.Add(1)
+	p.startedOnce.Do(func() {
+		close(p.started)
+	})
+	<-p.released
+	return nil
+}
+
+func (p *blockingPublisher) Close() error {
+	return nil
+}
+
+func (p *blockingPublisher) waitStarted(t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-p.started:
+	case <-time.After(time.Second):
+		t.Fatal("publisher was not called")
+	}
+}
+
+func (p *blockingPublisher) release() {
+	p.releaseOnce.Do(func() {
+		close(p.released)
+	})
+}
+
+type concurrentBlockingPublisher struct {
+	released    chan struct{}
+	releaseOnce sync.Once
+	calls       atomic.Uint64
+	inFlight    atomic.Int64
+	maxInFlight atomic.Int64
+}
+
+func newConcurrentBlockingPublisher() *concurrentBlockingPublisher {
+	return &concurrentBlockingPublisher{
+		released: make(chan struct{}),
+	}
+}
+
+func (p *concurrentBlockingPublisher) Publish(string, ...*message.Message) error {
+	p.calls.Add(1)
+	inFlight := p.inFlight.Add(1)
+	for {
+		maxInFlight := p.maxInFlight.Load()
+		if inFlight <= maxInFlight || p.maxInFlight.CompareAndSwap(maxInFlight, inFlight) {
+			break
+		}
+	}
+
+	<-p.released
+	p.inFlight.Add(-1)
+	return nil
+}
+
+func (p *concurrentBlockingPublisher) Close() error {
+	return nil
+}
+
+func (p *concurrentBlockingPublisher) waitCalls(t *testing.T, calls uint64) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		return p.calls.Load() >= calls
+	}, time.Second, time.Millisecond)
+}
+
+func (p *concurrentBlockingPublisher) release() {
+	p.releaseOnce.Do(func() {
+		close(p.released)
+	})
+}
+
+type sequentialBlockingRecorderPublisher struct {
+	mu          sync.Mutex
+	released    chan struct{}
+	releaseOnce sync.Once
+	calls       atomic.Uint64
+	messagesSet []*message.Message
+}
+
+func newSequentialBlockingRecorderPublisher() *sequentialBlockingRecorderPublisher {
+	return &sequentialBlockingRecorderPublisher{
+		released: make(chan struct{}),
+	}
+}
+
+func (p *sequentialBlockingRecorderPublisher) Publish(_ string, messages ...*message.Message) error {
+	call := p.calls.Add(1)
+	p.mu.Lock()
+	p.messagesSet = append(p.messagesSet, messages...)
+	p.mu.Unlock()
+
+	if call == 1 {
+		<-p.released
+	}
+	return nil
+}
+
+func (p *sequentialBlockingRecorderPublisher) Close() error {
+	return nil
+}
+
+func (p *sequentialBlockingRecorderPublisher) waitCalls(t *testing.T, calls uint64) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		return p.calls.Load() >= calls
+	}, time.Second, time.Millisecond)
+}
+
+func (p *sequentialBlockingRecorderPublisher) release() {
+	p.releaseOnce.Do(func() {
+		close(p.released)
+	})
+}
+
+func (p *sequentialBlockingRecorderPublisher) messages() []*message.Message {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return append([]*message.Message(nil), p.messagesSet...)
+}
+
+type delayedPublisher struct {
+	delay time.Duration
+	calls atomic.Uint64
+}
+
+func (p *delayedPublisher) Publish(string, ...*message.Message) error {
+	p.calls.Add(1)
+	time.Sleep(p.delay)
+	return nil
+}
+
+func (p *delayedPublisher) Close() error {
+	return nil
+}
+
+type errorPublisher struct {
+	err   error
+	calls atomic.Uint64
+}
+
+func (p *errorPublisher) Publish(string, ...*message.Message) error {
+	p.calls.Add(1)
+	return p.err
+}
+
+func (p *errorPublisher) Close() error {
+	return nil
 }
