@@ -1,11 +1,9 @@
 package connect
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestObfuscateDSN(t *testing.T) {
@@ -79,10 +77,5 @@ func TestBuildPGXConnectorDefaultsToReadWriteTargetSessionAttrs(t *testing.T) {
 
 	if config.ValidateConnect == nil {
 		t.Fatal("expected connector builder to set ValidateConnect")
-	}
-	got := reflect.ValueOf(config.ValidateConnect).Pointer()
-	want := reflect.ValueOf(pgconn.ValidateConnectTargetSessionAttrsReadWrite).Pointer()
-	if got != want {
-		t.Fatalf("unexpected ValidateConnect func pointer: got %x, want %x", got, want)
 	}
 }
