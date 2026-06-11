@@ -48,6 +48,44 @@ func TestConfigFromFlagsEnabledFromEnv(t *testing.T) {
 	assert.True(t, cfg.Enabled)
 }
 
+func TestConfigFromFlagsHandledHeaderSecretEmptyByDefault(t *testing.T) {
+	t.Parallel()
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	AddFlags(flags)
+
+	cfg, err := ConfigFromFlags(flags)
+
+	require.NoError(t, err)
+	assert.Empty(t, cfg.HandledHeaderSecret)
+}
+
+func TestConfigFromFlagsHandledHeaderSecretFromFlag(t *testing.T) {
+	t.Parallel()
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	AddFlags(flags)
+	require.NoError(t, flags.Set(AuditHandledHeaderSecretFlag, "super-secret"))
+
+	cfg, err := ConfigFromFlags(flags)
+
+	require.NoError(t, err)
+	assert.Equal(t, "super-secret", cfg.HandledHeaderSecret)
+}
+
+func TestConfigFromFlagsHandledHeaderSecretFromEnv(t *testing.T) {
+	t.Setenv("AUDIT_HANDLED_HEADER_SECRET", "env-secret")
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	AddFlags(flags)
+	service.BindEnvToFlagSet(flags)
+
+	cfg, err := ConfigFromFlags(flags)
+
+	require.NoError(t, err)
+	assert.Equal(t, "env-secret", cfg.HandledHeaderSecret)
+}
+
 func TestConfigFromFlagsReturnsErrorWhenFlagIsMissing(t *testing.T) {
 	t.Parallel()
 
