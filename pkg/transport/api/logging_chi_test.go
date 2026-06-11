@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/require"
 
@@ -73,16 +74,58 @@ func TestChiLogFormatter(t *testing.T) {
 
 	t.Run("Panic", func(t *testing.T) {
 		t.Parallel()
-		formatter := api.NewLogFormatter()
+		// Create a buffer to capture log output
+		var buf bytes.Buffer
+		logger := logging.NewDefaultLogger(&buf, true, false, false)
+
+		// Create a request with the logger in context
 		req, err := http.NewRequest("GET", "/test", nil)
 		require.NoError(t, err)
+		ctx := logging.ContextWithLogger(context.Background(), logger)
+		req = req.WithContext(ctx)
 
+		formatter := api.NewLogFormatter()
 		entry := formatter.NewLogEntry(req)
 
-		// Test that Panic method panics
-		require.Panics(t, func() {
+		// Panic must log the panic value and stack instead of re-panicking,
+		// otherwise chi's Recoverer cannot write the 500 response.
+		require.NotPanics(t, func() {
 			entry.Panic("test panic", []byte("stack trace"))
 		})
+
+		logOutput := buf.String()
+		require.Contains(t, logOutput, "GET /test")
+		require.Contains(t, logOutput, "test panic")
+		require.Contains(t, logOutput, "stack trace")
+	})
+
+	t.Run("Panicking handler returns 500 with Recoverer", func(t *testing.T) {
+		t.Parallel()
+		// Regression test for EN-1164: re-panicking from chiLogEntry.Panic
+		// aborted chi's Recoverer before it could write the 500 response.
+		var buf bytes.Buffer
+		logger := logging.NewDefaultLogger(&buf, true, false, false)
+
+		router := chi.NewRouter()
+		router.Use(middleware.RequestLogger(api.NewLogFormatter()))
+		router.Use(middleware.Recoverer)
+		router.Get("/panic", func(w http.ResponseWriter, r *http.Request) {
+			panic("boom")
+		})
+
+		req := httptest.NewRequest("GET", "/panic", nil)
+		req = req.WithContext(logging.ContextWithLogger(context.Background(), logger))
+		rr := httptest.NewRecorder()
+
+		// Recoverer must be able to complete its recovery path and write
+		// the 500 response instead of the panic being propagated
+		require.NotPanics(t, func() {
+			router.ServeHTTP(rr, req)
+		})
+		require.Equal(t, http.StatusInternalServerError, rr.Code)
+
+		// The panic value must have been logged
+		require.Contains(t, buf.String(), "boom")
 	})
 
 	t.Run("Integration with Chi middleware", func(t *testing.T) {
