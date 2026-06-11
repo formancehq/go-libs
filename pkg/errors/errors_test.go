@@ -92,6 +92,59 @@ func TestErrorWithExitCode(t *testing.T) {
 		require.False(t, errWithCode.Is(plainErr))
 	})
 
+	t.Run("errors.Is with pointer target", func(t *testing.T) {
+		t.Parallel()
+		// errors.Is must match when the target is the pointer form returned
+		// by NewErrorWithExitCode, even through wrapping
+		errWithCode := errorsutils.NewErrorWithExitCode(errors.New("test error"), 42)
+
+		require.True(t, errors.Is(errWithCode, errorsutils.NewErrorWithExitCode(nil, 0)))
+
+		wrapped := fmt.Errorf("wrapped: %w", errWithCode)
+		require.True(t, errors.Is(wrapped, errorsutils.NewErrorWithExitCode(nil, 0)))
+
+		// Value target keeps working
+		require.True(t, errors.Is(wrapped, errorsutils.ErrorWithExitCode{}))
+
+		// Plain error never matches
+		require.False(t, errors.Is(errors.New("plain error"), errorsutils.NewErrorWithExitCode(nil, 0)))
+	})
+
+	t.Run("ExitCodeFromError", func(t *testing.T) {
+		t.Parallel()
+		errWithCode := errorsutils.NewErrorWithExitCode(errors.New("base error"), 42)
+
+		// Direct error
+		exitCode, ok := errorsutils.ExitCodeFromError(errWithCode)
+		require.True(t, ok)
+		require.Equal(t, 42, exitCode)
+
+		// Double-wrapped error: this is the regression for the old
+		// direct type assertion which panicked on wrapped errors
+		wrappedTwice := fmt.Errorf("wrapped twice: %w", fmt.Errorf("wrapped once: %w", errWithCode))
+		require.NotPanics(t, func() {
+			exitCode, ok = errorsutils.ExitCodeFromError(wrappedTwice)
+		})
+		require.True(t, ok)
+		require.Equal(t, 42, exitCode)
+
+		// Value form in the chain
+		valueErr := fmt.Errorf("wrapped: %w", errorsutils.ErrorWithExitCode{Err: errors.New("base"), ExitCode: 7})
+		exitCode, ok = errorsutils.ExitCodeFromError(valueErr)
+		require.True(t, ok)
+		require.Equal(t, 7, exitCode)
+
+		// Plain error
+		exitCode, ok = errorsutils.ExitCodeFromError(errors.New("plain error"))
+		require.False(t, ok)
+		require.Equal(t, 0, exitCode)
+
+		// Nil error
+		exitCode, ok = errorsutils.ExitCodeFromError(nil)
+		require.False(t, ok)
+		require.Equal(t, 0, exitCode)
+	})
+
 	t.Run("IsErrorWithExitCode", func(t *testing.T) {
 		t.Parallel()
 		// Test with ErrorWithExitCode
