@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -47,18 +48,37 @@ func FetchAllPaginated[T any](ctx context.Context, client *http.Client, _url str
 		if err != nil {
 			return nil, err
 		}
-		if rsp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code %d while waiting for %d", rsp.StatusCode, http.StatusOK)
-		}
-		apiResponse := BaseResponse[T]{}
-		if err := json.NewDecoder(rsp.Body).Decode(&apiResponse); err != nil {
-			return nil, errors.Wrap(err, "decoding cursir")
+		apiResponse, err := decodePaginatedResponse[T](rsp)
+		if err != nil {
+			return nil, err
 		}
 		ret = append(ret, apiResponse.Cursor.Data...)
 		if !apiResponse.Cursor.HasMore {
 			break
 		}
+		if apiResponse.Cursor.Next == "" || apiResponse.Cursor.Next == nextToken {
+			return nil, errors.New("paginated response did not advance: empty or repeated next cursor while hasMore is true")
+		}
 		nextToken = apiResponse.Cursor.Next
 	}
 	return ret, nil
+}
+
+func decodePaginatedResponse[T any](rsp *http.Response) (*BaseResponse[T], error) {
+	defer func() {
+		_, _ = io.Copy(io.Discard, rsp.Body)
+		_ = rsp.Body.Close()
+	}()
+
+	if rsp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d while waiting for %d", rsp.StatusCode, http.StatusOK)
+	}
+	apiResponse := &BaseResponse[T]{}
+	if err := json.NewDecoder(rsp.Body).Decode(apiResponse); err != nil {
+		return nil, errors.Wrap(err, "decoding cursor")
+	}
+	if apiResponse.Cursor == nil {
+		return nil, errors.New("missing cursor in paginated response")
+	}
+	return apiResponse, nil
 }
