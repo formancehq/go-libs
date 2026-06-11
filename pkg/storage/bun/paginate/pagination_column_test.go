@@ -318,6 +318,29 @@ func TestColumnPagination(t *testing.T) {
 		},
 	}
 
+	t.Run("invalid pagination column", func(t *testing.T) {
+		t.Parallel()
+
+		for _, column := range []string{
+			"id; DROP TABLE models--",
+			"(SELECT 1)",
+			"id, pair",
+			"unknown",
+			"",
+		} {
+			models := make([]model, 0)
+			query := db.NewSelect().Model(&models).Column("id")
+			_, err := bunpaginate.UsingColumn[bool, model](context.Background(), query, bunpaginate.ColumnPaginatedQuery[bool]{
+				PageSize:     10,
+				Column:       column,
+				PaginationID: big.NewInt(int64(10)),
+				Order:        bunpaginate.OrderAsc,
+			})
+			require.Error(t, err)
+			require.ErrorContains(t, err, "invalid pagination column")
+		}
+	})
+
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {

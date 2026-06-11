@@ -18,28 +18,37 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	query ColumnPaginatedQuery[FILTERS]) (*Cursor[ENTITY], error) {
 	ret := make([]ENTITY, 0)
 
+	// The column comes from the client-provided cursor, so it must be validated
+	// against the entity known pagination fields before being used in any SQL
+	// expression to prevent SQL injection.
+	var v ENTITY
+	fields := findPaginationFieldPath(v, query.Column)
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("invalid pagination column %q", query.Column)
+	}
+
 	sb = sb.Model(&ret)
 	sb = sb.Limit(int(query.PageSize) + 1) // Fetch one additional item to find the next token
 	order := query.Order
 	if query.Reverse {
 		order = order.Reverse()
 	}
-	sb = sb.OrderExpr(fmt.Sprintf("%s %s", query.Column, order))
+	sb = sb.OrderExpr("? ?", bun.Ident(query.Column), bun.Safe(order.String()))
 
 	if query.PaginationID != nil {
 		if query.Reverse {
 			switch query.Order {
 			case OrderAsc:
-				sb = sb.Where(fmt.Sprintf("%s < ?", query.Column), query.PaginationID)
+				sb = sb.Where("? < ?", bun.Ident(query.Column), query.PaginationID)
 			case OrderDesc:
-				sb = sb.Where(fmt.Sprintf("%s > ?", query.Column), query.PaginationID)
+				sb = sb.Where("? > ?", bun.Ident(query.Column), query.PaginationID)
 			}
 		} else {
 			switch query.Order {
 			case OrderAsc:
-				sb = sb.Where(fmt.Sprintf("%s >= ?", query.Column), query.PaginationID)
+				sb = sb.Where("? >= ?", bun.Ident(query.Column), query.PaginationID)
 			case OrderDesc:
-				sb = sb.Where(fmt.Sprintf("%s <= ?", query.Column), query.PaginationID)
+				sb = sb.Where("? <= ?", bun.Ident(query.Column), query.PaginationID)
 			}
 		}
 	}
@@ -47,9 +56,6 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	if err := sb.Scan(ctx); err != nil {
 		return nil, err
 	}
-
-	var v ENTITY
-	fields := findPaginationFieldPath(v, query.Column)
 
 	var (
 		paginationIDs = make([]*big.Int, 0)
