@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -43,9 +44,8 @@ func startServer(ctx context.Context, s *serverport.Server, handler http.Handler
 	}
 
 	go func() {
-		err := srv.Serve(s.Listener)
-		if err != nil && err != http.ErrServerClosed {
-			panic(err)
+		if err := srv.Serve(s.Listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logging.FromContext(ctx).Errorf("failed to serve: %v", err)
 		}
 	}()
 
