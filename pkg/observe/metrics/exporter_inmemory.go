@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 type InMemoryExporter struct {
-	exp     sdkmetric.Exporter
+	exp sdkmetric.Exporter
+
+	mu      sync.RWMutex
 	metrics *metricdata.ResourceMetrics
 }
 
@@ -51,14 +54,25 @@ func (e *InMemoryExporter) Export(ctx context.Context, data *metricdata.Resource
 		return err
 	}
 
-	// notes(gfyrag): copy as indicate by interface sdkmetric.Exporter
-	// I don't know if that's enough...
-	e.metrics = &(*data)
+	// The SDK reader owns *data and recycles it (via a sync.Pool) once Export
+	// returns, so we must keep a deep copy of it.
+	snapshot := copyResourceMetrics(data)
 
-	return e.exp.Export(ctx, data)
+	e.mu.Lock()
+	e.metrics = snapshot
+	e.mu.Unlock()
+
+	if e.exp != nil {
+		return e.exp.Export(ctx, data)
+	}
+
+	return nil
 }
 
 func (e *InMemoryExporter) GetMetrics() *metricdata.ResourceMetrics {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
 	return e.metrics
 }
 
