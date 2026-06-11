@@ -486,6 +486,7 @@ func TestParsePageSize(t *testing.T) {
 		name           string
 		queryParams    map[string]string
 		expectedResult int
+		expectedError  error
 	}{
 		{
 			name: "with page size",
@@ -506,6 +507,48 @@ func TestParsePageSize(t *testing.T) {
 			},
 			expectedResult: 15, // default limit
 		},
+		{
+			name: "with max page size",
+			queryParams: map[string]string{
+				"pageSize": "100",
+			},
+			expectedResult: 100,
+		},
+		{
+			name: "with non-numeric page size",
+			queryParams: map[string]string{
+				"pageSize": "invalid",
+			},
+			expectedError: api.ErrInvalidPageSize,
+		},
+		{
+			name: "with negative page size",
+			queryParams: map[string]string{
+				"pageSize": "-1",
+			},
+			expectedError: api.ErrInvalidPageSize,
+		},
+		{
+			name: "with zero page size",
+			queryParams: map[string]string{
+				"pageSize": "0",
+			},
+			expectedError: api.ErrInvalidPageSize,
+		},
+		{
+			name: "with page size above max",
+			queryParams: map[string]string{
+				"pageSize": "101",
+			},
+			expectedError: api.ErrInvalidPageSize,
+		},
+		{
+			name: "with huge page size overflowing int32",
+			queryParams: map[string]string{
+				"pageSize": "99999999999999999999",
+			},
+			expectedError: api.ErrInvalidPageSize,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -522,30 +565,22 @@ func TestParsePageSize(t *testing.T) {
 			// Create a request with the URL
 			req, _ := http.NewRequest("GET", u.String(), nil)
 
-			// Call the function
-			result := api.ParsePageSize(req)
+			// Call the function, it must never panic
+			var result int
+			var err error
+			require.NotPanics(t, func() {
+				result, err = api.ParsePageSize(req)
+			})
 
 			// Check the result
+			if tc.expectedError != nil {
+				require.ErrorIs(t, err, tc.expectedError)
+				return
+			}
+			require.NoError(t, err)
 			require.Equal(t, tc.expectedResult, result)
 		})
 	}
-
-	// Test panic with invalid page size
-	t.Run("invalid page size", func(t *testing.T) {
-		// Create a URL with invalid page size
-		u, _ := url.Parse("http://example.com")
-		q := u.Query()
-		q.Set("pageSize", "invalid")
-		u.RawQuery = q.Encode()
-
-		// Create a request with the URL
-		req, _ := http.NewRequest("GET", u.String(), nil)
-
-		// Call the function and expect panic
-		require.Panics(t, func() {
-			api.ParsePageSize(req)
-		})
-	})
 }
 
 func TestReadPaginatedRequest(t *testing.T) {
@@ -571,18 +606,32 @@ func TestReadPaginatedRequest(t *testing.T) {
 	}
 
 	// Call the function
-	result := api.ReadPaginatedRequest(req, payloadExtractor)
+	result, err := api.ReadPaginatedRequest(req, payloadExtractor)
 
 	// Check the result
+	require.NoError(t, err)
 	require.Equal(t, 20, result.Limit)
 	require.Equal(t, "test-token", result.PaginationToken)
 	require.Equal(t, TestPayload{Filter: ""}, result.Payload)
 
 	// Test with nil payload extractor
-	result = api.ReadPaginatedRequest[TestPayload](req, nil)
+	result, err = api.ReadPaginatedRequest[TestPayload](req, nil)
+	require.NoError(t, err)
 	require.Equal(t, 20, result.Limit)
 	require.Equal(t, "test-token", result.PaginationToken)
 	require.Equal(t, TestPayload{}, result.Payload)
+
+	// Invalid page size must be reported as a validation error, not a panic
+	u, _ = url.Parse("http://example.com")
+	q = u.Query()
+	q.Set("pageSize", "invalid")
+	u.RawQuery = q.Encode()
+	req, _ = http.NewRequest("GET", u.String(), nil)
+
+	require.NotPanics(t, func() {
+		_, err = api.ReadPaginatedRequest(req, payloadExtractor)
+	})
+	require.ErrorIs(t, err, api.ErrInvalidPageSize)
 }
 
 func TestGetQueryMap(t *testing.T) {
