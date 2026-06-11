@@ -2,8 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +14,7 @@ const (
 	defaultLimit = 15
 
 	// MaxPageSize is the maximum value accepted for the `pageSize` query parameter.
+	// Larger values are clamped to it.
 	MaxPageSize = bunpaginate.MaxPageSize
 
 	ErrorCodeNotFound   = "NOT_FOUND"
@@ -23,10 +22,6 @@ const (
 	ErrorCodeForbidden  = "FORBIDDEN"
 	ErrorCodeValidation = "VALIDATION"
 )
-
-// ErrInvalidPageSize is returned when the `pageSize` query parameter is not a
-// valid integer in the [1, MaxPageSize] range.
-var ErrInvalidPageSize = errors.New("invalid 'pageSize' query param")
 
 func writeJSON(w http.ResponseWriter, statusCode int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -122,42 +117,43 @@ func ParsePaginationToken(r *http.Request) string {
 	return r.URL.Query().Get("paginationToken")
 }
 
-// ParsePageSize parses the `pageSize` query parameter.
-// It returns defaultLimit when the parameter is absent or empty, and
-// ErrInvalidPageSize when the value is not an integer in the [1, MaxPageSize] range.
-func ParsePageSize(r *http.Request) (int, error) {
+// ParsePageSize parses the `pageSize` query parameter. It never fails:
+//   - absent or empty parameter: returns defaultLimit
+//   - invalid value (non-numeric, overflow, <= 0): logs and returns defaultLimit
+//   - value above MaxPageSize: logs and returns MaxPageSize
+func ParsePageSize(r *http.Request) int {
 	pageSize := r.URL.Query().Get("pageSize")
 	if pageSize == "" {
-		return defaultLimit, nil
+		return defaultLimit
 	}
 
 	v, err := strconv.ParseInt(pageSize, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("%w: must be an integer between 1 and %d", ErrInvalidPageSize, MaxPageSize)
+	if err != nil || v <= 0 {
+		// note: the logger has no warning level, Infof is the closest
+		logging.FromContext(r.Context()).
+			Infof("invalid 'pageSize' query param %q, falling back to default page size %d", pageSize, defaultLimit)
+		return defaultLimit
 	}
-	if v <= 0 || v > MaxPageSize {
-		return 0, fmt.Errorf("%w: must be between 1 and %d", ErrInvalidPageSize, MaxPageSize)
+	if v > MaxPageSize {
+		logging.FromContext(r.Context()).
+			Debugf("'pageSize' query param %d exceeds maximum, clamped to %d", v, MaxPageSize)
+		return MaxPageSize
 	}
-	return int(v), nil
+	return int(v)
 }
 
-func ReadPaginatedRequest[T any](r *http.Request, f func(r *http.Request) T) (ListQuery[T], error) {
-	pageSize, err := ParsePageSize(r)
-	if err != nil {
-		return ListQuery[T]{}, err
-	}
-
+func ReadPaginatedRequest[T any](r *http.Request, f func(r *http.Request) T) ListQuery[T] {
 	var payload T
 	if f != nil {
 		payload = f(r)
 	}
 	return ListQuery[T]{
 		Pagination: Pagination{
-			Limit:           pageSize,
+			Limit:           ParsePageSize(r),
 			PaginationToken: ParsePaginationToken(r),
 		},
 		Payload: payload,
-	}, nil
+	}
 }
 
 func GetQueryMap(m map[string][]string, key string) map[string]string {
