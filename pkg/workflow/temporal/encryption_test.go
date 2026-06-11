@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,6 +40,26 @@ func TestEncryption(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, payload[0].Foo, result[0].Foo)
 		require.Equal(t, payload[1].Foo, result[1].Foo)
+	})
+
+	t.Run("decrypt truncated ciphertext", func(t *testing.T) {
+		converter, err := NewEncryptionDataConverter([]byte("12345678901011121314151617181920"))
+		require.NoError(t, err)
+
+		payload := Payload{
+			Foo: "bar",
+		}
+		p, err := converter.ToPayload(&payload)
+		require.NoError(t, err)
+		require.NotNil(t, p)
+
+		// Truncate the encrypted data to less than the GCM nonce size
+		p.Data = []byte(base64.StdEncoding.EncodeToString([]byte("short")))
+
+		var result Payload
+		err = converter.FromPayload(p, &result)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "ciphertext too short")
 	})
 
 	t.Run("decrypt if metadata is not present", func(t *testing.T) {
