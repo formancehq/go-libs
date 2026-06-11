@@ -29,7 +29,12 @@ func (c *chiLogEntry) Write(status, bytes int, _ http.Header, elapsed time.Durat
 }
 
 func (c *chiLogEntry) Panic(v interface{}, stack []byte) {
-	panic(fmt.Sprintf("%s\n%s", v, stack))
+	logging.FromContext(c.r.Context()).
+		WithFields(map[string]any{
+			"panic": fmt.Sprintf("%v", v),
+			"stack": string(stack),
+		}).
+		Errorf("%s %s: panic recovered", c.r.Method, c.r.URL.Path)
 }
 
 var _ middleware.LogEntry = (*chiLogEntry)(nil)
