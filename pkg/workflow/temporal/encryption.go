@@ -87,7 +87,7 @@ func (c *EncryptionDataConverter) FromPayload(payload *common.Payload, valuePtr 
 
 	nonceSize := gcm.NonceSize()
 	if len(ciphertext) < nonceSize {
-		return err
+		return fmt.Errorf("ciphertext too short: %d bytes, need at least %d", len(ciphertext), nonceSize)
 	}
 
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
