@@ -13,6 +13,10 @@ import (
 const (
 	defaultLimit = 15
 
+	// MaxPageSize is the maximum value accepted for the `pageSize` query parameter.
+	// Larger values are clamped to it.
+	MaxPageSize = bunpaginate.MaxPageSize
+
 	ErrorCodeNotFound   = "NOT_FOUND"
 	ErrorInternal       = "INTERNAL"
 	ErrorCodeForbidden  = "FORBIDDEN"
@@ -113,6 +117,10 @@ func ParsePaginationToken(r *http.Request) string {
 	return r.URL.Query().Get("paginationToken")
 }
 
+// ParsePageSize parses the `pageSize` query parameter. It never fails:
+//   - absent or empty parameter: returns defaultLimit
+//   - invalid value (non-numeric, overflow, <= 0): logs and returns defaultLimit
+//   - value above MaxPageSize: logs and returns MaxPageSize
 func ParsePageSize(r *http.Request) int {
 	pageSize := r.URL.Query().Get("pageSize")
 	if pageSize == "" {
@@ -120,8 +128,16 @@ func ParsePageSize(r *http.Request) int {
 	}
 
 	v, err := strconv.ParseInt(pageSize, 10, 32)
-	if err != nil {
-		panic(err)
+	if err != nil || v <= 0 {
+		// note: the logger has no warning level, Infof is the closest
+		logging.FromContext(r.Context()).
+			Infof("invalid 'pageSize' query param %q, falling back to default page size %d", pageSize, defaultLimit)
+		return defaultLimit
+	}
+	if v > MaxPageSize {
+		logging.FromContext(r.Context()).
+			Infof("'pageSize' query param %d exceeds maximum, clamped to %d", v, MaxPageSize)
+		return MaxPageSize
 	}
 	return int(v)
 }
