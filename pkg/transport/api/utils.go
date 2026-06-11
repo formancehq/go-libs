@@ -136,7 +136,7 @@ func ParsePageSize(r *http.Request) int {
 	}
 	if v > MaxPageSize {
 		logging.FromContext(r.Context()).
-			Debugf("'pageSize' query param %d exceeds maximum, clamped to %d", v, MaxPageSize)
+			Infof("'pageSize' query param %d exceeds maximum, clamped to %d", v, MaxPageSize)
 		return MaxPageSize
 	}
 	return int(v)
