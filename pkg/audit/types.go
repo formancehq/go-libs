@@ -14,6 +14,13 @@ const (
 // HandledHeader is set by the audit middleware after processing a request.
 // When present on an incoming request, the middleware skips audit to avoid
 // duplicate events (e.g. gateway already audited, upstream service sees this header).
+//
+// Trust requirement: this header is only trustworthy when every hop that can
+// set it is trusted. Edge components (e.g. the gateway) MUST strip it from
+// external requests, or a shared secret MUST be configured (see
+// httpaudit.WithHandledHeaderSecret / AuditHandledHeaderSecretFlag) so that
+// only holders of the secret can mark a request as already audited.
+// Otherwise, any external client can send this header to bypass the audit trail.
 const HandledHeader = "X-Formance-Audit"
 
 type Payload struct {

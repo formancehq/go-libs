@@ -489,6 +489,131 @@ func TestMiddleware_SkipsWhenHeaderPresent(t *testing.T) {
 	assert.Empty(t, messages)
 }
 
+func TestMiddleware_SecretConfiguredAuditsForgedHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		headerValue string
+	}{
+		{name: "legacy true value", headerValue: "true"},
+		{name: "arbitrary client value", headerValue: "x"},
+		{name: "wrong secret", headerValue: "not-the-secret"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pub := publish.InMemory()
+			topic := "audit-events"
+
+			var downstreamHeaderValue string
+			handler := Middleware(pub, topic, "test-app", nil,
+				WithEnabled(true),
+				WithHandledHeaderSecret("super-secret"),
+			)(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					downstreamHeaderValue = r.Header.Get(audit.HandledHeader)
+					w.WriteHeader(http.StatusOK)
+				}),
+			)
+
+			req := httptest.NewRequest("GET", "/api/test", nil)
+			req.Header.Set(audit.HandledHeader, tt.headerValue)
+			req = req.WithContext(logging.TestingContext())
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			require.Equal(t, http.StatusOK, rr.Code)
+
+			messages := pub.AllMessages()[topic]
+			require.Len(t, messages, 1, "request with forged header must still be audited")
+
+			// Downstream services sharing the secret must see the secret, not the forged value.
+			assert.Equal(t, "super-secret", downstreamHeaderValue)
+
+			// The secret must not leak into the audit payload.
+			var event publish.EventMessage
+			require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
+
+			payloadBytes, _ := json.Marshal(event.Payload)
+			var payload audit.Payload
+			require.NoError(t, json.Unmarshal(payloadBytes, &payload))
+
+			assert.Empty(t, payload.HTTP.Request.Header.Get(audit.HandledHeader))
+			assert.NotContains(t, string(messages[0].Payload), "super-secret")
+		})
+	}
+}
+
+func TestMiddleware_SecretConfiguredSkipsWhenHeaderMatches(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	handler := Middleware(pub, topic, "test-app", nil,
+		WithEnabled(true),
+		WithHandledHeaderSecret("super-secret"),
+	)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set(audit.HandledHeader, "super-secret")
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "ok", rr.Body.String())
+
+	assert.Empty(t, pub.AllMessages()[topic])
+}
+
+func TestMiddleware_SecretConfiguredViaConfigFromFlags(t *testing.T) {
+	t.Parallel()
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	audit.AddFlags(flags)
+	require.NoError(t, flags.Set(audit.AuditEnabledFlag, "true"))
+	require.NoError(t, flags.Set(audit.AuditHandledHeaderSecretFlag, "flag-secret"))
+
+	cfg, err := audit.ConfigFromFlags(flags)
+	require.NoError(t, err)
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	handler := Middleware(pub, topic, "test-app", nil, WithConfig(cfg))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	// A client-forged header value is still audited.
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set(audit.HandledHeader, "true")
+	req = req.WithContext(logging.TestingContext())
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	require.Len(t, pub.AllMessages()[topic], 1)
+
+	// The configured secret skips audit.
+	req = httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set(audit.HandledHeader, "flag-secret")
+	req = req.WithContext(logging.TestingContext())
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	require.Len(t, pub.AllMessages()[topic], 1)
+}
+
 func TestMiddleware_SetsHeaderForDownstream(t *testing.T) {
 	t.Parallel()
 
