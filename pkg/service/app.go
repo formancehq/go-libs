@@ -55,11 +55,11 @@ func (a *App) Run(cmd *cobra.Command) error {
 
 	app := a.newFxApp(a.logger, gracePeriod, totalStopTimeout)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), a.logger)); err != nil {
-		switch {
-		case errorsutils.IsErrorWithExitCode(err):
+		switch exitCode, hasExitCode := errorsutils.ExitCodeFromError(err); {
+		case hasExitCode:
 			a.logger.Errorf("Error: %v", err)
 			// We want to have a specific exit code for the error
-			os.Exit(err.(*errorsutils.ErrorWithExitCode).ExitCode)
+			os.Exit(exitCode)
 		default:
 			// Return complete error if we are debugging
 			// While polluting the output most of the time, it sometimes gives some precious information
