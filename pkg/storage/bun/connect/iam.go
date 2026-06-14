@@ -69,7 +69,7 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 			otlp.RecordError(ctx, err)
 		}
 
-		return ret, nil
+		return ret, err
 	}()
 	if err != nil {
 		return nil, errors.Wrap(err, "building aws auth token")
