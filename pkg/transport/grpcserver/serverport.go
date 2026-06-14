@@ -39,9 +39,20 @@ func startServer(ctx context.Context, s *serverport.Server, serverOptions []grpc
 	}()
 
 	return func(ctx context.Context) error {
-		grpcServer.GracefulStop()
+		stopped := make(chan struct{})
+		go func() {
+			grpcServer.GracefulStop()
+			close(stopped)
+		}()
 
-		return nil
+		select {
+		case <-stopped:
+			return nil
+		case <-ctx.Done():
+			grpcServer.Stop()
+			<-stopped
+			return ctx.Err()
+		}
 	}, nil
 }
 
