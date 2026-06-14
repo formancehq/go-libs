@@ -83,13 +83,12 @@ func ClaimsFromRequest(r *http.Request, keySets map[string]oidc.KeySet) (*oidc.A
 		return nil, ErrNoAuthorizationHeader
 	}
 
-	if !strings.HasPrefix(authHeader, "bearer") &&
-		!strings.HasPrefix(authHeader, "Bearer") {
+	authParts := strings.Fields(authHeader)
+	if len(authParts) != 2 || !strings.EqualFold(authParts[0], "Bearer") {
 		return nil, ErrMalformedHeader
 	}
 
-	token := authHeader[6:]
-	token = strings.TrimSpace(token)
+	token := authParts[1]
 
 	claims := &oidc.AccessTokenClaims{}
 	decrypted, err := oidc.DecryptToken(token)

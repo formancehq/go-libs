@@ -45,18 +45,24 @@ func New(t time.Time) Time {
 func (t *Time) Scan(src interface{}) (err error) {
 	switch src := src.(type) {
 	case time.Time:
-		*t = Time{
-			Time: src.UTC(),
-		}
+		*t = New(src)
 		return nil
 	case string:
 		*t = Time{}
-		t.Time, err = time.ParseInLocation(DateFormat, src, time.UTC)
-		return err
+		parsed, err := ParseTime(src)
+		if err != nil {
+			return err
+		}
+		*t = parsed
+		return nil
 	case []byte:
 		*t = Time{}
-		t.Time, err = time.ParseInLocation(DateFormat, string(src), time.UTC)
-		return err
+		parsed, err := ParseTime(string(src))
+		if err != nil {
+			return err
+		}
+		*t = parsed
+		return nil
 	case nil:
 		*t = Time{}
 		t.Time = time.Time{}
@@ -109,7 +115,7 @@ func (t Time) MarshalJSON() ([]byte, error) {
 }
 
 func (t *Time) UnmarshalJSON(data []byte) error {
-	if len(data) == 0 {
+	if len(data) == 0 || string(data) == "null" {
 		*t = Time{}
 		return nil
 	}

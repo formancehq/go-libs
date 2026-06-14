@@ -204,6 +204,13 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 	t.Run("failure with malformed authorization header", func(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
+		headers := map[string]string{
+			"invalid scheme":       "Invalid token",
+			"bearer without gap":   "Bearertoken",
+			"bearer without token": "Bearer",
+			"bearer blank token":   "Bearer ",
+			"extra token segment":  "Bearer token extra",
+		}
 		tests := []struct {
 			name string
 			auth Authenticator
@@ -220,14 +227,18 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				req := httptest.NewRequest("GET", "/test", nil)
-				req.Header.Set("Authorization", "Invalid token")
-				req = req.WithContext(logging.TestingContext())
+				for name, header := range headers {
+					t.Run(name, func(t *testing.T) {
+						req := httptest.NewRequest("GET", "/test", nil)
+						req.Header.Set("Authorization", header)
+						req = req.WithContext(logging.TestingContext())
 
-				authenticated, err := tt.auth.Authenticate(nil, req)
-				require.Error(t, err)
-				assert.False(t, authenticated)
-				assert.Contains(t, err.Error(), "malformed authorization header")
+						authenticated, err := tt.auth.Authenticate(nil, req)
+						require.Error(t, err)
+						assert.False(t, authenticated)
+						assert.Contains(t, err.Error(), "malformed authorization header")
+					})
+				}
 			})
 		}
 	})

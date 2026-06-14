@@ -160,6 +160,6 @@ func InitNatsCLIFlags(flags *pflag.FlagSet, serviceName string, options ...func(
 	flags.Int(PublisherNatsMaxReconnectFlag, values.PublisherNatsMaxReconnect, "Nats: set the maximum number of reconnect attempts.")
 	flags.Duration(PublisherNatsReconnectWaitFlag, values.PublisherNatsReconnectWait, "Nats: the wait time between reconnect attempts.")
 	flags.String(PublisherNatsURLFlag, values.PublisherNatsURL, "Nats url")
-	flags.Bool(PublisherNatsAutoProvisionFlag, true, "Auto create streams")
+	flags.Bool(PublisherNatsAutoProvisionFlag, values.PublisherNatsAutoProvision, "Auto create streams")
 	flags.StringArray(PublisherNatsNkeyFileFlag, []string{}, "Nats: nkey file (can be used multiple times)")
 }

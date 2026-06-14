@@ -51,7 +51,11 @@ func StartedServer(ctx context.Context, listener net.Listener, discr string) {
 
 	si.address = listener.Addr().String()
 
-	close(si.started)
+	select {
+	case <-si.started:
+	default:
+		close(si.started)
+	}
 }
 
 type Server struct {
