@@ -51,6 +51,81 @@ func TestNewListenerInvalidCallback(t *testing.T) {
 	assert.Nil(t, listener)
 }
 
+func TestListenerDoneIsIdempotentBeforeListen(t *testing.T) {
+	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
+	listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error {
+		return nil
+	})
+	require.NoError(t, err)
+
+	done := listener.Done()
+	requireClosed(t, done)
+	assert.Equal(t, done, listener.Done())
+	requireClosed(t, done)
+}
+
+func TestListenerDoneBeforeListenMakesLaterListenNoop(t *testing.T) {
+	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
+	called := make(chan struct{}, 1)
+	listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error {
+		called <- struct{}{}
+		return nil
+	})
+	require.NoError(t, err)
+
+	done := listener.Done()
+	requireClosed(t, done)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := make(chan *message.Message, 1)
+	ch <- message.NewMessage("test-uuid", []byte("test-payload"))
+	listener.Listen(ctx, ch)
+
+	select {
+	case <-called:
+		t.Fatal("callback was called after listener was already done")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestListenerListenIsIdempotent(t *testing.T) {
+	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
+	processed := make(chan string, 2)
+	listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error {
+		processed <- string(msg)
+		return nil
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	firstCh := make(chan *message.Message, 1)
+	secondCh := make(chan *message.Message, 1)
+	listener.Listen(ctx, firstCh)
+	listener.Listen(ctx, secondCh)
+
+	secondCh <- message.NewMessage("second-uuid", []byte("second"))
+	select {
+	case got := <-processed:
+		t.Fatalf("second Listen call processed message %q", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	firstCh <- message.NewMessage("first-uuid", []byte("first"))
+	select {
+	case got := <-processed:
+		assert.Equal(t, "first", got)
+	case <-time.After(time.Second):
+		t.Fatal("first Listen call did not process message")
+	}
+
+	cancel()
+	requireClosed(t, listener.Done())
+}
+
 func TestHandleMessageInjectsLoggerAndPropagatesTraceContext(t *testing.T) {
 	// Register W3C TraceContext propagator so Extract parses traceparent from metadata
 	otel.SetTextMapPropagator(propagation.TraceContext{})
@@ -126,4 +201,14 @@ func TestCallbackDeadlineForcesCancels(t *testing.T) {
 
 	cancel()
 	<-listener.Done()
+}
+
+func requireClosed(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("channel was not closed")
+	}
 }

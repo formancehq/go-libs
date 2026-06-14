@@ -32,6 +32,7 @@ type listener struct {
 	wg         *sync.WaitGroup
 	mux        *sync.Mutex
 	hasStarted bool
+	doneClosed bool
 
 	logger logging.Logger
 
@@ -80,13 +81,19 @@ func NewListener(
 // Start polling for messages
 func (l *listener) Listen(ctx context.Context, ch <-chan *message.Message) {
 	l.mux.Lock()
+	if l.hasStarted || l.doneClosed {
+		l.mux.Unlock()
+		return
+	}
 	l.hasStarted = true
 	l.logger.WithField("listenerName", l.name).WithField("workerCount", l.workerCount).Debugf("queue listener starting listen...")
+	for i := 0; i < l.workerCount; i++ {
+		l.wg.Add(1)
+	}
 	l.mux.Unlock()
 
 	// fan out and process messages concurrently
 	for i := 0; i < l.workerCount; i++ {
-		l.wg.Add(1)
 		go func() {
 			l.startWorker(ctx, ch)
 		}()
@@ -95,7 +102,9 @@ func (l *listener) Listen(ctx context.Context, ch <-chan *message.Message) {
 	go func() {
 		l.wg.Wait()
 		l.logger.WithField("listenerName", l.name).Infof("queue listener closed")
-		close(l.done)
+		l.mux.Lock()
+		l.closeDoneLocked()
+		l.mux.Unlock()
 	}()
 	return
 }
@@ -106,9 +115,17 @@ func (l *listener) Done() <-chan struct{} {
 	defer l.mux.Unlock()
 	if !l.hasStarted {
 		// listen was never called
-		close(l.done)
+		l.closeDoneLocked()
 	}
 	return l.done
+}
+
+func (l *listener) closeDoneLocked() {
+	if l.doneClosed {
+		return
+	}
+	l.doneClosed = true
+	close(l.done)
 }
 
 func (l *listener) startWorker(ctx context.Context, messages <-chan *message.Message) {
