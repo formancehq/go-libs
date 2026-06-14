@@ -58,7 +58,7 @@ func NewListener(
 		}
 		fn(&opts)
 	}
-	if opts.WorkerCount < 0 {
+	if opts.WorkerCount <= 0 {
 		return nil, fmt.Errorf("workerCount must be bigger than 0")
 	}
 	if callbackFn == nil {

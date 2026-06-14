@@ -35,6 +35,14 @@ func TestNewListenerNegativeWorkerCount(t *testing.T) {
 	assert.Nil(t, listener)
 }
 
+func TestNewListenerZeroWorkerCount(t *testing.T) {
+	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
+	listener, err := queue.NewListener(logger, func(ctx context.Context, meta map[string]string, msg []byte) error { return nil }, queue.WithWorkerCount(0))
+	require.NotNil(t, err)
+	assert.ErrorContains(t, err, "workerCount")
+	assert.Nil(t, listener)
+}
+
 func TestNewListenerInvalidCallback(t *testing.T) {
 	logger := logging.NewDefaultLogger(os.Stderr, true, true, false)
 	listener, err := queue.NewListener(logger, nil)
