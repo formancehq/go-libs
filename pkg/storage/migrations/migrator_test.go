@@ -29,6 +29,12 @@ var (
 	bunDB      *bun.DB
 )
 
+type rawConnFunc func(func(driverConn any) error) error
+
+func (f rawConnFunc) Raw(fn func(driverConn any) error) error {
+	return f(fn)
+}
+
 func TestMain(m *testing.M) {
 	utils.WithTestMain(func(t *utils.TestingTForMain) int {
 		var err error
@@ -53,6 +59,39 @@ func TestMain(m *testing.M) {
 
 		return m.Run()
 	})
+}
+
+func TestMigrationProgressListenerRawErrorDoesNotRequireCleanup(t *testing.T) {
+	t.Parallel()
+
+	rawErr := errors.New("raw failed")
+	migrator := &Migrator{}
+
+	stop := migrator.startMigrationProgressListener(logging.TestingContext(), rawConnFunc(func(func(driverConn any) error) error {
+		return rawErr
+	}), 0)
+
+	require.Nil(t, stop)
+}
+
+func TestMigrationProgressListenerListenErrorDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	stop := runMigrationProgressListener(logging.TestingContext(), func(context.Context) error {
+		return errors.New("listen failed")
+	})
+
+	done := make(chan struct{})
+	go func() {
+		stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("listener cleanup blocked")
+	}
 }
 
 func TestMigrationsListen(t *testing.T) {
