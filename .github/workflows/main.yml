@@ -9,8 +9,7 @@ on:
     types: [ assigned, opened, synchronize, reopened, labeled ]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
