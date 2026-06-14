@@ -162,6 +162,13 @@ type DiscoveryConfiguration struct {
 	BackChannelLogoutSessionSupported bool `json:"backchannel_logout_session_supported,omitempty"`
 }
 
+func (d *DiscoveryConfiguration) GetIssuer() string {
+	if d == nil {
+		return ""
+	}
+	return d.Issuer
+}
+
 type AuthMethod string
 
 const (
