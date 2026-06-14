@@ -21,6 +21,8 @@ const (
 	ErrorInternal       = "INTERNAL"
 	ErrorCodeForbidden  = "FORBIDDEN"
 	ErrorCodeValidation = "VALIDATION"
+
+	internalServerErrorMessage = "internal server error"
 )
 
 func writeJSON(w http.ResponseWriter, statusCode int, v any) {
@@ -66,7 +68,10 @@ func BadRequestWithDetails(w http.ResponseWriter, code string, err error, detail
 
 func InternalServerError(w http.ResponseWriter, r *http.Request, err error) {
 	logging.FromContext(r.Context()).Error(err)
-	WriteErrorResponse(w, http.StatusInternalServerError, ErrorInternal, err)
+	writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+		ErrorCode:    ErrorInternal,
+		ErrorMessage: internalServerErrorMessage,
+	})
 }
 
 func Accepted(w http.ResponseWriter, v any) {

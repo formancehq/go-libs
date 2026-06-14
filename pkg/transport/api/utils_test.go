@@ -208,7 +208,7 @@ func TestInternalServerError(t *testing.T) {
 
 	// Create a response recorder
 	rr := httptest.NewRecorder()
-	testErr := errors.New("internal server error")
+	testErr := errors.New(`pq: duplicate key value violates unique constraint "accounts_pkey" at /srv/app/internal/storage/accounts.go:42`)
 
 	// Call the function
 	api.InternalServerError(rr, req, testErr)
@@ -220,15 +220,19 @@ func TestInternalServerError(t *testing.T) {
 	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 
 	// Check the response body
+	rawBody := rr.Body.String()
 	var response api.ErrorResponse
-	decodeErr := json.NewDecoder(rr.Body).Decode(&response)
+	decodeErr := json.NewDecoder(bytes.NewBufferString(rawBody)).Decode(&response)
 	require.NoError(t, decodeErr)
 	require.Equal(t, api.ErrorInternal, response.ErrorCode)
-	require.Equal(t, testErr.Error(), response.ErrorMessage)
+	require.Equal(t, "internal server error", response.ErrorMessage)
+	require.NotContains(t, rawBody, "accounts_pkey")
+	require.NotContains(t, rawBody, "/srv/app/internal/storage/accounts.go")
 
 	// Verify that the error was logged
 	logOutput := buf.String()
-	require.Contains(t, logOutput, testErr.Error())
+	require.Contains(t, logOutput, "accounts_pkey")
+	require.Contains(t, logOutput, "/srv/app/internal/storage/accounts.go")
 }
 
 func TestAccepted(t *testing.T) {
