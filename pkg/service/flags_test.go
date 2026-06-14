@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFlags(t *testing.T) {
@@ -42,4 +44,45 @@ func TestFlags(t *testing.T) {
 	}
 
 	fmt.Println(command.Flags().GetString("root1"))
+}
+
+func TestBindEnvToFlagSetDoesNotEnableDebugFromBareDebugEnv(t *testing.T) {
+	t.Setenv("DEBUG", "1")
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.Bool(DebugFlag, false, "")
+
+	BindEnvToFlagSet(flags)
+
+	debug, err := flags.GetBool(DebugFlag)
+	require.NoError(t, err)
+	require.False(t, debug)
+}
+
+func TestBindEnvToFlagSetStillBindsNonDebugEnv(t *testing.T) {
+	t.Setenv("ROOT1", "changed")
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.String("root1", "default", "")
+
+	BindEnvToFlagSet(flags)
+
+	root1, err := flags.GetString("root1")
+	require.NoError(t, err)
+	require.Equal(t, "changed", root1)
+}
+
+func TestBindEnvToFlagSetIgnoresInvalidEnvValue(t *testing.T) {
+	t.Setenv("ENABLED", "not-a-bool")
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.Bool("enabled", false, "")
+
+	require.NotPanics(t, func() {
+		BindEnvToFlagSet(flags)
+	})
+
+	enabled, err := flags.GetBool("enabled")
+	require.NoError(t, err)
+	require.False(t, enabled)
 }

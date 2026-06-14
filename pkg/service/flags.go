@@ -21,6 +21,10 @@ func BindEnvToFlagSet(set *pflag.FlagSet) {
 	set.VisitAll(func(flag *pflag.Flag) {
 		envVar := strings.ToUpper(flag.Name)
 		envVar = strings.Replace(envVar, "-", "_", -1)
+		// DEBUG is commonly set by tooling and shells; keep debug mode explicit.
+		if flag.Name == DebugFlag && envVar == "DEBUG" {
+			return
+		}
 		value := os.Getenv(envVar)
 		if value == "" {
 			return
@@ -33,9 +37,8 @@ func BindEnvToFlagSet(set *pflag.FlagSet) {
 			}
 		}
 
-		err := set.Set(flag.Name, value)
-		if err != nil {
-			panic(err)
+		if err := set.Set(flag.Name, value); err != nil {
+			return
 		}
 	})
 }
