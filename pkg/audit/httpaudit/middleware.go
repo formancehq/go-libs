@@ -90,6 +90,8 @@ var bufPool = sync.Pool{
 	},
 }
 
+const maxCapturedBodyBytes = 64 * 1024
+
 // Middleware returns an HTTP middleware that captures request/response data
 // and publishes audit events via the given Watermill publisher.
 func Middleware(publisher message.Publisher, topicName string, appName string, opts []audit.Option, httpOpts ...HTTPOption) func(http.Handler) http.Handler {
@@ -153,14 +155,10 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 			sensitivePath := ho.isSensitivePath(r.URL.Path)
 
 			if !isStreamRequest(r) && !sensitivePath {
-				body, err = io.ReadAll(r.Body)
+				body, err = captureRequestBody(r)
 				if err != nil && !errors.Is(err, io.EOF) {
 					http.Error(w, "failed to read request body", http.StatusInternalServerError)
 					return
-				}
-				if len(body) > 0 {
-					_ = r.Body.Close()
-					r.Body = io.NopCloser(bytes.NewBuffer(body))
 				}
 			}
 
@@ -170,7 +168,7 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
-			defer bufPool.Put(buf)
+			defer putCaptureBuffer(buf)
 
 			rww := &responseWriterWrapper{
 				ResponseWriter: w,
@@ -219,6 +217,37 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 	}
 }
 
+func captureRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCapturedBodyBytes))
+	if len(body) > 0 {
+		r.Body = readCloser{
+			Reader: io.MultiReader(bytes.NewReader(body), r.Body),
+			Closer: r.Body,
+		}
+	}
+	return body, err
+}
+
+func putCaptureBuffer(buf *bytes.Buffer) {
+	if shouldPoolCaptureBuffer(buf) {
+		buf.Reset()
+		bufPool.Put(buf)
+	}
+}
+
+func shouldPoolCaptureBuffer(buf *bytes.Buffer) bool {
+	return buf.Cap() <= maxCapturedBodyBytes
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
+}
+
 func cloneHeaderWithout(header http.Header, names ...string) http.Header {
 	clone := header.Clone()
 	for _, name := range names {
@@ -265,7 +294,14 @@ func (rww *responseWriterWrapper) Write(buf []byte) (int, error) {
 	if rww.captureBody {
 		mediaType, _, _ := mime.ParseMediaType(rww.Header().Get("Content-Type"))
 		if mediaType != "application/octet-stream" {
-			rww.body.Write(buf)
+			remaining := maxCapturedBodyBytes - rww.body.Len()
+			if remaining > 0 {
+				captured := buf
+				if len(captured) > remaining {
+					captured = captured[:remaining]
+				}
+				rww.body.Write(captured)
+			}
 		}
 	}
 	return rww.ResponseWriter.Write(buf)

@@ -127,6 +127,85 @@ func TestMiddleware_BasicCapture(t *testing.T) {
 	assert.Equal(t, `{"status":"ok"}`, payload.HTTP.Response.Body)
 }
 
+func TestMiddleware_CapsRequestBodyCaptureAndPassesFullBodyThrough(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	var receivedBody string
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			receivedBody = string(body)
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	capturedPrefix := strings.Repeat("a", maxCapturedBodyBytes)
+	reqBody := capturedPrefix + strings.Repeat("b", 1024)
+	req := httptest.NewRequest("POST", "/api/test", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, reqBody, receivedBody)
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+	payload := auditPayloadFromMessage(t, messages[0])
+
+	require.Len(t, payload.HTTP.Request.Body, maxCapturedBodyBytes)
+	assert.Equal(t, capturedPrefix, payload.HTTP.Request.Body)
+	assert.NotContains(t, payload.HTTP.Request.Body, "b")
+}
+
+func TestMiddleware_CapsResponseBodyCaptureAndWritesFullResponse(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	capturedPrefix := strings.Repeat("r", maxCapturedBodyBytes)
+	responseBody := capturedPrefix + strings.Repeat("s", 1024)
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(responseBody[:maxCapturedBodyBytes/2]))
+			_, _ = w.Write([]byte(responseBody[maxCapturedBodyBytes/2:]))
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, responseBody, rr.Body.String())
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+	payload := auditPayloadFromMessage(t, messages[0])
+
+	require.Len(t, payload.HTTP.Response.Body, maxCapturedBodyBytes)
+	assert.Equal(t, capturedPrefix, payload.HTTP.Response.Body)
+	assert.NotContains(t, payload.HTTP.Response.Body, "s")
+}
+
+func TestMiddleware_DoesNotPoolOversizedCaptureBuffers(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, shouldPoolCaptureBuffer(bytes.NewBuffer(make([]byte, 0, maxCapturedBodyBytes))))
+	assert.False(t, shouldPoolCaptureBuffer(bytes.NewBuffer(make([]byte, 0, maxCapturedBodyBytes+1))))
+}
+
 func TestMiddleware_AuthorizationHeaderStripped(t *testing.T) {
 	t.Parallel()
 
@@ -238,8 +317,8 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
-	assert.Empty(t, payload.HTTP.Response.Body)
 	assert.Empty(t, payload.HTTP.Request.Body)
+	assert.Empty(t, payload.HTTP.Response.Body)
 	assert.NotContains(t, string(messages[0].Payload), "client_credentials")
 	assert.NotContains(t, string(messages[0].Payload), "access_token")
 }
@@ -285,6 +364,7 @@ func TestMiddleware_SensitivePathsMatchPrefixAndPassRequestBodyThrough(t *testin
 	var payload audit.Payload
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
+	assert.Equal(t, "/api/auth/oauth/token", payload.HTTP.Request.Path)
 	assert.Empty(t, payload.HTTP.Request.Body)
 	assert.Empty(t, payload.HTTP.Response.Body)
 	assert.NotContains(t, string(messages[0].Payload), "request-secret")
@@ -1064,6 +1144,20 @@ func TestAsyncPublisher_CloseRespectsContextTimeout(t *testing.T) {
 
 	pub.release()
 	require.NoError(t, asyncPublisher.Close(context.Background()))
+}
+
+func auditPayloadFromMessage(t *testing.T, msg *message.Message) audit.Payload {
+	t.Helper()
+
+	var event publish.EventMessage
+	require.NoError(t, json.Unmarshal(msg.Payload, &event))
+
+	payloadBytes, err := json.Marshal(event.Payload)
+	require.NoError(t, err)
+
+	var payload audit.Payload
+	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
+	return payload
 }
 
 func serveAuditRequest(t *testing.T, handler http.Handler) {
