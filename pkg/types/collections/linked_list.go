@@ -1,6 +1,7 @@
 package collections
 
 import (
+	"reflect"
 	"sync"
 )
 
@@ -19,6 +20,13 @@ func (n *LinkedListNode[T]) Value() T {
 }
 
 func (n *LinkedListNode[T]) Remove() {
+	n.list.mu.Lock()
+	defer n.list.mu.Unlock()
+
+	n.remove()
+}
+
+func (n *LinkedListNode[T]) remove() {
 	if n.previousNode != nil {
 		n.previousNode.nextNode = n.nextNode
 	}
@@ -67,7 +75,7 @@ func (r *LinkedList[T]) RemoveFirst(cmp func(T) bool) *LinkedListNode[T] {
 	node := r.firstNode
 	for node != nil {
 		if cmp(node.object) {
-			node.Remove()
+			node.remove()
 			return node
 		}
 		node = node.nextNode
@@ -78,11 +86,14 @@ func (r *LinkedList[T]) RemoveFirst(cmp func(T) bool) *LinkedListNode[T] {
 
 func (r *LinkedList[T]) RemoveValue(t T) *LinkedListNode[T] {
 	return r.RemoveFirst(func(t2 T) bool {
-		return (any)(t) == (any)(t2)
+		return comparableEqual(t, t2)
 	})
 }
 
 func (r *LinkedList[T]) TakeFirst() T {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	var t T
 	if r.firstNode == nil {
 		return t
@@ -90,6 +101,7 @@ func (r *LinkedList[T]) TakeFirst() T {
 	ret := r.firstNode.object
 	if r.firstNode.nextNode == nil {
 		r.firstNode = nil
+		r.lastNode = nil
 	} else {
 		r.firstNode = r.firstNode.nextNode
 		r.firstNode.previousNode = nil
@@ -124,6 +136,9 @@ func (r *LinkedList[T]) ForEach(f func(t T)) {
 }
 
 func (r *LinkedList[T]) Slice() []T {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	ret := make([]T, 0)
 	node := r.firstNode
 	for node != nil {
@@ -134,9 +149,34 @@ func (r *LinkedList[T]) Slice() []T {
 }
 
 func (r *LinkedList[T]) FirstNode() *LinkedListNode[T] {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	return r.firstNode
 }
 
 func NewLinkedList[T any]() *LinkedList[T] {
 	return &LinkedList[T]{}
+}
+
+func comparableEqual[T any](a, b T) (equal bool) {
+	aAny := any(a)
+	bAny := any(b)
+
+	aType := reflect.TypeOf(aAny)
+	bType := reflect.TypeOf(bAny)
+	if aType == nil || bType == nil {
+		return aType == bType
+	}
+	if aType != bType || !aType.Comparable() {
+		return false
+	}
+
+	defer func() {
+		if recover() != nil {
+			equal = false
+		}
+	}()
+
+	return aAny == bAny
 }

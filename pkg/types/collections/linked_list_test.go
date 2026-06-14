@@ -118,6 +118,43 @@ func TestLinkedList(t *testing.T) {
 		require.Equal(t, 4, list.Length())
 	})
 
+	t.Run("RemoveValueNonComparable", func(t *testing.T) {
+		t.Parallel()
+		list := collectionutils.NewLinkedList[[]int]()
+		list.Append([]int{1}, []int{2})
+
+		require.NotPanics(t, func() {
+			node := list.RemoveValue([]int{1})
+			require.Nil(t, node)
+		})
+		require.Equal(t, [][]int{{1}, {2}}, list.Slice())
+
+		interfaceList := collectionutils.NewLinkedList[any]()
+		interfaceList.Append([]int{1}, "match")
+
+		require.NotPanics(t, func() {
+			node := interfaceList.RemoveValue([]int{1})
+			require.Nil(t, node)
+		})
+
+		node := interfaceList.RemoveValue("match")
+		require.NotNil(t, node)
+		require.Equal(t, "match", node.Value())
+		require.Equal(t, []any{[]int{1}}, interfaceList.Slice())
+
+		type interfaceField struct {
+			value any
+		}
+		structList := collectionutils.NewLinkedList[interfaceField]()
+		structList.Append(interfaceField{value: []int{1}})
+
+		require.NotPanics(t, func() {
+			node := structList.RemoveValue(interfaceField{value: []int{1}})
+			require.Nil(t, node)
+		})
+		require.Equal(t, []interfaceField{{value: []int{1}}}, structList.Slice())
+	})
+
 	t.Run("TakeFirst", func(t *testing.T) {
 		t.Parallel()
 		list := collectionutils.NewLinkedList[int]()
@@ -303,5 +340,36 @@ func TestLinkedList(t *testing.T) {
 		// Sum should be 10 * sum of numbers from 0 to 99
 		expectedSum := 10 * (99 * 100 / 2)
 		require.Equal(t, expectedSum, sum)
+	})
+
+	t.Run("ConcurrentTakeFirstSliceAndFirstNode", func(t *testing.T) {
+		t.Parallel()
+		list := collectionutils.NewLinkedList[int]()
+		list.Append(1, 2, 3, 4, 5)
+
+		var wg sync.WaitGroup
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func(base int) {
+				defer wg.Done()
+				for j := 0; j < 1000; j++ {
+					list.Append(base*1000 + j)
+					_ = list.TakeFirst()
+				}
+			}(i)
+		}
+
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < 1000; j++ {
+					_ = list.Slice()
+					_ = list.FirstNode()
+				}
+			}()
+		}
+
+		wg.Wait()
 	})
 }
