@@ -159,6 +159,51 @@ func TestMiddleware_AuthorizationHeaderStripped(t *testing.T) {
 	assert.Empty(t, payload.HTTP.Request.Header.Get("Authorization"))
 }
 
+func TestMiddleware_CookieHeadersStripped(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Response-ID", "response-id")
+			http.SetCookie(w, &http.Cookie{
+				Name:  "session",
+				Value: "response-secret",
+			})
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set("Cookie", "session=request-secret")
+	req.Header.Set("X-Request-ID", "request-id")
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.Contains(t, rr.Header().Get("Set-Cookie"), "response-secret")
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+
+	var event publish.EventMessage
+	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
+
+	payloadBytes, _ := json.Marshal(event.Payload)
+	var payload audit.Payload
+	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
+
+	assert.Empty(t, payload.HTTP.Request.Header.Get("Cookie"))
+	assert.Equal(t, "request-id", payload.HTTP.Request.Header.Get("X-Request-ID"))
+	assert.Empty(t, payload.HTTP.Response.Headers.Get("Set-Cookie"))
+	assert.Equal(t, "response-id", payload.HTTP.Response.Headers.Get("X-Response-ID"))
+	assert.NotContains(t, string(messages[0].Payload), "request-secret")
+	assert.NotContains(t, string(messages[0].Payload), "response-secret")
+}
+
 func TestMiddleware_SensitivePaths(t *testing.T) {
 	t.Parallel()
 
@@ -194,6 +239,56 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
 
 	assert.Empty(t, payload.HTTP.Response.Body)
+	assert.Empty(t, payload.HTTP.Request.Body)
+	assert.NotContains(t, string(messages[0].Payload), "client_credentials")
+	assert.NotContains(t, string(messages[0].Payload), "access_token")
+}
+
+func TestMiddleware_SensitivePathsMatchPrefixAndPassRequestBodyThrough(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	var receivedBody string
+	handler := Middleware(pub, topic, "test-app", nil,
+		WithEnabled(true),
+		WithSensitivePaths("/api/auth"),
+	)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			receivedBody = string(body)
+
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"access_token":"response-secret"}`))
+		}),
+	)
+
+	reqBody := `username=alice&password=request-secret`
+	req := httptest.NewRequest("POST", "/api/auth/oauth/token", strings.NewReader(reqBody))
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, reqBody, receivedBody)
+	require.Equal(t, `{"access_token":"response-secret"}`, rr.Body.String())
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+
+	var event publish.EventMessage
+	require.NoError(t, json.Unmarshal(messages[0].Payload, &event))
+
+	payloadBytes, _ := json.Marshal(event.Payload)
+	var payload audit.Payload
+	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
+
+	assert.Empty(t, payload.HTTP.Request.Body)
+	assert.Empty(t, payload.HTTP.Response.Body)
+	assert.NotContains(t, string(messages[0].Payload), "request-secret")
+	assert.NotContains(t, string(messages[0].Payload), "response-secret")
 }
 
 func TestMiddleware_StreamRequestSkipsBodyCapture(t *testing.T) {
