@@ -61,6 +61,10 @@ func createAccessToken(t *testing.T, privateKey *rsa.PrivateKey, issuer string, 
 	// Set scopes
 	accessTokenClaims.Scopes = scopes
 
+	return signAccessTokenClaims(t, privateKey, accessTokenClaims)
+}
+
+func signAccessTokenClaims(t *testing.T, privateKey *rsa.PrivateKey, accessTokenClaims *oidc.AccessTokenClaims) string {
 	// Create JWT using go-jose
 	signer, err := jose.NewSigner(
 		jose.SigningKey{
@@ -314,6 +318,52 @@ func TestJWTAuth_Authenticate(t *testing.T) {
 
 				authenticated, err := tt.auth.Authenticate(nil, req)
 				require.Error(t, err)
+				assert.False(t, authenticated)
+			})
+		}
+	})
+
+	t.Run("failure with token before not-before time", func(t *testing.T) {
+		t.Parallel()
+		keySet, privateKey, issuer := setupTestKeySet(t)
+		tests := []struct {
+			name string
+			auth Authenticator
+		}{
+			{
+				name: "JWTAuth",
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil),
+			},
+			{
+				name: "JWTAuth with additional checks",
+				auth: NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, autoPassingAdditionalChecks),
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				now := stdtime.Now().UTC()
+				expirationTime := libtime.New(now.Add(2 * stdtime.Hour))
+
+				accessTokenClaims := oidc.NewAccessTokenClaims(
+					issuer,
+					"test-user",
+					[]string{"test-client"},
+					expirationTime,
+					"test-jti",
+					"test-client",
+				)
+				accessTokenClaims.NotBefore = oidc.FromTime(libtime.New(now.Add(1 * stdtime.Hour)))
+
+				token := signAccessTokenClaims(t, privateKey, accessTokenClaims)
+
+				req := httptest.NewRequest("GET", "/test", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				req = req.WithContext(logging.TestingContext())
+
+				authenticated, err := tt.auth.Authenticate(nil, req)
+				require.Error(t, err)
+				assert.ErrorIs(t, err, oidc.ErrNotBefore)
 				assert.False(t, authenticated)
 			})
 		}
