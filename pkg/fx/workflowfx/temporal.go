@@ -2,6 +2,7 @@ package workflowfx
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/metric"
@@ -66,25 +67,34 @@ func TemporalWorkerModule(ctx context.Context, taskQueue string, options worker.
 			}, fx.ParamTags(``, ``, `group:"workflows"`, `group:"activities"`)),
 		),
 		fx.Invoke(func(lc fx.Lifecycle, w worker.Worker) {
-			willStop := false
-			lc.Append(fx.Hook{
-				OnStart: func(ctx context.Context) error {
-					go func() {
-						err := w.Run(worker.InterruptCh())
-						if err != nil {
-							if !willStop {
-								panic(err)
-							}
-						}
-					}()
-					return nil
-				},
-				OnStop: func(ctx context.Context) error {
-					willStop = true
-					w.Stop()
-					return nil
-				},
-			})
+			registerTemporalWorkerLifecycle(lc, w)
 		}),
 	)
+}
+
+type temporalWorkerRunner interface {
+	Run(interruptCh <-chan interface{}) error
+	Stop()
+}
+
+func registerTemporalWorkerLifecycle(lc fx.Lifecycle, w temporalWorkerRunner) {
+	var willStop atomic.Bool
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				err := w.Run(worker.InterruptCh())
+				if err != nil {
+					if !willStop.Load() {
+						panic(err)
+					}
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			willStop.Store(true)
+			w.Stop()
+			return nil
+		},
+	})
 }
