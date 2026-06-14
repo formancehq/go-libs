@@ -11,7 +11,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/formancehq/go-libs/v5/pkg/messaging/publish/circuit/storage"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
@@ -429,4 +433,140 @@ func TestCircuitBreaker(t *testing.T) {
 			assert.Equal(c, StateOpen, circuitBreaker.GetState())
 		}, 2*time.Second, 100*time.Millisecond)
 	})
+}
+
+func TestCircuitBreakerCloseWithoutLoopIsIdempotent(t *testing.T) {
+	messages := make(chan *testMessages, 10)
+	publisher := newMockPublisher(messages)
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		publisher,
+		newMockStore(),
+		5*time.Second,
+	)
+
+	requireCloseWithin(t, circuitBreaker)
+	requireCloseWithin(t, circuitBreaker)
+	require.Equal(t, 1, publisher.CloseCount())
+}
+
+func TestCircuitBreakerCloseCancelsCatchUp(t *testing.T) {
+	store := &blockingListStore{
+		listStarted: make(chan struct{}, 1),
+	}
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(make(chan *testMessages, 10)),
+		store,
+		5*time.Second,
+	)
+
+	go circuitBreaker.Loop(context.Background())
+
+	select {
+	case <-store.listStarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected catchup to start")
+	}
+
+	requireCloseWithin(t, circuitBreaker)
+}
+
+func TestCircuitBreakerLoopStopsWhenContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(make(chan *testMessages, 10)),
+		newMockStore(),
+		5*time.Second,
+	)
+
+	go circuitBreaker.Loop(ctx)
+	require.Eventually(t, circuitBreaker.hasLoopStarted, time.Second, 10*time.Millisecond)
+
+	cancel()
+
+	select {
+	case <-circuitBreaker.stopped:
+	case <-time.After(time.Second):
+		t.Fatal("expected loop to stop after context cancellation")
+	}
+
+	require.NoError(t, circuitBreaker.Close())
+}
+
+func TestCircuitBreakerCatchUpExtractsStoredTraceContext(t *testing.T) {
+	originalPropagator := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(originalPropagator)
+	})
+
+	messages := make(chan *testMessages, 10)
+	store := newMockStore()
+	require.NoError(t, store.Insert(context.Background(), "test", []byte("test"), map[string]string{
+		otelContextKey: `{"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}`,
+	}))
+
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(messages),
+		store,
+		5*time.Second,
+	)
+	go circuitBreaker.Loop(context.Background())
+	defer func() {
+		require.NoError(t, circuitBreaker.Close())
+	}()
+
+	var received *testMessages
+	select {
+	case received = <-messages:
+	case <-time.After(time.Second):
+		t.Fatal("expected replayed message")
+	}
+
+	spanContext := trace.SpanContextFromContext(received.msg.Context())
+	require.True(t, spanContext.IsValid())
+	require.True(t, spanContext.IsRemote())
+	require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spanContext.TraceID().String())
+	require.Equal(t, "00f067aa0ba902b7", spanContext.SpanID().String())
+}
+
+func requireCloseWithin(t *testing.T, circuitBreaker *CircuitBreaker) {
+	t.Helper()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- circuitBreaker.Close()
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("expected circuit breaker close to return")
+	}
+}
+
+type blockingListStore struct {
+	listStarted chan struct{}
+}
+
+func (s *blockingListStore) Insert(ctx context.Context, topic string, data []byte, metadata map[string]string) error {
+	return nil
+}
+
+func (s *blockingListStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, error) {
+	select {
+	case s.listStarted <- struct{}{}:
+	default:
+	}
+
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (s *blockingListStore) Delete(ctx context.Context, ids []uint64) error {
+	return nil
 }
