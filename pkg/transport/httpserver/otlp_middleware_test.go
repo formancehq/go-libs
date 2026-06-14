@@ -17,6 +17,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
 func TestOTLPMiddlewareDebugRedactsAndCapsTraceAttributes(t *testing.T) {
@@ -123,6 +125,32 @@ func TestOTLPMiddlewareDoesNotAdvertiseUnsupportedResponseWriterInterfaces(t *te
 			handler.ServeHTTP(newPlainResponseWriter(), httptest.NewRequest(http.MethodGet, "/test", nil))
 		})
 	}
+}
+
+func TestLoggerMiddlewarePreservesResponseWriterInterfaces(t *testing.T) {
+	base := newOptionalResponseWriter()
+	handler := LoggerMiddleware(logging.Testing())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertOptionalResponseWriterInterfaces(t, w)
+	}))
+
+	handler.ServeHTTP(base, httptest.NewRequest(http.MethodGet, "/test", nil))
+
+	require.Equal(t, 1, base.flushes)
+	require.Equal(t, 1, base.pushes)
+	require.Equal(t, "/events", base.pushTarget)
+	require.Equal(t, 1, base.hijacks)
+	require.Equal(t, testWriteDeadline, base.writeDeadline)
+}
+
+func TestLoggingResponseWriterUnwrapsForResponseController(t *testing.T) {
+	base := newOptionalResponseWriter()
+	controller := http.NewResponseController(NewLoggingResponseWriter(base))
+
+	require.NoError(t, controller.Flush())
+	require.NoError(t, controller.SetWriteDeadline(testWriteDeadline))
+
+	require.Equal(t, 1, base.flushes)
+	require.Equal(t, testWriteDeadline, base.writeDeadline)
 }
 
 func recordedSpanAttributes(t *testing.T, spanRecorder *tracetest.SpanRecorder) map[string]attribute.Value {
