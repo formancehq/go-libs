@@ -1,11 +1,16 @@
 package connect
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
 func TestObfuscateDSN(t *testing.T) {
@@ -84,5 +89,26 @@ func TestBuildPGXConnectorDefaultsToReadWriteTargetSessionAttrs(t *testing.T) {
 	want := reflect.ValueOf(pgconn.ValidateConnectTargetSessionAttrsReadWrite).Pointer()
 	if got != want {
 		t.Fatalf("unexpected ValidateConnect func pointer: got %x, want %x", got, want)
+	}
+}
+
+func TestIAMConnectorReturnsBuildAuthTokenError(t *testing.T) {
+	expectedErr := errors.New("retrieve aws credentials")
+	connector := &iamConnector{
+		dsn: "postgres://db-user@localhost:5432/mydb?sslmode=disable",
+		driver: &iamDriver{
+			awsConfig: aws.Config{
+				Region: "us-east-1",
+				Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+					return aws.Credentials{}, expectedErr
+				}),
+			},
+		},
+		logger: logging.Testing(),
+	}
+
+	_, err := connector.Connect(context.Background())
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected BuildAuthToken error %q, got %v", expectedErr, err)
 	}
 }

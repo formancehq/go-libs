@@ -27,6 +27,10 @@ type Claims interface {
 	GetAuthorizedParty() string
 }
 
+type NotBeforeClaims interface {
+	GetNotBefore() time.Time
+}
+
 type IDClaims interface {
 	Claims
 	GetAccessTokenHash() string
@@ -46,6 +50,7 @@ var (
 	ErrSignatureInvalidPayload = errors.New("signature does not match Payload")
 	ErrSignatureInvalid        = errors.New("invalid signature")
 	ErrExpired                 = errors.New("token has expired")
+	ErrNotBefore               = errors.New("token is not valid yet")
 	ErrIatMissing              = errors.New("issuedAt of token is missing")
 	ErrIatInFuture             = errors.New("issuedAt of token is in the future")
 	ErrIatToOld                = errors.New("issuedAt of token is to old")
@@ -191,6 +196,18 @@ func CheckExpiration(claims Claims, offset time.Duration) error {
 	expiration := claims.GetExpiration()
 	if !time.Now().Add(offset).Before(expiration) {
 		return ErrExpired
+	}
+	return nil
+}
+
+func CheckNotBefore(claims NotBeforeClaims, offset time.Duration) error {
+	notBefore := claims.GetNotBefore()
+	if notBefore.IsZero() {
+		return nil
+	}
+	nowWithOffset := time.Now().Add(offset).Round(time.Second)
+	if nowWithOffset.Before(notBefore) {
+		return fmt.Errorf("%w: (nbf: %v, now with offset: %v)", ErrNotBefore, notBefore, nowWithOffset)
 	}
 	return nil
 }

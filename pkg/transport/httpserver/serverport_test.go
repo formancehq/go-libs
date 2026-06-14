@@ -88,3 +88,31 @@ func TestStartServerGracefulShutdownDoesNotLogError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.NotContains(t, buf.String(), "failed to serve")
 }
+
+func TestStartServerSetsDefaultTimeouts(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	server := serverport.NewServer(serverPortDiscr, serverport.WithListener(listener))
+	var configured http.Server
+
+	stop, err := startServer(
+		logging.TestingContext(),
+		server,
+		http.NewServeMux(),
+		func(server *http.Server) {
+			configured = *server
+		},
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = stop(context.Background())
+	})
+
+	require.Equal(t, 10*time.Second, configured.ReadHeaderTimeout)
+	require.Equal(t, 30*time.Second, configured.ReadTimeout)
+	require.Equal(t, 30*time.Second, configured.WriteTimeout)
+	require.Equal(t, 120*time.Second, configured.IdleTimeout)
+}

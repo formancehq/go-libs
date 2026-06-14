@@ -68,6 +68,10 @@ func (c *TokenClaims) GetIssuedAt() time.Time {
 	return c.IssuedAt.AsTime()
 }
 
+func (c *TokenClaims) GetNotBefore() time.Time {
+	return c.NotBefore.AsTime()
+}
+
 func (c *TokenClaims) GetNonce() string {
 	return c.Nonce
 }

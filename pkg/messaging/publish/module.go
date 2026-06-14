@@ -52,7 +52,14 @@ func (m *memoryPublisher) Close() error {
 }
 
 func (m *memoryPublisher) AllMessages() map[string][]*message.Message {
-	return m.messages
+	m.Lock()
+	defer m.Unlock()
+
+	ret := make(map[string][]*message.Message, len(m.messages))
+	for topic, messages := range m.messages {
+		ret[topic] = append([]*message.Message(nil), messages...)
+	}
+	return ret
 }
 
 var _ message.Publisher = (*memoryPublisher)(nil)

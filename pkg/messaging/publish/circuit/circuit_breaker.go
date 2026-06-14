@@ -37,13 +37,23 @@ type CircuitBreaker struct {
 	stateMu sync.RWMutex
 	state   State
 
+	stopOnce sync.Once
+	doneOnce sync.Once
+
+	publisherCloseOnce sync.Once
+	publisherCloseErr  error
+
+	loopMu      sync.Mutex
+	loopCancel  context.CancelFunc
+	loopStarted bool
+
 	// openInterval is the time interval for the "open" state, before switching
 	// to the "half-open" state.
 	openInterval      time.Duration
 	openIntervalTimer *time.Timer
 
 	sendChan    chan *internalMessage
-	stopChannel chan chan struct{}
+	stopChannel chan struct{}
 	stopped     chan struct{}
 }
 
@@ -61,7 +71,7 @@ func NewCircuitBreaker(
 	openIntervalDuration time.Duration,
 ) *CircuitBreaker {
 	return &CircuitBreaker{
-		stopChannel: make(chan chan struct{}),
+		stopChannel: make(chan struct{}),
 		stopped:     make(chan struct{}),
 		logger:      logger,
 		publisher:   publisher,
@@ -109,10 +119,31 @@ func (cb *CircuitBreaker) CloseState() {
 }
 
 func (cb *CircuitBreaker) Loop(ctx context.Context) {
-	defer close(cb.stopped)
+	ctx, cancel := context.WithCancel(ctx)
+	if !cb.startLoop(cancel) {
+		cancel()
+		return
+	}
+	defer func() {
+		cb.clearLoopCancel()
+		cancel()
+		cb.markStopped()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-cb.stopChannel:
+		return
+	default:
+	}
+
 	// Start in the half open state to fetch the messages from the database
 	cb.HalfOpenState()
 	if err := cb.catchUpDatabase(ctx); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		cb.OpenState()
 		// Don't switch to closed state if there was an error
 	} else {
@@ -122,9 +153,10 @@ func (cb *CircuitBreaker) Loop(ctx context.Context) {
 
 	for {
 		select {
-		case ch := <-cb.stopChannel:
-			close(ch)
-			// context cancelled
+		case <-ctx.Done():
+			return
+
+		case <-cb.stopChannel:
 			return
 
 		case <-cb.openIntervalTimer.C:
@@ -133,6 +165,9 @@ func (cb *CircuitBreaker) Loop(ctx context.Context) {
 			cb.HalfOpenState()
 
 			if err := cb.catchUpDatabase(ctx); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
 				cb.OpenState()
 				continue
 			}
@@ -146,7 +181,7 @@ func (cb *CircuitBreaker) Loop(ctx context.Context) {
 				return
 			}
 
-			switch cb.state {
+			switch cb.GetState() {
 			case StateClose:
 				// We are in the closed state, send the message to the publisher
 
@@ -162,8 +197,9 @@ func (cb *CircuitBreaker) Loop(ctx context.Context) {
 					if err != nil {
 						select {
 						case msg.errChan <- err:
-						case ch := <-cb.stopChannel:
-							close(ch)
+						case <-ctx.Done():
+							return
+						case <-cb.stopChannel:
 							return
 						}
 						continue
@@ -177,8 +213,9 @@ func (cb *CircuitBreaker) Loop(ctx context.Context) {
 				if err != nil {
 					select {
 					case msg.errChan <- err:
-					case ch := <-cb.stopChannel:
-						close(ch)
+					case <-ctx.Done():
+						return
+					case <-cb.stopChannel:
 						return
 					}
 					continue
@@ -187,8 +224,9 @@ func (cb *CircuitBreaker) Loop(ctx context.Context) {
 
 			select {
 			case msg.errChan <- nil:
-			case ch := <-cb.stopChannel:
-				close(ch)
+			case <-ctx.Done():
+				return
+			case <-cb.stopChannel:
 				return
 			}
 		}
@@ -197,6 +235,10 @@ func (cb *CircuitBreaker) Loop(ctx context.Context) {
 
 func (cb *CircuitBreaker) catchUpDatabase(ctx context.Context) error {
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		// fetch the oldest messages from the database
 		messages, err := cb.store.List(ctx)
 		if err != nil {
@@ -211,6 +253,10 @@ func (cb *CircuitBreaker) catchUpDatabase(ctx context.Context) error {
 		messagesToDelete := make([]uint64, 0)
 		var publishError error
 		for _, msg := range messages {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
 			// We need to publish the messages one by one in order to know
 			// which one failed.
 
@@ -229,6 +275,10 @@ func (cb *CircuitBreaker) catchUpDatabase(ctx context.Context) error {
 			messagesToDelete = append(messagesToDelete, msg.ID)
 		}
 
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		err = cb.store.Delete(ctx, messagesToDelete)
 		if err != nil {
 			// error deleting messages, let's switch back to the open state
@@ -244,6 +294,12 @@ func (cb *CircuitBreaker) catchUpDatabase(ctx context.Context) error {
 
 func (cb *CircuitBreaker) Publish(topic string, messages ...*message.Message) error {
 	for _, msg := range messages {
+		select {
+		case <-cb.stopChannel:
+			return errors.New("circuit breaker closed")
+		default:
+		}
+
 		errChan := make(chan error, 1)
 
 		internalMessage := &internalMessage{
@@ -254,6 +310,8 @@ func (cb *CircuitBreaker) Publish(topic string, messages ...*message.Message) er
 
 		select {
 		case cb.sendChan <- internalMessage:
+		case <-cb.stopChannel:
+			return errors.New("circuit breaker closed")
 		case <-cb.stopped:
 			return errors.New("circuit breaker closed")
 		}
@@ -263,6 +321,8 @@ func (cb *CircuitBreaker) Publish(topic string, messages ...*message.Message) er
 			if err != nil {
 				return err
 			}
+		case <-cb.stopChannel:
+			return errors.New("circuit breaker closed")
 		case <-cb.stopped:
 			return errors.New("circuit breaker closed")
 		}
@@ -272,11 +332,63 @@ func (cb *CircuitBreaker) Publish(topic string, messages ...*message.Message) er
 }
 
 func (cb *CircuitBreaker) Close() error {
-	ch := make(chan struct{})
-	cb.stopChannel <- ch
-	<-ch
+	cb.stopOnce.Do(func() {
+		close(cb.stopChannel)
+		cb.cancelLoop()
+	})
 
-	return cb.publisher.Close()
+	if cb.hasLoopStarted() {
+		<-cb.stopped
+	} else {
+		cb.markStopped()
+	}
+
+	cb.publisherCloseOnce.Do(func() {
+		cb.publisherCloseErr = cb.publisher.Close()
+	})
+
+	return cb.publisherCloseErr
+}
+
+func (cb *CircuitBreaker) startLoop(cancel context.CancelFunc) bool {
+	cb.loopMu.Lock()
+	defer cb.loopMu.Unlock()
+
+	if cb.loopStarted {
+		return false
+	}
+
+	cb.loopStarted = true
+	cb.loopCancel = cancel
+	return true
+}
+
+func (cb *CircuitBreaker) clearLoopCancel() {
+	cb.loopMu.Lock()
+	cb.loopCancel = nil
+	cb.loopMu.Unlock()
+}
+
+func (cb *CircuitBreaker) cancelLoop() {
+	cb.loopMu.Lock()
+	cancel := cb.loopCancel
+	cb.loopMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (cb *CircuitBreaker) hasLoopStarted() bool {
+	cb.loopMu.Lock()
+	defer cb.loopMu.Unlock()
+	return cb.loopStarted
+}
+
+func (cb *CircuitBreaker) markStopped() {
+	cb.doneOnce.Do(func() {
+		close(cb.stopped)
+	})
 }
 
 const (
@@ -297,7 +409,7 @@ func newMessage(ctx context.Context, data []byte, metadata map[string]string) (*
 		if err != nil {
 			return nil, err
 		}
-		otel.GetTextMapPropagator().Inject(ctx, carrier)
+		ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
 	}
 
 	msg.SetContext(ctx)

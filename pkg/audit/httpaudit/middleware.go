@@ -28,7 +28,7 @@ type httpOptions struct {
 	handledHeaderSecret string
 }
 
-// WithSensitivePaths sets paths for which the response body should not be captured.
+// WithSensitivePaths sets path prefixes for which request and response bodies should not be captured.
 func WithSensitivePaths(paths ...string) HTTPOption {
 	return func(o *httpOptions) {
 		for _, p := range paths {
@@ -90,6 +90,8 @@ var bufPool = sync.Pool{
 	},
 }
 
+const maxCapturedBodyBytes = 64 * 1024
+
 // Middleware returns an HTTP middleware that captures request/response data
 // and publishes audit events via the given Watermill publisher.
 func Middleware(publisher message.Publisher, topicName string, appName string, opts []audit.Option, httpOpts ...HTTPOption) func(http.Handler) http.Handler {
@@ -150,40 +152,38 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 				err  error
 			)
 
-			if !isStreamRequest(r) {
-				body, err = io.ReadAll(r.Body)
+			sensitivePath := ho.isSensitivePath(r.URL.Path)
+
+			if !isStreamRequest(r) && !sensitivePath {
+				body, err = captureRequestBody(r)
 				if err != nil && !errors.Is(err, io.EOF) {
 					http.Error(w, "failed to read request body", http.StatusInternalServerError)
 					return
 				}
-				if len(body) > 0 {
-					_ = r.Body.Close()
-					r.Body = io.NopCloser(bytes.NewBuffer(body))
-				}
 			}
 
-			requestHeaders := r.Header.Clone()
-			requestHeaders.Del("Authorization")
-			requestHeaders.Del(audit.HandledHeader)
+			requestHeaders := cloneHeaderWithout(r.Header, "Authorization", "Cookie", audit.HandledHeader)
 
 			r.Header.Set(audit.HandledHeader, handledHeaderValue)
 
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
-			defer bufPool.Put(buf)
+			defer putCaptureBuffer(buf)
 
 			rww := &responseWriterWrapper{
 				ResponseWriter: w,
 				body:           buf,
 				statusCode:     http.StatusOK,
+				captureBody:    !sensitivePath,
 			}
 
 			next.ServeHTTP(rww, r)
 
-			responseBody := rww.body.String()
-			if _, sensitive := ho.sensitivePaths[r.URL.Path]; sensitive {
-				responseBody = ""
+			responseBody := ""
+			if !sensitivePath {
+				responseBody = rww.body.String()
 			}
+			responseHeaders := cloneHeaderWithout(rww.Header(), "Set-Cookie")
 
 			actor := audit.ExtractClaims(r, auditOpts)
 
@@ -206,7 +206,7 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 					},
 					Response: audit.HTTPResponse{
 						StatusCode: rww.statusCode,
-						Headers:    rww.Header(),
+						Headers:    responseHeaders,
 						Body:       responseBody,
 					},
 				},
@@ -217,6 +217,67 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 	}
 }
 
+func captureRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCapturedBodyBytes))
+	if len(body) > 0 {
+		r.Body = readCloser{
+			Reader: io.MultiReader(bytes.NewReader(body), r.Body),
+			Closer: r.Body,
+		}
+	}
+	return body, err
+}
+
+func putCaptureBuffer(buf *bytes.Buffer) {
+	if shouldPoolCaptureBuffer(buf) {
+		buf.Reset()
+		bufPool.Put(buf)
+	}
+}
+
+func shouldPoolCaptureBuffer(buf *bytes.Buffer) bool {
+	return buf.Cap() <= maxCapturedBodyBytes
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
+}
+
+func cloneHeaderWithout(header http.Header, names ...string) http.Header {
+	clone := header.Clone()
+	for _, name := range names {
+		clone.Del(name)
+	}
+	return clone
+}
+
+func (o *httpOptions) isSensitivePath(requestPath string) bool {
+	for sensitivePath := range o.sensitivePaths {
+		if pathMatchesPrefix(requestPath, sensitivePath) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathMatchesPrefix(requestPath string, sensitivePath string) bool {
+	if sensitivePath == "" {
+		return false
+	}
+
+	sensitivePath = strings.TrimRight(sensitivePath, "/")
+	if sensitivePath == "" {
+		return strings.HasPrefix(requestPath, "/")
+	}
+
+	return requestPath == sensitivePath || strings.HasPrefix(requestPath, sensitivePath+"/")
+}
+
 func isStreamRequest(r *http.Request) bool {
 	ct := r.Header.Get("Content-Type")
 	return strings.HasPrefix(ct, "application/vnd.formance") && strings.HasSuffix(ct, "-stream")
@@ -224,14 +285,24 @@ func isStreamRequest(r *http.Request) bool {
 
 type responseWriterWrapper struct {
 	http.ResponseWriter
-	body       *bytes.Buffer
-	statusCode int
+	body        *bytes.Buffer
+	statusCode  int
+	captureBody bool
 }
 
 func (rww *responseWriterWrapper) Write(buf []byte) (int, error) {
-	mediaType, _, _ := mime.ParseMediaType(rww.Header().Get("Content-Type"))
-	if mediaType != "application/octet-stream" {
-		rww.body.Write(buf)
+	if rww.captureBody {
+		mediaType, _, _ := mime.ParseMediaType(rww.Header().Get("Content-Type"))
+		if mediaType != "application/octet-stream" {
+			remaining := maxCapturedBodyBytes - rww.body.Len()
+			if remaining > 0 {
+				captured := buf
+				if len(captured) > remaining {
+					captured = captured[:remaining]
+				}
+				rww.body.Write(captured)
+			}
+		}
 	}
 	return rww.ResponseWriter.Write(buf)
 }

@@ -59,14 +59,14 @@ func TestErrorWithExitCode(t *testing.T) {
 		errWithCode := errorsutils.NewErrorWithExitCode(originalErr, exitCode)
 		errorMsg := errWithCode.Error()
 
-		expectedMsg := fmt.Sprintf("error with exit code '%v': %d", originalErr, exitCode)
+		expectedMsg := fmt.Sprintf("error with exit code '%d': %v", exitCode, originalErr)
 		require.Equal(t, expectedMsg, errorMsg)
 
 		// Test with nil error
 		nilErr := errorsutils.NewErrorWithExitCode(nil, exitCode)
 		nilErrorMsg := nilErr.Error()
 
-		expectedNilMsg := fmt.Sprintf("error with exit code '%v': %d", nil, exitCode)
+		expectedNilMsg := fmt.Sprintf("error with exit code '%d': %v", exitCode, nil)
 		require.Equal(t, expectedNilMsg, nilErrorMsg)
 	})
 

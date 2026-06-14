@@ -15,7 +15,7 @@ func (e ErrorWithExitCode) Unwrap() error {
 }
 
 func (e ErrorWithExitCode) Error() string {
-	return fmt.Sprintf("error with exit code '%v': %d", e.Err, e.ExitCode)
+	return fmt.Sprintf("error with exit code '%d': %v", e.ExitCode, e.Err)
 }
 
 func (e ErrorWithExitCode) Is(err error) bool {

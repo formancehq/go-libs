@@ -1,6 +1,8 @@
 package temporal
 
 import (
+	"fmt"
+
 	"go.temporal.io/sdk/log"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
@@ -8,14 +10,18 @@ import (
 
 func keyvalsToMap(keyvals ...interface{}) map[string]any {
 	ret := make(map[string]any)
-	for i := 0; i < len(keyvals); i += 2 {
-		ret[keyvals[i].(string)] = keyvals[i+1]
+	for i := 0; i+1 < len(keyvals); i += 2 {
+		ret[fmt.Sprint(keyvals[i])] = keyvals[i+1]
 	}
 	return ret
 }
 
 type logger struct {
 	logger logging.Logger
+}
+
+type warnLogger interface {
+	Warnf(format string, args ...any)
 }
 
 func (l logger) Debug(msg string, keyvals ...interface{}) {
@@ -27,7 +33,12 @@ func (l logger) Info(msg string, keyvals ...interface{}) {
 }
 
 func (l logger) Warn(msg string, keyvals ...interface{}) {
-	l.logger.WithFields(keyvalsToMap(keyvals...)).Errorf(msg)
+	logger := l.logger.WithFields(keyvalsToMap(keyvals...))
+	if warnLogger, ok := logger.(warnLogger); ok {
+		warnLogger.Warnf(msg)
+		return
+	}
+	logger.Infof(msg)
 }
 
 func (l logger) Error(msg string, keyvals ...interface{}) {

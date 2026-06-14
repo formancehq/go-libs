@@ -319,88 +319,9 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 
 	switch conn := actualDB.(type) {
 	case bun.Conn:
-		listeningContext, cancel := context.WithCancel(ctx)
-		listenerStopped := make(chan struct{})
-		defer func() {
-			cancel()
-			<-listenerStopped
-		}()
-
-		if err := conn.Raw(func(driverConn any) error {
-			channel := "migrations-" + m.GetSchema()
-			logging.FromContext(ctx).Debugf("Listening for migrations notifications on " + channel)
-
-			listener := pgxlisten.Listener{
-				Connect: func(ctx context.Context) (*pgx.Conn, error) {
-					return pgx.Connect(ctx, driverConn.(*stdlib.Conn).Conn().Config().ConnString())
-				},
-				LogError: func(ctx context.Context, err error) {
-					if !errors.Is(err, context.Canceled) {
-						logging.FromContext(ctx).Errorf("pgxlisten error: %v", err)
-					}
-				},
-			}
-			listener.Handle(channel, pgxlisten.HandlerFunc(func(ctx context.Context, notification *pgconn.Notification, conn *pgx.Conn) error {
-
-				logging.FromContext(ctx).Debugf("Received notification: %s", notification.Payload)
-
-				switch {
-				case strings.HasPrefix(notification.Payload, "init: "):
-					value := strings.TrimPrefix(notification.Payload, "init: ")
-					maxCounter, err := strconv.ParseInt(value, 10, 64)
-					if err != nil {
-						logging.FromContext(ctx).Errorf("failed to parse max counter: %v", err)
-						return nil
-					}
-
-					_, err = conn.Exec(ctx, `
-						update `+m.getVersionsTable()+`
-						set max_counter = $1
-						where version_id = $2 and max_counter is null
-					`, maxCounter, lastVersion+1)
-					if err != nil {
-						logging.FromContext(ctx).Debugf("failed to update max counter: %v", err)
-						return nil
-					}
-				case strings.HasPrefix(notification.Payload, "continue: "):
-					value := strings.TrimPrefix(notification.Payload, "continue: ")
-					increment, err := strconv.ParseInt(value, 10, 64)
-					if err != nil {
-						logging.FromContext(ctx).Errorf("failed to parse actual counter: %v", err)
-						return nil
-					}
-
-					_, err = conn.Exec(ctx, `
-						update `+m.getVersionsTable()+`
-						set actual_counter = coalesce(actual_counter, 0) + $1
-						where version_id = $2
-					`, increment, lastVersion+1)
-					if err != nil {
-						return err
-					}
-					if err != nil {
-						logging.FromContext(ctx).Debugf("failed to update actual counter: %v", err)
-						return nil
-					}
-				default:
-					logging.FromContext(ctx).Errorf("unknown notification: %s", notification.Payload)
-				}
-
-				return nil
-			}))
-			go func() {
-				if err := listener.Listen(listeningContext); err != nil {
-					if errors.Is(err, context.Canceled) {
-						close(listenerStopped)
-						return
-					}
-					panic(err)
-				}
-			}()
-
-			return nil
-		}); err != nil {
-			logging.FromContext(ctx).Errorf("Failed so setup migrations listener: %v", err)
+		stopMigrationProgressListener := m.startMigrationProgressListener(ctx, conn, lastVersion)
+		if stopMigrationProgressListener != nil {
+			defer stopMigrationProgressListener()
 		}
 	}
 
@@ -422,6 +343,103 @@ func (m *Migrator) upByOne(ctx context.Context, db bun.IDB) error {
 	}
 
 	return nil
+}
+
+type migrationProgressRawConn interface {
+	Raw(func(driverConn any) error) error
+}
+
+func (m *Migrator) startMigrationProgressListener(ctx context.Context, conn migrationProgressRawConn, lastVersion int) func() {
+	var stopMigrationProgressListener func()
+
+	if err := conn.Raw(func(driverConn any) error {
+		channel := "migrations-" + m.GetSchema()
+		logging.FromContext(ctx).Debugf("Listening for migrations notifications on " + channel)
+
+		listener := pgxlisten.Listener{
+			Connect: func(ctx context.Context) (*pgx.Conn, error) {
+				return pgx.Connect(ctx, driverConn.(*stdlib.Conn).Conn().Config().ConnString())
+			},
+			LogError: func(ctx context.Context, err error) {
+				if !errors.Is(err, context.Canceled) {
+					logging.FromContext(ctx).Errorf("pgxlisten error: %v", err)
+				}
+			},
+		}
+		listener.Handle(channel, pgxlisten.HandlerFunc(func(ctx context.Context, notification *pgconn.Notification, conn *pgx.Conn) error {
+
+			logging.FromContext(ctx).Debugf("Received notification: %s", notification.Payload)
+
+			switch {
+			case strings.HasPrefix(notification.Payload, "init: "):
+				value := strings.TrimPrefix(notification.Payload, "init: ")
+				maxCounter, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					logging.FromContext(ctx).Errorf("failed to parse max counter: %v", err)
+					return nil
+				}
+
+				_, err = conn.Exec(ctx, `
+					update `+m.getVersionsTable()+`
+					set max_counter = $1
+					where version_id = $2 and max_counter is null
+				`, maxCounter, lastVersion+1)
+				if err != nil {
+					logging.FromContext(ctx).Debugf("failed to update max counter: %v", err)
+					return nil
+				}
+			case strings.HasPrefix(notification.Payload, "continue: "):
+				value := strings.TrimPrefix(notification.Payload, "continue: ")
+				increment, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					logging.FromContext(ctx).Errorf("failed to parse actual counter: %v", err)
+					return nil
+				}
+
+				_, err = conn.Exec(ctx, `
+					update `+m.getVersionsTable()+`
+					set actual_counter = coalesce(actual_counter, 0) + $1
+					where version_id = $2
+				`, increment, lastVersion+1)
+				if err != nil {
+					return err
+				}
+				if err != nil {
+					logging.FromContext(ctx).Debugf("failed to update actual counter: %v", err)
+					return nil
+				}
+			default:
+				logging.FromContext(ctx).Errorf("unknown notification: %s", notification.Payload)
+			}
+
+			return nil
+		}))
+		stopMigrationProgressListener = runMigrationProgressListener(ctx, listener.Listen)
+
+		return nil
+	}); err != nil {
+		logging.FromContext(ctx).Errorf("failed to set up migrations listener: %v", err)
+	}
+
+	return stopMigrationProgressListener
+}
+
+func runMigrationProgressListener(ctx context.Context, listen func(context.Context) error) func() {
+	listeningContext, cancel := context.WithCancel(ctx)
+	listenerStopped := make(chan struct{})
+
+	go func() {
+		defer close(listenerStopped)
+
+		if err := listen(listeningContext); err != nil && !errors.Is(err, context.Canceled) {
+			logging.FromContext(ctx).Errorf("migrations listener stopped with error: %v", err)
+		}
+	}()
+
+	return func() {
+		cancel()
+		<-listenerStopped
+	}
 }
 
 func (m *Migrator) UpByOne(ctx context.Context) error {

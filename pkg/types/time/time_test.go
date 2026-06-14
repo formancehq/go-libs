@@ -28,8 +28,8 @@ func TestScan(t *testing.T) {
 	}{
 		{
 			name:     "time.Time",
-			input:    time.Date(2023, 1, 2, 3, 4, 5, 6, time.FixedZone("UTC+2", 2*60*60)),
-			expected: time.Date(2023, 1, 2, 1, 4, 5, 6, time.UTC), // 3:04:05 UTC+2 -> 1:04:05 UTC
+			input:    time.Date(2023, 1, 2, 3, 4, 5, 1600, time.FixedZone("UTC+2", 2*60*60)),
+			expected: time.Date(2023, 1, 2, 1, 4, 5, 2000, time.UTC), // 3:04:05 UTC+2 -> 1:04:05 UTC, rounded to microsecond
 		},
 		{
 			name:     "string",
@@ -40,6 +40,11 @@ func TestScan(t *testing.T) {
 			name:     "[]byte",
 			input:    []byte("2023-01-02T03:04:05.000006Z"),
 			expected: time.Date(2023, 1, 2, 3, 4, 5, 6000, time.UTC),
+		},
+		{
+			name:     "string rounded to precision",
+			input:    "2023-01-02T03:04:05.0000066Z",
+			expected: time.Date(2023, 1, 2, 3, 4, 5, 7000, time.UTC),
 		},
 		{
 			name:     "nil",
@@ -169,6 +174,11 @@ func TestUnmarshalJSON(t *testing.T) {
 			name:        "invalid date",
 			input:       `"not-a-date"`,
 			expectError: true,
+		},
+		{
+			name:     "null",
+			input:    `null`,
+			expected: time.Time{},
 		},
 		// Empty string case is handled differently in the implementation
 		// The test for this case is removed as it's causing issues

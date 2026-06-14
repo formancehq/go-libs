@@ -100,7 +100,7 @@ func CreateSearchAttributes(ctx context.Context, c client.Client, namespace stri
 			Namespace: namespace,
 		})
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("list temporal search attributes: %w", err)
 		}
 
 		done := true

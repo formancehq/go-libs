@@ -3,12 +3,17 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 	httphelper "github.com/formancehq/go-libs/v5/pkg/authn/oidc/http"
 )
+
+type issuerGetter interface {
+	GetIssuer() string
+}
 
 // Discover calls the discovery endpoint of the provided issuer and returns its configuration
 // It accepts an optional argument "wellknownUrl" which can be used to override the discovery endpoint url
@@ -27,6 +32,21 @@ func Discover[V any](ctx context.Context, issuer string, httpClient *http.Client
 	if err != nil {
 		return nil, errors.Join(oidc.ErrDiscoveryFailed, err)
 	}
+	if err := validateDiscoveredIssuer(issuer, discoveryConfig); err != nil {
+		return nil, errors.Join(oidc.ErrDiscoveryFailed, err)
+	}
 
 	return discoveryConfig, nil
+}
+
+func validateDiscoveredIssuer[V any](issuer string, discoveryConfig *V) error {
+	issuerConfig, ok := any(discoveryConfig).(issuerGetter)
+	if !ok {
+		return nil
+	}
+	discoveredIssuer := issuerConfig.GetIssuer()
+	if discoveredIssuer != issuer {
+		return fmt.Errorf("%w: Expected: %s, got: %s", oidc.ErrIssuerInvalid, issuer, discoveredIssuer)
+	}
+	return nil
 }
