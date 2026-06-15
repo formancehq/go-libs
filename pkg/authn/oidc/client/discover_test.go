@@ -33,6 +33,25 @@ func TestDiscoverValidatesIssuer(t *testing.T) {
 		require.Equal(t, issuer, discoveryConfig.Issuer)
 	})
 
+	t.Run("normalizes trailing slash before validating issuer", func(t *testing.T) {
+		t.Parallel()
+
+		issuer := "https://issuer.example.com/"
+		discoveredIssuer := "https://issuer.example.com"
+		server := httptest.NewServer(discoveryHandler(t, discoveredIssuer))
+		t.Cleanup(server.Close)
+
+		discoveryConfig, err := Discover[oidc.DiscoveryConfiguration](
+			context.Background(),
+			issuer,
+			server.Client(),
+			server.URL,
+		)
+
+		require.NoError(t, err)
+		require.Equal(t, discoveredIssuer, discoveryConfig.Issuer)
+	})
+
 	t.Run("rejects discovery configuration when issuer differs", func(t *testing.T) {
 		t.Parallel()
 
@@ -64,6 +83,8 @@ func discoveryHandler(t *testing.T, issuer string) http.Handler {
 			Issuer:  issuer,
 			JwksURI: issuer + "/.well-known/jwks.json",
 		})
-		require.NoError(t, err)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 }
