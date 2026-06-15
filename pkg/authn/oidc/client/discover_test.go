@@ -33,11 +33,11 @@ func TestDiscoverValidatesIssuer(t *testing.T) {
 		require.Equal(t, issuer, discoveryConfig.Issuer)
 	})
 
-	t.Run("normalizes trailing slash before validating issuer", func(t *testing.T) {
+	t.Run("preserves trailing slash when validating issuer", func(t *testing.T) {
 		t.Parallel()
 
 		issuer := "https://issuer.example.com/"
-		discoveredIssuer := "https://issuer.example.com"
+		discoveredIssuer := issuer
 		server := httptest.NewServer(discoveryHandler(t, discoveredIssuer))
 		t.Cleanup(server.Close)
 

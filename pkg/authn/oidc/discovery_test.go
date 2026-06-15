@@ -19,7 +19,7 @@ func TestDiscoverValidatesIssuer(t *testing.T) {
 		var discoveredIssuer string
 		server := httptest.NewServer(discoveryConfigurationHandler(&discoveredIssuer))
 		t.Cleanup(server.Close)
-		discoveredIssuer = server.URL
+		discoveredIssuer = server.URL + "/"
 
 		discoveryConfig, err := Discover(context.Background(), server.URL+"/", DiscoveryEndpoint)
 
