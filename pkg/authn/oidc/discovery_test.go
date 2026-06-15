@@ -41,6 +41,22 @@ func TestDiscoverValidatesIssuer(t *testing.T) {
 		require.ErrorIs(t, err, ErrIssuerInvalid)
 		require.ErrorContains(t, err, "Expected: "+server.URL+", got: "+discoveredIssuer)
 	})
+
+	t.Run("rejects discovery issuer that only matches after trimming", func(t *testing.T) {
+		t.Parallel()
+
+		var discoveredIssuer string
+		server := httptest.NewServer(discoveryConfigurationHandler(&discoveredIssuer))
+		t.Cleanup(server.Close)
+		discoveredIssuer = server.URL + "/"
+
+		discoveryConfig, err := Discover(context.Background(), server.URL, DiscoveryEndpoint)
+
+		require.Nil(t, discoveryConfig)
+		require.ErrorIs(t, err, ErrDiscoveryFailed)
+		require.ErrorIs(t, err, ErrIssuerInvalid)
+		require.ErrorContains(t, err, "Expected: "+server.URL+", got: "+discoveredIssuer)
+	})
 }
 
 func discoveryConfigurationHandler(issuer *string) http.Handler {

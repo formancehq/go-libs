@@ -181,9 +181,9 @@ func NormalizeIssuer(issuer string) string {
 
 func CheckDiscoveredIssuer(issuer string, discovered IssuerGetter) error {
 	expectedIssuer := NormalizeIssuer(issuer)
-	discoveredIssuer := NormalizeIssuer(discovered.GetIssuer())
+	discoveredIssuer := discovered.GetIssuer()
 	if discoveredIssuer != expectedIssuer {
-		return fmt.Errorf("%w: Expected: %s, got: %s", ErrIssuerInvalid, expectedIssuer, discovered.GetIssuer())
+		return fmt.Errorf("%w: Expected: %s, got: %s", ErrIssuerInvalid, expectedIssuer, discoveredIssuer)
 	}
 	return nil
 }
