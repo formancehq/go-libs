@@ -44,15 +44,17 @@ type HTTP struct {
 }
 
 type HTTPRequest struct {
-	Method string      `json:"method"`
-	Path   string      `json:"path"`
-	Host   string      `json:"host"`
-	Header http.Header `json:"header"`
-	Body   string      `json:"body,omitempty"`
+	Method        string      `json:"method"`
+	Path          string      `json:"path"`
+	Host          string      `json:"host"`
+	Header        http.Header `json:"header"`
+	Body          string      `json:"body,omitempty"`
+	BodyTruncated bool        `json:"body_truncated,omitempty"`
 }
 
 type HTTPResponse struct {
-	StatusCode int         `json:"status_code"`
-	Headers    http.Header `json:"headers"`
-	Body       string      `json:"body,omitempty"`
+	StatusCode    int         `json:"status_code"`
+	Headers       http.Header `json:"headers"`
+	Body          string      `json:"body,omitempty"`
+	BodyTruncated bool        `json:"body_truncated,omitempty"`
 }
