@@ -22,6 +22,8 @@ const (
 	otelContextKey = "otel-context"
 )
 
+// NewMessage preserves the legacy best-effort behavior. Prefer
+// NewMessageWithError in code paths that can return marshal errors.
 func NewMessage(ctx context.Context, m EventMessage) *message.Message {
 	msg, err := NewMessageWithError(ctx, m)
 	if err == nil {
