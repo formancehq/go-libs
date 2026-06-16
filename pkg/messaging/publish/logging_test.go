@@ -85,8 +85,7 @@ func TestWatermillLoggerAdapter_WithPreservesTraceSetting(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockLogger := logging.NewMockLogger(ctrl)
 
-	mockLogger.EXPECT().WithFields(gomock.Any()).Return(mockLogger)
-	mockLogger.EXPECT().WithFields(gomock.Any()).Return(mockLogger)
+	mockLogger.EXPECT().WithFields(gomock.Any()).Times(2).Return(mockLogger)
 	mockLogger.EXPECT().Debug("trace message").Return()
 
 	logger := publish.NewWatermillLoggerAdapter(mockLogger, true).With(watermill.LogFields{"component": "test"})

@@ -55,6 +55,8 @@ func (m *memoryPublisher) AllMessages() map[string][]*message.Message {
 	m.Lock()
 	defer m.Unlock()
 
+	// Return a shallow snapshot: callers can change the map or topic slices
+	// without mutating the publisher, while message payloads are not duplicated.
 	ret := make(map[string][]*message.Message, len(m.messages))
 	for topic, messages := range m.messages {
 		ret[topic] = append([]*message.Message(nil), messages...)
