@@ -86,14 +86,13 @@ func (l *listener) Listen(ctx context.Context, ch <-chan *message.Message) {
 		return
 	}
 	l.hasStarted = true
-	l.logger.WithField("listenerName", l.name).WithField("workerCount", l.workerCount).Debugf("queue listener starting listen...")
-	for i := 0; i < l.workerCount; i++ {
-		l.wg.Add(1)
-	}
+	workerCount := l.workerCount
+	l.logger.WithField("listenerName", l.name).WithField("workerCount", workerCount).Debugf("queue listener starting listen...")
 	l.mux.Unlock()
 
 	// fan out and process messages concurrently
-	for i := 0; i < l.workerCount; i++ {
+	for i := 0; i < workerCount; i++ {
+		l.wg.Add(1)
 		go func() {
 			l.startWorker(ctx, ch)
 		}()
