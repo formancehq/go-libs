@@ -18,6 +18,9 @@ import (
 )
 
 // NewEventMessage builds the Watermill message used for audit events.
+//
+// Deprecated: use NewEventMessageWithError in code paths that can return
+// marshal errors.
 func NewEventMessage(ctx context.Context, appName string, payload Payload) *message.Message {
 	return publish.NewMessage(ctx, newEventMessage(appName, payload))
 }
