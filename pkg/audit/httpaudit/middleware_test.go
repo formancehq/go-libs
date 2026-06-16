@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v5/pkg/audit"
+	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 	"github.com/formancehq/go-libs/v5/pkg/messaging/publish"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
@@ -1022,6 +1023,46 @@ func TestMiddleware_AsyncPublishingLogsAndCountsPublishErrors(t *testing.T) {
 	assert.Equal(t, uint64(1), stats.PublishErrors)
 	assert.Contains(t, logBuffer.String(), "failed to publish audit message asynchronously")
 	assert.Contains(t, logBuffer.String(), "publisher failed")
+}
+
+func TestAsyncPublisher_ReportsMessageBuildErrors(t *testing.T) {
+	var logBuffer bytes.Buffer
+	logger := logging.NewDefaultLogger(&logBuffer, true, false, false)
+	pub := &errorPublisher{}
+	topic := "audit-events"
+	errorCallback := make(chan error, 1)
+	asyncPublisher := NewAsyncPublisher(pub, topic, "test-app",
+		WithAsyncPublishingQueueCapacity(1),
+		WithAsyncPublishingWorkerCount(1),
+		WithAsyncPublishingErrorCallback(func(_ context.Context, _ audit.Payload, err error) {
+			errorCallback <- err
+		}),
+	)
+
+	payload := audit.Payload{
+		ID: "payload-id",
+		Actor: audit.Actor{
+			Claims: &oidc.AccessTokenClaims{
+				Claims: map[string]any{
+					"unsupported": func() {},
+				},
+			},
+		},
+	}
+	asyncPublisher.Publish(logging.ContextWithLogger(context.Background(), logger), payload)
+	require.NoError(t, asyncPublisher.Close(context.Background()))
+
+	stats := asyncPublisher.Stats()
+	assert.Equal(t, uint64(0), stats.Enqueued)
+	assert.Equal(t, uint64(0), stats.Published)
+	assert.Equal(t, uint64(0), stats.Dropped)
+	assert.Equal(t, uint64(1), stats.PublishErrors)
+	assert.Equal(t, uint64(0), pub.calls.Load())
+	require.Len(t, errorCallback, 1)
+	err := <-errorCallback
+	require.ErrorContains(t, err, "marshal event message")
+	assert.Contains(t, logBuffer.String(), "failed to build audit message asynchronously")
+	assert.Contains(t, logBuffer.String(), "marshal event message")
 }
 
 func TestMiddleware_PublishLatencyRegression(t *testing.T) {

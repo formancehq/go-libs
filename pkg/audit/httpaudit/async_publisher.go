@@ -149,7 +149,16 @@ func NewAsyncPublisher(publisher message.Publisher, topicName string, appName st
 func (p *AsyncPublisher) Publish(ctx context.Context, payload audit.Payload) {
 	detachedCtx := context.WithoutCancel(ctx)
 	detachedCtx = logging.ContextWithLogger(detachedCtx, logging.FromContext(ctx))
-	msg := audit.NewEventMessage(detachedCtx, p.appName, payload)
+	msg, err := audit.NewEventMessageWithError(detachedCtx, p.appName, payload)
+	if err != nil {
+		p.publishErrors.Add(1)
+		logger := logging.FromContext(ctx)
+		logger.WithField("audit_payload_id", payload.ID).Errorf("failed to build audit message asynchronously: %v", err)
+		if p.cfg.onError != nil {
+			p.cfg.onError(detachedCtx, payload, err)
+		}
+		return
+	}
 
 	p.mu.RLock()
 	if p.closed {

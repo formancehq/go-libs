@@ -107,7 +107,8 @@ func TestModule(t *testing.T) {
 				span.End()
 			})
 			require.True(t, trace.SpanFromContext(ctx).SpanContext().IsValid())
-			msg := publish.NewMessage(ctx, publish.EventMessage{})
+			msg, err := publish.NewMessageWithError(ctx, publish.EventMessage{})
+			require.NoError(t, err)
 			require.NoError(t, publisher.Publish(tc.topic, msg))
 
 			select {

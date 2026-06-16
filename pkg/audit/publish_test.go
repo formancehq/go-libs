@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 	"github.com/formancehq/go-libs/v5/pkg/messaging/publish"
 )
 
@@ -34,6 +35,26 @@ func TestNewEventMessage(t *testing.T) {
 	assert.Equal(t, payload.ID, decodedPayload.ID)
 }
 
+func TestNewEventMessageWithError(t *testing.T) {
+	t.Parallel()
+
+	payload := Payload{ID: "payload-id"}
+
+	msg, err := NewEventMessageWithError(context.Background(), "test-app", payload)
+
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+}
+
+func TestNewEventMessageWithErrorReturnsMarshalError(t *testing.T) {
+	t.Parallel()
+
+	msg, err := NewEventMessageWithError(context.Background(), "test-app", payloadWithUnsupportedClaims())
+
+	require.Nil(t, msg)
+	require.ErrorContains(t, err, "marshal event message")
+}
+
 func TestPublishEventWithError(t *testing.T) {
 	t.Parallel()
 
@@ -55,6 +76,30 @@ func TestPublishEventWithErrorReturnsPublisherError(t *testing.T) {
 	err := PublishEventWithError(context.Background(), pub, "audit-events", "test-app", Payload{})
 
 	require.ErrorIs(t, err, expectedErr)
+}
+
+func TestPublishEventWithErrorReturnsMarshalError(t *testing.T) {
+	t.Parallel()
+
+	pub := &recordingPublisher{}
+
+	err := PublishEventWithError(context.Background(), pub, "audit-events", "test-app", payloadWithUnsupportedClaims())
+
+	require.ErrorContains(t, err, "marshal event message")
+	require.Empty(t, pub.messages)
+}
+
+func payloadWithUnsupportedClaims() Payload {
+	return Payload{
+		ID: "payload-id",
+		Actor: Actor{
+			Claims: &oidc.AccessTokenClaims{
+				Claims: map[string]any{
+					"unsupported": func() {},
+				},
+			},
+		},
+	}
 }
 
 type recordingPublisher struct {

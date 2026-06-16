@@ -19,23 +19,33 @@ import (
 
 // NewEventMessage builds the Watermill message used for audit events.
 func NewEventMessage(ctx context.Context, appName string, payload Payload) *message.Message {
-	return publish.NewMessage(
-		ctx,
-		publish.EventMessage{
-			Date:    time.Now().UTC(),
-			App:     appName,
-			Version: EventVersion,
-			Type:    EventTypeAudit,
-			Payload: payload,
-		},
-	)
+	return publish.NewMessage(ctx, newEventMessage(appName, payload))
+}
+
+// NewEventMessageWithError builds the Watermill message used for audit events.
+func NewEventMessageWithError(ctx context.Context, appName string, payload Payload) (*message.Message, error) {
+	return publish.NewMessageWithError(ctx, newEventMessage(appName, payload))
+}
+
+func newEventMessage(appName string, payload Payload) publish.EventMessage {
+	return publish.EventMessage{
+		Date:    time.Now().UTC(),
+		App:     appName,
+		Version: EventVersion,
+		Type:    EventTypeAudit,
+		Payload: payload,
+	}
 }
 
 // PublishEventWithError publishes an audit event to the configured publisher.
 func PublishEventWithError(ctx context.Context, publisher message.Publisher, topicName string, appName string, payload Payload) error {
+	msg, err := NewEventMessageWithError(ctx, appName, payload)
+	if err != nil {
+		return err
+	}
 	return publisher.Publish(
 		topicName,
-		NewEventMessage(ctx, appName, payload),
+		msg,
 	)
 }
 
