@@ -26,13 +26,34 @@ type httpOptions struct {
 	sensitivePaths      map[string]struct{}
 	eventPublisher      auditEventPublisher
 	handledHeaderSecret string
+	maxBodyBytes        int
 }
+
+// DefaultMaxCapturedBodyBytes bounds how many bytes of each request and response
+// body are stored in an audit event when WithMaxBodyBytes is not set. It keeps the
+// serialized audit message well within broker payload limits (e.g. NATS max_payload).
+const DefaultMaxCapturedBodyBytes = 64 * 1024
 
 // WithSensitivePaths sets paths for which the response body should not be captured.
 func WithSensitivePaths(paths ...string) HTTPOption {
 	return func(o *httpOptions) {
 		for _, p := range paths {
 			o.sensitivePaths[p] = struct{}{}
+		}
+	}
+}
+
+// WithMaxBodyBytes caps how many bytes of each captured request and response body
+// are stored in the audit event. Bodies larger than the cap are truncated to the
+// cap and flagged via HTTPRequest.BodyTruncated / HTTPResponse.BodyTruncated, which
+// bounds the serialized audit message so it stays within broker payload limits
+// (e.g. NATS max_payload). The full body is always passed through to the client and
+// downstream handlers; only the audited copy is bounded. A value <= 0 keeps the
+// default cap (DefaultMaxCapturedBodyBytes).
+func WithMaxBodyBytes(maxBytes int) HTTPOption {
+	return func(o *httpOptions) {
+		if maxBytes > 0 {
+			o.maxBodyBytes = maxBytes
 		}
 	}
 }
@@ -97,6 +118,7 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 
 	ho := &httpOptions{
 		sensitivePaths: make(map[string]struct{}),
+		maxBodyBytes:   DefaultMaxCapturedBodyBytes,
 	}
 	for _, opt := range httpOpts {
 		opt(ho)
@@ -146,19 +168,16 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 			}
 
 			var (
-				body []byte
-				err  error
+				body                 []byte
+				requestBodyTruncated bool
+				err                  error
 			)
 
 			if !isStreamRequest(r) {
-				body, err = io.ReadAll(r.Body)
+				body, requestBodyTruncated, err = captureRequestBody(r, ho.maxBodyBytes)
 				if err != nil && !errors.Is(err, io.EOF) {
 					http.Error(w, "failed to read request body", http.StatusInternalServerError)
 					return
-				}
-				if len(body) > 0 {
-					_ = r.Body.Close()
-					r.Body = io.NopCloser(bytes.NewBuffer(body))
 				}
 			}
 
@@ -170,19 +189,22 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 
 			buf := bufPool.Get().(*bytes.Buffer)
 			buf.Reset()
-			defer bufPool.Put(buf)
+			defer putCaptureBuffer(buf)
 
 			rww := &responseWriterWrapper{
 				ResponseWriter: w,
 				body:           buf,
 				statusCode:     http.StatusOK,
+				maxBodyBytes:   ho.maxBodyBytes,
 			}
 
 			next.ServeHTTP(rww, r)
 
 			responseBody := rww.body.String()
+			responseBodyTruncated := rww.bodyTruncated
 			if _, sensitive := ho.sensitivePaths[r.URL.Path]; sensitive {
 				responseBody = ""
+				responseBodyTruncated = false
 			}
 
 			actor := audit.ExtractClaims(r, auditOpts)
@@ -193,21 +215,18 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 				Actor:   actor,
 				HTTP: audit.HTTP{
 					Request: audit.HTTPRequest{
-						Method: r.Method,
-						Path:   r.URL.Path,
-						Host:   r.Host,
-						Header: requestHeaders,
-						Body: func() string {
-							if len(body) > 0 {
-								return string(body)
-							}
-							return ""
-						}(),
+						Method:        r.Method,
+						Path:          r.URL.Path,
+						Host:          r.Host,
+						Header:        requestHeaders,
+						Body:          string(body),
+						BodyTruncated: requestBodyTruncated,
 					},
 					Response: audit.HTTPResponse{
-						StatusCode: rww.statusCode,
-						Headers:    rww.Header(),
-						Body:       responseBody,
+						StatusCode:    rww.statusCode,
+						Headers:       rww.Header(),
+						Body:          responseBody,
+						BodyTruncated: responseBodyTruncated,
 					},
 				},
 			}
@@ -222,18 +241,82 @@ func isStreamRequest(r *http.Request) bool {
 	return strings.HasPrefix(ct, "application/vnd.formance") && strings.HasSuffix(ct, "-stream")
 }
 
+// captureRequestBody reads up to maxBytes of the request body for audit capture
+// while leaving the full body readable by downstream handlers. truncated reports
+// whether the captured copy was cut to the cap.
+func captureRequestBody(r *http.Request, maxBytes int) (captured []byte, truncated bool, err error) {
+	if r.Body == nil {
+		return nil, false, nil
+	}
+
+	// Read one byte past the cap to detect whether the body exceeds it.
+	raw, err := io.ReadAll(io.LimitReader(r.Body, int64(maxBytes)+1))
+	if len(raw) > 0 {
+		r.Body = readCloser{
+			Reader: io.MultiReader(bytes.NewReader(raw), r.Body),
+			Closer: r.Body,
+		}
+	}
+
+	captured = raw
+	if len(raw) > maxBytes {
+		truncated = true
+		captured = raw[:maxBytes]
+	}
+	return captured, truncated, err
+}
+
+func putCaptureBuffer(buf *bytes.Buffer) {
+	if shouldPoolCaptureBuffer(buf) {
+		buf.Reset()
+		bufPool.Put(buf)
+	}
+}
+
+// shouldPoolCaptureBuffer keeps oversized buffers (from large WithMaxBodyBytes
+// caps) out of the shared pool so they are not pinned in memory.
+func shouldPoolCaptureBuffer(buf *bytes.Buffer) bool {
+	return buf.Cap() <= DefaultMaxCapturedBodyBytes
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
+}
+
 type responseWriterWrapper struct {
 	http.ResponseWriter
-	body       *bytes.Buffer
-	statusCode int
+	body          *bytes.Buffer
+	statusCode    int
+	maxBodyBytes  int
+	bodyTruncated bool
 }
 
 func (rww *responseWriterWrapper) Write(buf []byte) (int, error) {
 	mediaType, _, _ := mime.ParseMediaType(rww.Header().Get("Content-Type"))
 	if mediaType != "application/octet-stream" {
-		rww.body.Write(buf)
+		rww.captureBody(buf)
 	}
 	return rww.ResponseWriter.Write(buf)
+}
+
+// captureBody appends bytes to the audited copy up to maxBodyBytes, flagging
+// truncation once the cap is reached. The full buffer is still written to the
+// client by the caller.
+func (rww *responseWriterWrapper) captureBody(buf []byte) {
+	remaining := rww.maxBodyBytes - rww.body.Len()
+	if remaining <= 0 {
+		if len(buf) > 0 {
+			rww.bodyTruncated = true
+		}
+		return
+	}
+	if len(buf) > remaining {
+		rww.body.Write(buf[:remaining])
+		rww.bodyTruncated = true
+		return
+	}
+	rww.body.Write(buf)
 }
 
 func (rww *responseWriterWrapper) WriteHeader(statusCode int) {

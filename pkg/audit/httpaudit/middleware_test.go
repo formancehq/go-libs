@@ -125,6 +125,136 @@ func TestMiddleware_BasicCapture(t *testing.T) {
 	assert.Equal(t, `{"key":"value"}`, payload.HTTP.Request.Body)
 	assert.Equal(t, http.StatusOK, payload.HTTP.Response.StatusCode)
 	assert.Equal(t, `{"status":"ok"}`, payload.HTTP.Response.Body)
+	assert.False(t, payload.HTTP.Request.BodyTruncated)
+	assert.False(t, payload.HTTP.Response.BodyTruncated)
+}
+
+func TestMiddleware_CapsRequestBodyAndFlagsTruncation(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	var received string
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			received = string(b)
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	prefix := strings.Repeat("a", DefaultMaxCapturedBodyBytes)
+	reqBody := prefix + strings.Repeat("b", 1024)
+	req := httptest.NewRequest("POST", "/api/test", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	// The handler still sees the full request body.
+	assert.Equal(t, reqBody, received)
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+	payload := auditPayloadFromMessage(t, messages[0])
+
+	assert.Len(t, payload.HTTP.Request.Body, DefaultMaxCapturedBodyBytes)
+	assert.Equal(t, prefix, payload.HTTP.Request.Body)
+	assert.True(t, payload.HTTP.Request.BodyTruncated)
+}
+
+func TestMiddleware_CapsResponseBodyAndFlagsTruncation(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	prefix := strings.Repeat("r", DefaultMaxCapturedBodyBytes)
+	responseBody := prefix + strings.Repeat("s", 1024)
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			// Write across the cap boundary in two chunks.
+			_, _ = w.Write([]byte(responseBody[:DefaultMaxCapturedBodyBytes/2]))
+			_, _ = w.Write([]byte(responseBody[DefaultMaxCapturedBodyBytes/2:]))
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	// The client still receives the full response body.
+	assert.Equal(t, responseBody, rr.Body.String())
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+	payload := auditPayloadFromMessage(t, messages[0])
+
+	assert.Len(t, payload.HTTP.Response.Body, DefaultMaxCapturedBodyBytes)
+	assert.Equal(t, prefix, payload.HTTP.Response.Body)
+	assert.True(t, payload.HTTP.Response.BodyTruncated)
+}
+
+func TestMiddleware_WithMaxBodyBytesOverridesDefault(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	const limit = 16
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true), WithMaxBodyBytes(limit))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(strings.Repeat("z", 100)))
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, strings.Repeat("z", 100), rr.Body.String())
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+	payload := auditPayloadFromMessage(t, messages[0])
+
+	assert.Len(t, payload.HTTP.Response.Body, limit)
+	assert.True(t, payload.HTTP.Response.BodyTruncated)
+}
+
+func TestMiddleware_DoesNotPoolOversizedCaptureBuffers(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, shouldPoolCaptureBuffer(bytes.NewBuffer(make([]byte, 0, DefaultMaxCapturedBodyBytes))))
+	assert.False(t, shouldPoolCaptureBuffer(bytes.NewBuffer(make([]byte, 0, DefaultMaxCapturedBodyBytes+1))))
+}
+
+func auditPayloadFromMessage(t *testing.T, msg *message.Message) audit.Payload {
+	t.Helper()
+
+	var event publish.EventMessage
+	require.NoError(t, json.Unmarshal(msg.Payload, &event))
+
+	payloadBytes, err := json.Marshal(event.Payload)
+	require.NoError(t, err)
+
+	var payload audit.Payload
+	require.NoError(t, json.Unmarshal(payloadBytes, &payload))
+	return payload
 }
 
 func TestMiddleware_AuthorizationHeaderStripped(t *testing.T) {
