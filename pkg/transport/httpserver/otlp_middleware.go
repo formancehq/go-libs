@@ -54,10 +54,23 @@ func isJSONContent(contentType string) bool {
 	return strings.Contains(strings.ToLower(contentType), "application/json")
 }
 
-func OTLPMiddleware(serverName string, debug bool) func(h http.Handler) http.Handler {
-	m := otelchi.Middleware(serverName)
+func OTLPMiddleware(serverName string, debug bool, opts ...Option) func(h http.Handler) http.Handler {
+	cfg := newMiddlewareConfig(opts...)
+	// Hand the ignore set to otelchi as a filter so no span is started for
+	// ignored paths (e.g. health probes). A filter returning false excludes the
+	// request from tracing.
+	m := otelchi.Middleware(serverName, otelchi.WithFilter(func(r *http.Request) bool {
+		return !cfg.isIgnored(r.URL.Path)
+	}))
 	return func(h http.Handler) http.Handler {
 		return m(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// otelchi created no span for ignored paths; skip attribute
+			// collection and body capture entirely.
+			if cfg.isIgnored(r.URL.Path) {
+				h.ServeHTTP(w, r)
+				return
+			}
+
 			span := trace.SpanFromContext(r.Context())
 
 			// Always log basic request metadata
