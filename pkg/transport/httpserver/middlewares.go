@@ -21,11 +21,20 @@ func (lrw *loggingResponseWriter) WriteHeader(statusCode int) {
 	lrw.ResponseWriter.WriteHeader(statusCode)
 }
 
-func LoggerMiddleware(l logging.Logger) func(h http.Handler) http.Handler {
+func LoggerMiddleware(l logging.Logger, opts ...Option) func(h http.Handler) http.Handler {
+	cfg := newMiddlewareConfig(opts...)
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
 			r = r.WithContext(logging.ContextWithLogger(r.Context(), l))
+
+			// Skip request logging for ignored paths (e.g. health probes), but
+			// keep the logger available to downstream handlers via the context.
+			if cfg.isIgnored(r.URL.Path) {
+				h.ServeHTTP(w, r)
+				return
+			}
+
+			start := time.Now()
 			logger := logging.FromContext(r.Context())
 
 			rec := NewLoggingResponseWriter(w)
