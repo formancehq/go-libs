@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"fmt"
+	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
@@ -49,7 +50,7 @@ type iamConnector struct {
 }
 
 func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	url, err := dburl.Parse(i.dsn)
+	databaseURL, err := dburl.Parse(i.dsn)
 	if err != nil {
 		return nil, errors.Wrapf(err, "parsing dsn: %s", i.dsn)
 	}
@@ -60,36 +61,24 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 		ret, err := auth.BuildAuthToken(
 			ctx,
-			url.Host,
+			databaseURL.Host,
 			i.driver.awsConfig.Region,
-			url.User.Username(),
+			databaseURL.User.Username(),
 			i.driver.awsConfig.Credentials,
 		)
 		if err != nil {
 			otlp.RecordError(ctx, err)
 		}
 
-		return ret, nil
+		return ret, err
 	}()
 	if err != nil {
 		return nil, errors.Wrap(err, "building aws auth token")
 	}
 
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s",
-		url.Hostname(),
-		url.Port(),
-		url.User.Username(),
-		authenticationToken,
-		url.Path[1:],
-	)
-	for key, strings := range url.Query() {
-		for _, value := range strings {
-			dsn = fmt.Sprintf("%s %s=%s", dsn, key, value)
-		}
-	}
+	dsn := buildIAMAuthDSN(&databaseURL.URL, authenticationToken)
 
-	i.logger.Debugf("IAM: Connect using dsn '%s'", dsn)
+	i.logger.Debugf("IAM: Connect using dsn '%s'", obfuscateDSN(dsn))
 
 	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
@@ -107,3 +96,9 @@ func (i iamConnector) Driver() driver.Driver {
 }
 
 var _ driver.Connector = &iamConnector{}
+
+func buildIAMAuthDSN(databaseURL *url.URL, authenticationToken string) string {
+	dsnURL := *databaseURL
+	dsnURL.User = url.UserPassword(databaseURL.User.Username(), authenticationToken)
+	return dsnURL.String()
+}

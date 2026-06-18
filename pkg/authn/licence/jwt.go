@@ -93,6 +93,10 @@ func ValidateToken(jwtToken string, expectedIssuer string, opts ...ValidateToken
 }
 
 func (l *Licence) validate() error {
+	if l.validateToken != nil {
+		return l.validateToken()
+	}
+
 	return ValidateToken(
 		l.jwtToken,
 		l.expectedIssuer,

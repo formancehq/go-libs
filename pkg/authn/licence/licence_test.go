@@ -6,9 +6,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,6 +207,94 @@ func TestLicence_Start(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		require.Equal(t, "Licence check stopped, app stopped", logger.getMessage())
 	})
+}
+
+func TestLicence_StopIsIdempotent(t *testing.T) {
+	privateKey, pubPEM := generateTestRSAKeyPair(t)
+	setEmbeddedKey(t, pubPEM)
+
+	logger := &mockLogger{}
+	claims := jwt.MapClaims{
+		"sub": "test-cluster",
+		"aud": "test-service",
+		"iss": "test-issuer",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	tokenString := createTokenWithRSAKey(t, claims, privateKey)
+
+	licence := NewLicence(
+		logger,
+		tokenString,
+		time.Minute,
+		"test-service",
+		"test-cluster",
+		"test-issuer",
+	)
+
+	licenceError := make(chan error, 1)
+	require.NoError(t, licence.Start(licenceError))
+	require.NotPanics(t, func() {
+		licence.Stop()
+		licence.Stop()
+	})
+}
+
+func TestLicence_StopWaitsForInFlightValidationBeforeChannelClose(t *testing.T) {
+	logger := &mockLogger{}
+	licence := NewLicence(
+		logger,
+		"unused-token",
+		10*time.Millisecond,
+		"test-service",
+		"test-cluster",
+		"test-issuer",
+	)
+
+	validateStarted := make(chan struct{})
+	releaseValidate := make(chan struct{})
+	var validateCalls atomic.Int32
+	licence.validateToken = func() error {
+		if validateCalls.Add(1) == 1 {
+			return nil
+		}
+
+		close(validateStarted)
+		<-releaseValidate
+		return errors.New("licence validation failed")
+	}
+
+	licenceError := make(chan error, 1)
+	require.NoError(t, licence.Start(licenceError))
+
+	select {
+	case <-validateStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for licence validation to start")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		licence.Stop()
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+		t.Fatal("Stop returned before in-flight validation completed")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(releaseValidate)
+
+	select {
+	case <-stopDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Stop to return")
+	}
+
+	close(licenceError)
+	err := <-licenceError
+	require.EqualError(t, err, "licence validation failed")
 }
 
 func TestValidateToken(t *testing.T) {
