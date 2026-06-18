@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,7 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/formancehq/go-libs/v5/pkg/messaging/publish/circuit/storage"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
@@ -429,4 +434,521 @@ func TestCircuitBreaker(t *testing.T) {
 			assert.Equal(c, StateOpen, circuitBreaker.GetState())
 		}, 2*time.Second, 100*time.Millisecond)
 	})
+}
+
+func TestCircuitBreakerCloseWithoutLoopIsIdempotent(t *testing.T) {
+	messages := make(chan *testMessages, 10)
+	publisher := newMockPublisher(messages)
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		publisher,
+		newMockStore(),
+		5*time.Second,
+	)
+
+	requireCloseWithin(t, circuitBreaker)
+	requireCloseWithin(t, circuitBreaker)
+	require.Equal(t, 1, publisher.CloseCount())
+}
+
+func TestCircuitBreakerCloseCancelsCatchUp(t *testing.T) {
+	store := &blockingListStore{
+		listStarted: make(chan struct{}, 1),
+	}
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(make(chan *testMessages, 10)),
+		store,
+		5*time.Second,
+	)
+
+	go circuitBreaker.Loop(context.Background())
+
+	select {
+	case <-store.listStarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected catchup to start")
+	}
+
+	requireCloseWithin(t, circuitBreaker)
+}
+
+func TestCircuitBreakerCloseDrainsInFlightInsert(t *testing.T) {
+	store := &blockingInsertStore{
+		insertStarted:     make(chan struct{}, 1),
+		releaseInsert:     make(chan struct{}),
+		insertCtxCanceled: make(chan struct{}, 1),
+	}
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(make(chan *testMessages, 10)).WithPublishError(errors.New("publish failed")),
+		store,
+		5*time.Second,
+	)
+	go circuitBreaker.Loop(context.Background())
+
+	publishDone := make(chan error, 1)
+	go func() {
+		publishDone <- circuitBreaker.Publish("test", message.NewMessage("1", []byte("payload")))
+	}()
+
+	select {
+	case <-store.insertStarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected insert to start")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- circuitBreaker.Close()
+	}()
+
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close returned before insert completed: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	select {
+	case <-store.insertCtxCanceled:
+		t.Fatal("insert context was canceled before insert completed")
+	default:
+	}
+
+	close(store.releaseInsert)
+
+	select {
+	case err := <-closeDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("expected Close to return after insert completed")
+	}
+	select {
+	case <-publishDone:
+	case <-time.After(time.Second):
+		t.Fatal("expected publish to return after close")
+	}
+	require.True(t, store.inserted)
+}
+
+func TestCircuitBreakerPublishWaitsForAcceptedMessageDuringClose(t *testing.T) {
+	publisher := &blockingPublishPublisher{
+		publishStarted: make(chan struct{}, 1),
+		releasePublish: make(chan struct{}),
+	}
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		publisher,
+		newMockStore(),
+		5*time.Second,
+	)
+	go circuitBreaker.Loop(context.Background())
+
+	publishDone := make(chan error, 1)
+	go func() {
+		publishDone <- circuitBreaker.Publish("test", message.NewMessage("1", []byte("payload")))
+	}()
+
+	select {
+	case <-publisher.publishStarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected publish to start")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- circuitBreaker.Close()
+	}()
+
+	select {
+	case err := <-publishDone:
+		t.Fatalf("Publish returned before accepted message completed: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(publisher.releasePublish)
+
+	select {
+	case err := <-publishDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("expected Publish to return after accepted message completed")
+	}
+	select {
+	case err := <-closeDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("expected Close to return after accepted message completed")
+	}
+}
+
+func TestWaitAcceptedMessageResultPrefersQueuedResultAfterStop(t *testing.T) {
+	errChan := make(chan error, 1)
+	errChan <- nil
+	stopped := make(chan struct{})
+	close(stopped)
+
+	require.NoError(t, waitAcceptedMessageResult(errChan, stopped))
+}
+
+func TestCircuitBreakerCloseDrainsInFlightReplayDelete(t *testing.T) {
+	messages := make(chan *testMessages, 10)
+	store := &blockingDeleteStore{
+		deleteStarted:     make(chan struct{}, 1),
+		releaseDelete:     make(chan struct{}),
+		deleteCtxCanceled: make(chan struct{}, 1),
+		messages: []*storage.CircuitBreakerModel{{
+			ID:    42,
+			Topic: "test",
+			Data:  []byte("payload"),
+		}},
+	}
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(messages),
+		store,
+		5*time.Second,
+	)
+	go circuitBreaker.Loop(context.Background())
+
+	select {
+	case <-messages:
+	case <-time.After(time.Second):
+		t.Fatal("expected replayed message")
+	}
+	select {
+	case <-store.deleteStarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected delete to start")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- circuitBreaker.Close()
+	}()
+
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close returned before delete completed: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	select {
+	case <-store.deleteCtxCanceled:
+		t.Fatal("delete context was canceled before delete completed")
+	default:
+	}
+
+	close(store.releaseDelete)
+
+	select {
+	case err := <-closeDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("expected Close to return after delete completed")
+	}
+	require.Empty(t, store.messages)
+}
+
+func TestCircuitBreakerCloseStopsReplayAfterDeletingPublishedMessages(t *testing.T) {
+	publisher := &blockingReplayPublisher{
+		firstStarted:  make(chan struct{}, 1),
+		releaseFirst:  make(chan struct{}),
+		secondStarted: make(chan struct{}, 1),
+	}
+	store := &trackingReplayStore{
+		messages: []*storage.CircuitBreakerModel{
+			{ID: 1, Topic: "test", Data: []byte("first")},
+			{ID: 2, Topic: "test", Data: []byte("second")},
+		},
+	}
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		publisher,
+		store,
+		5*time.Second,
+	)
+	go circuitBreaker.Loop(context.Background())
+
+	select {
+	case <-publisher.firstStarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected first replay publish to start")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- circuitBreaker.Close()
+	}()
+
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close returned before first replay publish completed: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(publisher.releaseFirst)
+
+	select {
+	case err := <-closeDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("expected Close to return after deleting published replay")
+	}
+	select {
+	case <-publisher.secondStarted:
+		t.Fatal("second replay message should not be published after close")
+	default:
+	}
+	require.Equal(t, []uint64{1}, store.deletedIDs)
+	require.Len(t, store.messages, 1)
+	require.Equal(t, uint64(2), store.messages[0].ID)
+}
+
+func TestCircuitBreakerLoopStopsWhenContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(make(chan *testMessages, 10)),
+		newMockStore(),
+		5*time.Second,
+	)
+
+	go circuitBreaker.Loop(ctx)
+	require.Eventually(t, circuitBreaker.hasLoopStarted, time.Second, 10*time.Millisecond)
+
+	cancel()
+
+	select {
+	case <-circuitBreaker.stopped:
+	case <-time.After(time.Second):
+		t.Fatal("expected loop to stop after context cancellation")
+	}
+
+	require.NoError(t, circuitBreaker.Close())
+}
+
+func TestCircuitBreakerCatchUpExtractsStoredTraceContext(t *testing.T) {
+	originalPropagator := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(originalPropagator)
+	})
+
+	messages := make(chan *testMessages, 10)
+	store := newMockStore()
+	require.NoError(t, store.Insert(context.Background(), "test", []byte("test"), map[string]string{
+		otelContextKey: `{"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}`,
+	}))
+
+	circuitBreaker := NewCircuitBreaker(
+		logging.Testing(),
+		newMockPublisher(messages),
+		store,
+		5*time.Second,
+	)
+	go circuitBreaker.Loop(context.Background())
+	defer func() {
+		require.NoError(t, circuitBreaker.Close())
+	}()
+
+	var received *testMessages
+	select {
+	case received = <-messages:
+	case <-time.After(time.Second):
+		t.Fatal("expected replayed message")
+	}
+
+	spanContext := trace.SpanContextFromContext(received.msg.Context())
+	require.True(t, spanContext.IsValid())
+	require.True(t, spanContext.IsRemote())
+	require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spanContext.TraceID().String())
+	require.Equal(t, "00f067aa0ba902b7", spanContext.SpanID().String())
+}
+
+func requireCloseWithin(t *testing.T, circuitBreaker *CircuitBreaker) {
+	t.Helper()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- circuitBreaker.Close()
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("expected circuit breaker close to return")
+	}
+}
+
+type blockingListStore struct {
+	listStarted chan struct{}
+}
+
+func (s *blockingListStore) Insert(ctx context.Context, topic string, data []byte, metadata map[string]string) error {
+	return nil
+}
+
+func (s *blockingListStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, error) {
+	select {
+	case s.listStarted <- struct{}{}:
+	default:
+	}
+
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (s *blockingListStore) Delete(ctx context.Context, ids []uint64) error {
+	return nil
+}
+
+type blockingInsertStore struct {
+	insertStarted     chan struct{}
+	releaseInsert     chan struct{}
+	insertCtxCanceled chan struct{}
+	inserted          bool
+}
+
+func (s *blockingInsertStore) Insert(ctx context.Context, topic string, data []byte, metadata map[string]string) error {
+	select {
+	case s.insertStarted <- struct{}{}:
+	default:
+	}
+
+	select {
+	case <-ctx.Done():
+		select {
+		case s.insertCtxCanceled <- struct{}{}:
+		default:
+		}
+		return ctx.Err()
+	case <-s.releaseInsert:
+		s.inserted = true
+		return nil
+	}
+}
+
+func (s *blockingInsertStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, error) {
+	return nil, nil
+}
+
+func (s *blockingInsertStore) Delete(ctx context.Context, ids []uint64) error {
+	return nil
+}
+
+type blockingDeleteStore struct {
+	deleteStarted     chan struct{}
+	releaseDelete     chan struct{}
+	deleteCtxCanceled chan struct{}
+	messages          []*storage.CircuitBreakerModel
+}
+
+func (s *blockingDeleteStore) Insert(ctx context.Context, topic string, data []byte, metadata map[string]string) error {
+	return nil
+}
+
+func (s *blockingDeleteStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, error) {
+	result := make([]*storage.CircuitBreakerModel, len(s.messages))
+	copy(result, s.messages)
+	return result, nil
+}
+
+func (s *blockingDeleteStore) Delete(ctx context.Context, ids []uint64) error {
+	select {
+	case s.deleteStarted <- struct{}{}:
+	default:
+	}
+
+	select {
+	case <-ctx.Done():
+		select {
+		case s.deleteCtxCanceled <- struct{}{}:
+		default:
+		}
+		return ctx.Err()
+	case <-s.releaseDelete:
+		s.messages = nil
+		return nil
+	}
+}
+
+type blockingPublishPublisher struct {
+	publishStarted chan struct{}
+	releasePublish chan struct{}
+}
+
+func (p *blockingPublishPublisher) Publish(topic string, messages ...*message.Message) error {
+	select {
+	case p.publishStarted <- struct{}{}:
+	default:
+	}
+	<-p.releasePublish
+	return nil
+}
+
+func (p *blockingPublishPublisher) Close() error {
+	return nil
+}
+
+type blockingReplayPublisher struct {
+	calls         atomic.Int32
+	firstStarted  chan struct{}
+	releaseFirst  chan struct{}
+	secondStarted chan struct{}
+}
+
+func (p *blockingReplayPublisher) Publish(topic string, messages ...*message.Message) error {
+	if p.calls.Add(1) == 1 {
+		select {
+		case p.firstStarted <- struct{}{}:
+		default:
+		}
+		<-p.releaseFirst
+		return nil
+	}
+
+	select {
+	case p.secondStarted <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func (p *blockingReplayPublisher) Close() error {
+	return nil
+}
+
+type trackingReplayStore struct {
+	messages   []*storage.CircuitBreakerModel
+	deletedIDs []uint64
+}
+
+func (s *trackingReplayStore) Insert(ctx context.Context, topic string, data []byte, metadata map[string]string) error {
+	return nil
+}
+
+func (s *trackingReplayStore) List(ctx context.Context) ([]*storage.CircuitBreakerModel, error) {
+	result := make([]*storage.CircuitBreakerModel, len(s.messages))
+	copy(result, s.messages)
+	return result, nil
+}
+
+func (s *trackingReplayStore) Delete(ctx context.Context, ids []uint64) error {
+	s.deletedIDs = append(s.deletedIDs, ids...)
+
+	remaining := s.messages[:0]
+	for _, msg := range s.messages {
+		deleted := false
+		for _, id := range ids {
+			if msg.ID == id {
+				deleted = true
+				break
+			}
+		}
+		if !deleted {
+			remaining = append(remaining, msg)
+		}
+	}
+	s.messages = remaining
+	return nil
 }
