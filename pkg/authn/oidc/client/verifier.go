@@ -67,6 +67,10 @@ func VerifyIDToken[C oidc.Claims](ctx context.Context, token string, v *Verifier
 		return nilClaims, "", err
 	}
 
+	if err = oidc.CheckNotBeforePayload(payload, v.Offset); err != nil {
+		return nilClaims, "", err
+	}
+
 	if err = oidc.CheckIssuedAt(claims, v.MaxAgeIAT, v.Offset); err != nil {
 		return nilClaims, "", err
 	}
