@@ -62,35 +62,38 @@ func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
 
 			return ret
 		}, fx.ParamTags(metricsProviderOptionKey))),
-		fx.Invoke(func(lc fx.Lifecycle, metricProvider *sdkmetric.MeterProvider, options ...runtime.Option) {
-			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-				b3.New(), propagation.TraceContext{}))
-			lc.Append(fx.Hook{
-				OnStart: func(ctx context.Context) error {
-					if cfg.RuntimeMetrics {
-						if err := runtime.Start(options...); err != nil {
-							return err
+		fx.Invoke(fx.Annotate(
+			func(lc fx.Lifecycle, metricProvider *sdkmetric.MeterProvider, options ...runtime.Option) {
+				otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+					b3.New(), propagation.TraceContext{}))
+				lc.Append(fx.Hook{
+					OnStart: func(ctx context.Context) error {
+						if cfg.RuntimeMetrics {
+							if err := runtime.Start(options...); err != nil {
+								return err
+							}
+							if err := host.Start(); err != nil {
+								return err
+							}
 						}
-						if err := host.Start(); err != nil {
-							return err
+						return nil
+					},
+					OnStop: func(ctx context.Context) error {
+						logging.FromContext(ctx).Infof("Flush metrics")
+						if err := metricProvider.ForceFlush(ctx); err != nil {
+							logging.FromContext(ctx).Errorf("unable to flush metrics: %s", err)
 						}
-					}
-					return nil
-				},
-				OnStop: func(ctx context.Context) error {
-					logging.FromContext(ctx).Infof("Flush metrics")
-					if err := metricProvider.ForceFlush(ctx); err != nil {
-						logging.FromContext(ctx).Errorf("unable to flush metrics: %s", err)
-					}
-					logging.FromContext(ctx).Infof("Shutting down metrics provider")
-					if err := metricProvider.Shutdown(ctx); err != nil {
-						logging.FromContext(ctx).Errorf("unable to shutdown metrics provider: %s", err)
-					}
-					logging.FromContext(ctx).Infof("Metrics provider stopped")
-					return nil
-				},
-			})
-		}),
+						logging.FromContext(ctx).Infof("Shutting down metrics provider")
+						if err := metricProvider.Shutdown(ctx); err != nil {
+							logging.FromContext(ctx).Errorf("unable to shutdown metrics provider: %s", err)
+						}
+						logging.FromContext(ctx).Infof("Metrics provider stopped")
+						return nil
+					},
+				})
+			},
+			fx.ParamTags(``, ``, metricsRuntimeOptionKey),
+		)),
 		ProvideMetricsProviderOption(sdkmetric.WithResource),
 		ProvideMetricsProviderOption(sdkmetric.WithReader),
 		fx.Provide(
@@ -99,10 +102,12 @@ func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
 		ProvideOTLPMetricsPeriodicReaderOption(func() sdkmetric.PeriodicReaderOption {
 			return sdkmetric.WithInterval(cfg.PushInterval)
 		}),
-		ProvideRuntimeMetricsOption(func() runtime.Option {
-			return runtime.WithMinimumReadMemStatsInterval(cfg.MinimumReadMemStatsInterval)
-		}),
 	)
+	if cfg.MinimumReadMemStatsInterval > 0 {
+		options = append(options, ProvideRuntimeMetricsOption(func() runtime.Option {
+			return runtime.WithMinimumReadMemStatsInterval(cfg.MinimumReadMemStatsInterval)
+		}))
+	}
 
 	switch cfg.Exporter {
 	case metrics.StdoutExporter:

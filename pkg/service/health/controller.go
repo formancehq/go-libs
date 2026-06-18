@@ -3,7 +3,6 @@ package health
 import (
 	"encoding/json"
 	"net/http"
-	"sync"
 )
 
 type HealthController struct {
@@ -11,34 +10,30 @@ type HealthController struct {
 }
 
 type result struct {
+	Index int
 	Check NamedCheck
 	Err   error
 }
 
 func (ctrl *HealthController) Check(w http.ResponseWriter, r *http.Request) {
-	sg := sync.WaitGroup{}
-	sg.Add(len(ctrl.Checks))
-
+	ctx := r.Context()
 	results := make(chan result, len(ctrl.Checks))
-	for _, ch := range ctrl.Checks {
-		go func(ch NamedCheck) {
-			defer sg.Done()
-			select {
-			case <-r.Context().Done():
-				return
-			case results <- result{
+	for index, ch := range ctrl.Checks {
+		go func(index int, ch NamedCheck) {
+			results <- result{
+				Index: index,
 				Check: ch,
-				Err:   ch.Do(r.Context()),
-			}:
+				Err:   ch.Do(ctx),
 			}
-		}(ch)
+		}(index, ch)
 	}
-	sg.Wait()
-	close(results)
 
 	response := map[string]string{}
+	completed := make([]bool, len(ctrl.Checks))
 	hasError := false
-	for r := range results {
+
+	recordResult := func(r result) {
+		completed[r.Index] = true
 		if r.Err != nil {
 			hasError = true
 			response[r.Check.Name()] = r.Err.Error()
@@ -47,6 +42,36 @@ func (ctrl *HealthController) Check(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	completedCount := 0
+	for completedCount < len(ctrl.Checks) {
+		select {
+		case r := <-results:
+			recordResult(r)
+			completedCount++
+		case <-ctx.Done():
+			for completedCount < len(ctrl.Checks) {
+				select {
+				case r := <-results:
+					recordResult(r)
+					completedCount++
+				default:
+					hasError = true
+					for index, ch := range ctrl.Checks {
+						if !completed[index] {
+							response[ch.Name()] = ctx.Err().Error()
+						}
+					}
+					writeResponse(w, response, hasError)
+					return
+				}
+			}
+		}
+	}
+
+	writeResponse(w, response, hasError)
+}
+
+func writeResponse(w http.ResponseWriter, response map[string]string, hasError bool) {
 	if hasError {
 		w.WriteHeader(http.StatusInternalServerError)
 	} else {
