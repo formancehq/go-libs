@@ -217,11 +217,11 @@ func NatsModule(url, group string, autoProvision bool, natsOptions ...nats.Optio
 }
 
 func HTTPModule() fx.Option {
-	return fx.Options(
+	return fx.Module("publish-http",
 		fx.Provide(publish.NewHTTPPublisher),
 		fx.Provide(publish.NewHTTPPublisherConfig),
 		fx.Provide(publish.DefaultHTTPMarshalMessageFunc),
-		fx.Supply(http.DefaultClient),
+		fx.Supply(http.DefaultClient, fx.Private),
 		fx.Provide(func(p *wHttp.Publisher) message.Publisher {
 			return p
 		}),
