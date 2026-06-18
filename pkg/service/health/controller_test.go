@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
@@ -86,4 +87,53 @@ func TestHealthController(t *testing.T) {
 		app := fx.New(options...)
 		require.NoError(t, app.Err())
 	}
+}
+
+func TestHealthControllerReturnsWhenContextCanceledDuringHungCheck(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	ctrl := health.NewHealthController(
+		health.NewNamedCheck("hung", health.CheckFn(func(ctx context.Context) error {
+			close(started)
+			<-release
+			return nil
+		})),
+	)
+	t.Cleanup(func() {
+		close(release)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/_health", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		ctrl.Check(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("health check did not start")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("health controller did not return after request context cancellation")
+	}
+
+	require.Equal(t, http.StatusInternalServerError, rec.Result().StatusCode)
+
+	ret := make(map[string]string)
+	require.NoError(t, json.NewDecoder(rec.Result().Body).Decode(&ret))
+	require.Equal(t, map[string]string{
+		"hung": context.Canceled.Error(),
+	}, ret)
 }

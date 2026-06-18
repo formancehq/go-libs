@@ -22,6 +22,7 @@ type testMessages struct {
 type mockPublisher struct {
 	mu       sync.RWMutex
 	err      error
+	closed   int
 	messages chan *testMessages
 }
 
@@ -64,7 +65,14 @@ func (p *mockPublisher) Publish(topic string, messages ...*message.Message) erro
 func (p *mockPublisher) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.closed++
 	return nil
+}
+
+func (p *mockPublisher) CloseCount() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.closed
 }
 
 type MockStore struct {
