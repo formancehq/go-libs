@@ -1,6 +1,7 @@
 package licence
 
 import (
+	"sync"
 	"time"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
@@ -12,6 +13,9 @@ type Licence struct {
 	jwtToken            string
 	licenceValidateTick time.Duration
 	appStoped           chan struct{}
+	stopOnce            sync.Once
+	wg                  sync.WaitGroup
+	validateToken       func() error
 
 	// Will be checked in claims (aud claim)
 	serviceName string
@@ -42,6 +46,7 @@ func NewLicence(
 
 func (l *Licence) run(licenceError chan error) {
 	ticker := time.NewTicker(l.licenceValidateTick)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -54,7 +59,14 @@ func (l *Licence) run(licenceError chan error) {
 			l.logger.Info("Licence check started")
 			if err := l.validate(); err != nil {
 				l.logger.Error("Licence check failed", err)
-				licenceError <- err
+				select {
+				case licenceError <- err:
+				default:
+					select {
+					case licenceError <- err:
+					case <-l.appStoped:
+					}
+				}
 				return
 			}
 			l.logger.Info("Licence check passed")
@@ -72,11 +84,20 @@ func (l *Licence) Start(licenceError chan error) error {
 	}
 	l.logger.Info("Licence check passed")
 
-	go l.run(licenceError)
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		l.run(licenceError)
+	}()
 
 	return nil
 }
 
 func (l *Licence) Stop() {
-	close(l.appStoped)
+	l.stopOnce.Do(func() {
+		if l.appStoped != nil {
+			close(l.appStoped)
+		}
+	})
+	l.wg.Wait()
 }
