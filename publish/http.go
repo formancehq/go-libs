@@ -32,11 +32,11 @@ func defaultHTTPMarshalMessageFunc() wHttp.MarshalMessageFunc {
 }
 
 func httpModule() fx.Option {
-	return fx.Options(
+	return fx.Module("publish-http",
 		fx.Provide(newHTTPPublisher),
 		fx.Provide(newHTTPPublisherConfig),
 		fx.Provide(defaultHTTPMarshalMessageFunc),
-		fx.Supply(http.DefaultClient),
+		fx.Supply(http.DefaultClient, fx.Private),
 		fx.Provide(func(p *wHttp.Publisher) message.Publisher {
 			return p
 		}),
