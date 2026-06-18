@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -110,5 +111,29 @@ func TestIAMConnectorReturnsBuildAuthTokenError(t *testing.T) {
 	_, err := connector.Connect(context.Background())
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected BuildAuthToken error %q, got %v", expectedErr, err)
+	}
+}
+
+func TestIAMConnectorParseErrorDoesNotLeakDSN(t *testing.T) {
+	dsn := "postgres://db-user:super-secret@%gh/mydb?sslmode=disable"
+	connector := &iamConnector{
+		dsn: dsn,
+		driver: &iamDriver{
+			awsConfig: aws.Config{Region: "us-east-1"},
+		},
+		logger: logging.Testing(),
+	}
+
+	_, err := connector.Connect(context.Background())
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if got := err.Error(); got != "parsing dsn" {
+		t.Fatalf("unexpected parse error: got %q", got)
+	}
+	for _, leaked := range []string{dsn, "super-secret"} {
+		if strings.Contains(err.Error(), leaked) {
+			t.Fatalf("parse error leaked %q in %q", leaked, err.Error())
+		}
 	}
 }

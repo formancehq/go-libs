@@ -59,7 +59,14 @@ func (l *Licence) run(licenceError chan error) {
 			l.logger.Info("Licence check started")
 			if err := l.validate(); err != nil {
 				l.logger.Error("Licence check failed", err)
-				licenceError <- err
+				select {
+				case licenceError <- err:
+				default:
+					select {
+					case licenceError <- err:
+					case <-l.appStoped:
+					}
+				}
 				return
 			}
 			l.logger.Info("Licence check passed")

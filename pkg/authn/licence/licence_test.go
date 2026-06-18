@@ -297,6 +297,56 @@ func TestLicence_StopWaitsForInFlightValidationBeforeChannelClose(t *testing.T) 
 	require.EqualError(t, err, "licence validation failed")
 }
 
+func TestLicence_StopDoesNotWaitForUnreadValidationError(t *testing.T) {
+	logger := &mockLogger{}
+	licence := NewLicence(
+		logger,
+		"unused-token",
+		10*time.Millisecond,
+		"test-service",
+		"test-cluster",
+		"test-issuer",
+	)
+
+	validationFailed := make(chan struct{})
+	var validateCalls atomic.Int32
+	licence.validateToken = func() error {
+		if validateCalls.Add(1) == 1 {
+			return nil
+		}
+
+		close(validationFailed)
+		return errors.New("licence validation failed")
+	}
+
+	licenceError := make(chan error)
+	require.NoError(t, licence.Start(licenceError))
+
+	select {
+	case <-validationFailed:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for licence validation to fail")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		licence.Stop()
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Stop to return")
+	}
+
+	select {
+	case err := <-licenceError:
+		t.Fatalf("unexpected licence error send after stop: %v", err)
+	default:
+	}
+}
+
 func TestValidateToken(t *testing.T) {
 	privateKey, pubPEM := generateTestRSAKeyPair(t)
 	setEmbeddedKey(t, pubPEM)

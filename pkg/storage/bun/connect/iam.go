@@ -52,7 +52,7 @@ type iamConnector struct {
 func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	databaseURL, err := dburl.Parse(i.dsn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "parsing dsn: %s", i.dsn)
+		return nil, errors.New("parsing dsn")
 	}
 
 	authenticationToken, err := func() (string, error) {
