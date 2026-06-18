@@ -129,5 +129,9 @@ func ClaimsFromRequest(r *http.Request, keySets map[string]oidc.KeySet) (*oidc.A
 		return claims, err
 	}
 
+	if err := oidc.CheckNotBefore(claims, 0); err != nil {
+		return claims, err
+	}
+
 	return claims, nil
 }

@@ -68,6 +68,10 @@ func (c *TokenClaims) GetIssuedAt() time.Time {
 	return c.IssuedAt.AsTime()
 }
 
+func (c *TokenClaims) GetNotBefore() time.Time {
+	return c.NotBefore.AsTime()
+}
+
 func (c *TokenClaims) GetNonce() string {
 	return c.Nonce
 }
@@ -139,6 +143,10 @@ type IDTokenClaims struct {
 // GetAccessTokenHash implements the IDTokenClaims interface
 func (t *IDTokenClaims) GetAccessTokenHash() string {
 	return t.AccessTokenHash
+}
+
+func (t *IDTokenClaims) GetNotBefore() time.Time {
+	return t.NotBefore.AsTime()
 }
 
 func (t *IDTokenClaims) SetUserInfo(i *UserInfo) {

@@ -27,6 +27,10 @@ type Claims interface {
 	GetAuthorizedParty() string
 }
 
+type NotBeforeClaims interface {
+	GetNotBefore() time.Time
+}
+
 type IDClaims interface {
 	Claims
 	GetAccessTokenHash() string
@@ -46,6 +50,7 @@ var (
 	ErrSignatureInvalidPayload = errors.New("signature does not match Payload")
 	ErrSignatureInvalid        = errors.New("invalid signature")
 	ErrExpired                 = errors.New("token has expired")
+	ErrNotBefore               = errors.New("token is not valid yet")
 	ErrIatMissing              = errors.New("issuedAt of token is missing")
 	ErrIatInFuture             = errors.New("issuedAt of token is in the future")
 	ErrIatToOld                = errors.New("issuedAt of token is to old")
@@ -193,6 +198,38 @@ func CheckExpiration(claims Claims, offset time.Duration) error {
 		return ErrExpired
 	}
 	return nil
+}
+
+func CheckNotBefore(claims NotBeforeClaims, offset time.Duration) error {
+	return checkNotBeforeAt(claims, offset, time.Now())
+}
+
+func checkNotBeforeAt(claims NotBeforeClaims, offset time.Duration, now time.Time) error {
+	notBefore := claims.GetNotBefore()
+	if notBefore.IsZero() {
+		return nil
+	}
+	nowWithOffset := now.Add(offset)
+	if nowWithOffset.Before(notBefore) {
+		return fmt.Errorf("%w: (nbf: %v, now with offset: %v)", ErrNotBefore, notBefore, nowWithOffset)
+	}
+	return nil
+}
+
+func CheckNotBeforePayload(payload []byte, offset time.Duration) error {
+	var claims payloadNotBeforeClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return err
+	}
+	return CheckNotBefore(claims, offset)
+}
+
+type payloadNotBeforeClaims struct {
+	NotBefore Time `json:"nbf,omitempty"`
+}
+
+func (c payloadNotBeforeClaims) GetNotBefore() time.Time {
+	return c.NotBefore.AsTime()
 }
 
 func CheckIssuedAt(claims Claims, maxAgeIAT, offset time.Duration) error {
