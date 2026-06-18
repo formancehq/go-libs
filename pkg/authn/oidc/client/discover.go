@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 	httphelper "github.com/formancehq/go-libs/v5/pkg/authn/oidc/http"
@@ -14,7 +13,7 @@ import (
 // It accepts an optional argument "wellknownUrl" which can be used to override the discovery endpoint url
 func Discover[V any](ctx context.Context, issuer string, httpClient *http.Client, wellKnownUrl ...string) (*V, error) {
 
-	wellKnown := strings.TrimSuffix(issuer, "/") + oidc.DiscoveryEndpoint
+	wellKnown := oidc.NormalizeIssuer(issuer) + oidc.DiscoveryEndpoint
 	if len(wellKnownUrl) == 1 && wellKnownUrl[0] != "" {
 		wellKnown = wellKnownUrl[0]
 	}
@@ -27,6 +26,17 @@ func Discover[V any](ctx context.Context, issuer string, httpClient *http.Client
 	if err != nil {
 		return nil, errors.Join(oidc.ErrDiscoveryFailed, err)
 	}
+	if err := validateDiscoveredIssuer(issuer, discoveryConfig); err != nil {
+		return nil, errors.Join(oidc.ErrDiscoveryFailed, err)
+	}
 
 	return discoveryConfig, nil
+}
+
+func validateDiscoveredIssuer[V any](issuer string, discoveryConfig *V) error {
+	issuerConfig, ok := any(discoveryConfig).(oidc.IssuerGetter)
+	if !ok {
+		return nil
+	}
+	return oidc.CheckDiscoveredIssuer(issuer, issuerConfig)
 }

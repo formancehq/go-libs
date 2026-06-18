@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -162,6 +164,30 @@ type DiscoveryConfiguration struct {
 	BackChannelLogoutSessionSupported bool `json:"backchannel_logout_session_supported,omitempty"`
 }
 
+func (d *DiscoveryConfiguration) GetIssuer() string {
+	if d == nil {
+		return ""
+	}
+	return d.Issuer
+}
+
+type IssuerGetter interface {
+	GetIssuer() string
+}
+
+func NormalizeIssuer(issuer string) string {
+	return strings.TrimRight(issuer, "/")
+}
+
+func CheckDiscoveredIssuer(issuer string, discovered IssuerGetter) error {
+	expectedIssuer := issuer
+	discoveredIssuer := discovered.GetIssuer()
+	if discoveredIssuer != expectedIssuer {
+		return fmt.Errorf("%w: Expected: %s, got: %s", ErrIssuerInvalid, expectedIssuer, discoveredIssuer)
+	}
+	return nil
+}
+
 type AuthMethod string
 
 const (
@@ -172,7 +198,7 @@ const (
 )
 
 func Discover(ctx context.Context, issuer, discoveryPath string) (*DiscoveryConfiguration, error) {
-	discoveryURL := issuer + discoveryPath
+	discoveryURL := NormalizeIssuer(issuer) + discoveryPath
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
 	if err != nil {
@@ -193,6 +219,9 @@ func Discover(ctx context.Context, issuer, discoveryPath string) (*DiscoveryConf
 	}
 
 	if err := json.NewDecoder(rsp.Body).Decode(discoveryConfig); err != nil {
+		return nil, errors.Join(ErrDiscoveryFailed, err)
+	}
+	if err := CheckDiscoveredIssuer(issuer, discoveryConfig); err != nil {
 		return nil, errors.Join(ErrDiscoveryFailed, err)
 	}
 

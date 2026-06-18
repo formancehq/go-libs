@@ -30,10 +30,11 @@ func setupTestOIDCServer(t *testing.T) (*httptest.Server, string, chan bool) {
 	// Discovery endpoint
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
 		discoveryCalled <- true
+		issuer := "http://" + r.Host
 
 		config := oidc.DiscoveryConfiguration{
-			Issuer:  r.URL.Scheme + "://" + r.Host,
-			JwksURI: r.URL.Scheme + "://" + r.Host + "/.well-known/jwks.json",
+			Issuer:  issuer,
+			JwksURI: issuer + "/.well-known/jwks.json",
 		}
 
 		w.Header().Set("Content-Type", "application/json")
