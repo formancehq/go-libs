@@ -51,7 +51,7 @@ func Module(cfg ModuleConfig) fx.Option {
 
 	if cfg.Enabled {
 		options = append(options,
-			fx.Supply(http.DefaultClient),
+			fx.Supply(http.DefaultClient, fx.Private),
 			fx.Provide(func(httpClient *http.Client) (Authenticator, error) {
 				retryableHttpClient := retryablehttp.NewClient()
 				retryableHttpClient.RetryMax = cfg.ReadKeySetMaxRetries
