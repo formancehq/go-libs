@@ -19,24 +19,38 @@ import (
 
 // NewEventMessage builds the Watermill message used for audit events.
 func NewEventMessage(ctx context.Context, appName string, payload Payload) *message.Message {
-	return publish.NewMessage(
-		ctx,
-		publish.EventMessage{
-			Date:    time.Now().UTC(),
-			App:     appName,
-			Version: EventVersion,
-			Type:    EventTypeAudit,
-			Payload: payload,
-		},
-	)
+	msg, err := NewEventMessageWithError(ctx, appName, payload)
+	if err == nil {
+		return msg
+	}
+
+	logging.FromContext(ctx).Errorf("failed to marshal audit message: %v", err)
+	return publish.NewMessage(ctx, newPublishEventMessage(appName, payload))
+}
+
+// NewEventMessageWithError builds the Watermill message used for audit events.
+func NewEventMessageWithError(ctx context.Context, appName string, payload Payload) (*message.Message, error) {
+	return publish.NewMessageWithError(ctx, newPublishEventMessage(appName, payload))
+}
+
+func newPublishEventMessage(appName string, payload Payload) publish.EventMessage {
+	return publish.EventMessage{
+		Date:    time.Now().UTC(),
+		App:     appName,
+		Version: EventVersion,
+		Type:    EventTypeAudit,
+		Payload: payload,
+	}
 }
 
 // PublishEventWithError publishes an audit event to the configured publisher.
 func PublishEventWithError(ctx context.Context, publisher message.Publisher, topicName string, appName string, payload Payload) error {
-	return publisher.Publish(
-		topicName,
-		NewEventMessage(ctx, appName, payload),
-	)
+	msg, err := NewEventMessageWithError(ctx, appName, payload)
+	if err != nil {
+		return err
+	}
+
+	return publisher.Publish(topicName, msg)
 }
 
 // PublishEvent publishes an audit event to the configured publisher.

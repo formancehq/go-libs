@@ -42,9 +42,11 @@ func (z *ZapLogger) Tracef(format string, args ...any) {
 func (z *ZapLogger) Trace(args ...any)                 { z.sugar.Log(zapTraceLevel, args...) }
 func (z *ZapLogger) Debugf(format string, args ...any) { z.sugar.Debugf(format, args...) }
 func (z *ZapLogger) Infof(format string, args ...any)  { z.sugar.Infof(format, args...) }
+func (z *ZapLogger) Warnf(format string, args ...any)  { z.sugar.Warnf(format, args...) }
 func (z *ZapLogger) Errorf(format string, args ...any) { z.sugar.Errorf(format, args...) }
 func (z *ZapLogger) Debug(args ...any)                 { z.sugar.Debug(args...) }
 func (z *ZapLogger) Info(args ...any)                  { z.sugar.Info(args...) }
+func (z *ZapLogger) Warn(args ...any)                  { z.sugar.Warn(args...) }
 func (z *ZapLogger) Error(args ...any)                 { z.sugar.Error(args...) }
 
 func (z *ZapLogger) Enabled(level Level) bool {

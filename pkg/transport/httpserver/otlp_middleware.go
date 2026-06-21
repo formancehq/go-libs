@@ -5,53 +5,204 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 
+	"github.com/felixge/httpsnoop"
 	"github.com/riandyrn/otelchi"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
+const (
+	debugBodyAttributeLimit   = 64 * 1024
+	debugHeaderAttributeLimit = 8 * 1024
+	debugRedactedValue        = "[REDACTED]"
+)
+
 type responseWriter struct {
-	http.ResponseWriter
-	data        []byte
-	statusCode  int
-	captureBody bool
+	data          []byte
+	statusCode    int
+	captureBody   bool
+	bodyLimit     int
+	bodyTruncated bool
+	wroteHeader   bool
 }
 
-func (w *responseWriter) WriteHeader(code int) {
+func (w *responseWriter) wrap(writer http.ResponseWriter) http.ResponseWriter {
+	return httpsnoop.Wrap(writer, httpsnoop.Hooks{
+		WriteHeader: func(next httpsnoop.WriteHeaderFunc) httpsnoop.WriteHeaderFunc {
+			return func(code int) {
+				if w.writeHeader(code) {
+					next(code)
+				}
+			}
+		},
+		Write: func(next httpsnoop.WriteFunc) httpsnoop.WriteFunc {
+			return func(data []byte) (int, error) {
+				w.write()
+
+				n, err := next(data)
+				if w.captureBody && n > 0 {
+					w.capture(data[:n])
+				}
+				return n, err
+			}
+		},
+		Flush: func(next httpsnoop.FlushFunc) httpsnoop.FlushFunc {
+			return func() {
+				w.write()
+				next()
+			}
+		},
+		ReadFrom: func(next httpsnoop.ReadFromFunc) httpsnoop.ReadFromFunc {
+			return func(src io.Reader) (int64, error) {
+				w.write()
+				if w.captureBody {
+					src = &captureReader{
+						reader:  src,
+						capture: w.capture,
+					}
+				}
+				return next(src)
+			}
+		},
+	})
+}
+
+func (w *responseWriter) writeHeader(code int) bool {
+	if code == http.StatusSwitchingProtocols {
+		if w.wroteHeader {
+			return false
+		}
+		w.wroteHeader = true
+		w.statusCode = code
+		return true
+	}
+	if code >= 100 && code <= 199 {
+		return true
+	}
+	if w.wroteHeader {
+		return false
+	}
+
+	w.wroteHeader = true
 	w.statusCode = code
-	if !w.captureBody {
-		w.ResponseWriter.WriteHeader(code)
+	return true
+}
+
+func (w *responseWriter) write() {
+	if !w.wroteHeader {
+		w.wroteHeader = true
+		w.statusCode = http.StatusOK
 	}
 }
 
-func (w *responseWriter) Write(data []byte) (int, error) {
-	if !w.captureBody {
-		return w.ResponseWriter.Write(data)
+func (w *responseWriter) capture(data []byte) {
+	if len(data) == 0 {
+		return
 	}
+
+	remaining := w.bodyLimit - len(w.data)
+	if remaining <= 0 {
+		w.bodyTruncated = true
+		return
+	}
+
+	if len(data) > remaining {
+		w.data = append(w.data, data[:remaining]...)
+		w.bodyTruncated = true
+		return
+	}
+
 	w.data = append(w.data, data...)
-	return len(data), nil
 }
 
-func (w *responseWriter) finalize() {
-	if !w.captureBody {
-		return
+type captureReader struct {
+	reader  io.Reader
+	capture func([]byte)
+}
+
+func (r *captureReader) Read(data []byte) (int, error) {
+	n, err := r.reader.Read(data)
+	if n > 0 {
+		r.capture(data[:n])
 	}
-	if w.statusCode != 0 {
-		w.ResponseWriter.WriteHeader(w.statusCode)
-	}
-	if len(w.data) == 0 {
-		return
-	}
-	_, err := w.ResponseWriter.Write(w.data)
-	if err != nil {
-		panic(err)
-	}
+	return n, err
 }
 
 func isJSONContent(contentType string) bool {
 	return strings.Contains(strings.ToLower(contentType), "application/json")
+}
+
+func formatDebugHeaders(headers http.Header, limit int) (string, bool) {
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var builder strings.Builder
+	for _, name := range names {
+		value := strings.Join(headers[name], ", ")
+		if isSensitiveHeader(name) {
+			value = debugRedactedValue
+		}
+
+		part := fmt.Sprintf("%s: %s", name, value)
+		if builder.Len() > 0 {
+			part = "\n" + part
+		}
+		if appendLimitedString(&builder, part, limit) {
+			return builder.String(), true
+		}
+	}
+
+	return builder.String(), false
+}
+
+func isSensitiveHeader(name string) bool {
+	switch strings.ToLower(name) {
+	case "authorization", "cookie", "proxy-authorization", "set-cookie":
+		return true
+	default:
+		return false
+	}
+}
+
+func appendLimitedString(builder *strings.Builder, value string, limit int) bool {
+	remaining := limit - builder.Len()
+	if remaining <= 0 {
+		return len(value) > 0
+	}
+	if len(value) > remaining {
+		builder.WriteString(value[:remaining])
+		return true
+	}
+	builder.WriteString(value)
+	return false
+}
+
+type bodyReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
+func captureDebugBody(body io.ReadCloser, limit int) ([]byte, bool, io.ReadCloser, error) {
+	data, err := io.ReadAll(io.LimitReader(body, int64(limit)+1))
+	replacement := &bodyReadCloser{
+		Reader: io.MultiReader(bytes.NewReader(data), body),
+		Closer: body,
+	}
+	if err != nil {
+		return nil, false, replacement, err
+	}
+
+	if len(data) > limit {
+		return data[:limit], true, replacement, nil
+	}
+
+	return data, false, replacement, nil
 }
 
 func OTLPMiddleware(serverName string, debug bool, opts ...Option) func(h http.Handler) http.Handler {
@@ -85,30 +236,40 @@ func OTLPMiddleware(serverName string, debug bool, opts ...Option) func(h http.H
 
 			if debug {
 				// Debug: request headers
-				headerParts := make([]string, 0, len(r.Header))
-				for name, values := range r.Header {
-					headerParts = append(headerParts, fmt.Sprintf("%s: %s", name, strings.Join(values, ", ")))
+				headers, truncated := formatDebugHeaders(r.Header, debugHeaderAttributeLimit)
+				span.SetAttributes(attribute.String("http.request.headers", headers))
+				if truncated {
+					span.SetAttributes(attribute.Bool("http.request.headers.truncated", true))
 				}
-				span.SetAttributes(attribute.String("http.request.headers", strings.Join(headerParts, "\n")))
 
 				// Debug: request body (JSON only)
 				if captureBody && r.Body != nil {
-					body, err := io.ReadAll(r.Body)
+					body, truncated, replacement, err := captureDebugBody(r.Body, debugBodyAttributeLimit)
+					r.Body = replacement
 					if err == nil {
 						span.SetAttributes(attribute.String("http.request.body", string(body)))
-						r.Body = io.NopCloser(bytes.NewReader(body))
+						if truncated {
+							span.SetAttributes(attribute.Bool("http.request.body.truncated", true))
+						}
 					}
 				}
 			}
 
-			rw := &responseWriter{
-				ResponseWriter: w,
-				data:           make([]byte, 0, 1024),
-				captureBody:    captureBody,
+			if !debug {
+				metrics := httpsnoop.CaptureMetricsFn(w, func(w http.ResponseWriter) {
+					h.ServeHTTP(w, r)
+				})
+				span.SetAttributes(attribute.Int("http.response.status_code", metrics.Code))
+				return
 			}
-			defer func() {
-				rw.finalize()
 
+			rw := &responseWriter{
+				data:        make([]byte, 0, 1024),
+				captureBody: captureBody,
+				bodyLimit:   debugBodyAttributeLimit,
+			}
+			ww := rw.wrap(w)
+			defer func() {
 				// Always log status code
 				statusCode := rw.statusCode
 				if statusCode == 0 {
@@ -118,20 +279,23 @@ func OTLPMiddleware(serverName string, debug bool, opts ...Option) func(h http.H
 
 				if debug {
 					// Debug: response headers
-					respHeaderParts := make([]string, 0, len(rw.Header()))
-					for name, values := range rw.Header() {
-						respHeaderParts = append(respHeaderParts, fmt.Sprintf("%s: %s", name, strings.Join(values, ", ")))
+					headers, truncated := formatDebugHeaders(ww.Header(), debugHeaderAttributeLimit)
+					span.SetAttributes(attribute.String("http.response.headers", headers))
+					if truncated {
+						span.SetAttributes(attribute.Bool("http.response.headers.truncated", true))
 					}
-					span.SetAttributes(attribute.String("http.response.headers", strings.Join(respHeaderParts, "\n")))
 
 					// Debug: response body (only if we captured it, i.e. JSON content)
 					if captureBody && len(rw.data) > 0 {
 						span.SetAttributes(attribute.String("http.response.body", string(rw.data)))
+						if rw.bodyTruncated {
+							span.SetAttributes(attribute.Bool("http.response.body.truncated", true))
+						}
 					}
 				}
 			}()
 
-			h.ServeHTTP(rw, r)
+			h.ServeHTTP(ww, r)
 		}))
 	}
 }

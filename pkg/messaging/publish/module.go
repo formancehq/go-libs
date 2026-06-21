@@ -52,7 +52,16 @@ func (m *memoryPublisher) Close() error {
 }
 
 func (m *memoryPublisher) AllMessages() map[string][]*message.Message {
-	return m.messages
+	m.Lock()
+	defer m.Unlock()
+
+	// Return a shallow snapshot: callers can change the map or topic slices
+	// without mutating the publisher, while message payloads are not duplicated.
+	snapshot := make(map[string][]*message.Message, len(m.messages))
+	for topic, messages := range m.messages {
+		snapshot[topic] = append([]*message.Message(nil), messages...)
+	}
+	return snapshot
 }
 
 var _ message.Publisher = (*memoryPublisher)(nil)
