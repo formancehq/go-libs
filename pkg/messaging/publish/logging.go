@@ -33,7 +33,8 @@ func (w watermillLoggerAdapter) Trace(msg string, fields watermill.LogFields) {
 
 func (w watermillLoggerAdapter) With(fields watermill.LogFields) watermill.LoggerAdapter {
 	return watermillLoggerAdapter{
-		Logger: w.Logger.WithFields(fields),
+		includeTraceLogs: w.includeTraceLogs,
+		Logger:           w.Logger.WithFields(fields),
 	}
 }
 

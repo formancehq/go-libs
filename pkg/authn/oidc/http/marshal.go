@@ -14,7 +14,8 @@ func MarshalJSON(w http.ResponseWriter, i any) {
 
 func MarshalJSONWithStatus(w http.ResponseWriter, i any, status int) {
 	w.Header().Set("content-type", "application/json")
-	if i == nil || (reflect.ValueOf(i).Kind() == reflect.Ptr && reflect.ValueOf(i).IsNil()) {
+	if isNilJSONValue(i) {
+		w.WriteHeader(status)
 		return
 	}
 	data, err := json.Marshal(i)
@@ -25,6 +26,19 @@ func MarshalJSONWithStatus(w http.ResponseWriter, i any, status int) {
 
 	w.WriteHeader(status)
 	_, _ = w.Write(data)
+}
+
+func isNilJSONValue(i any) bool {
+	if i == nil {
+		return true
+	}
+	value := reflect.ValueOf(i)
+	switch value.Kind() {
+	case reflect.Pointer:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 func ConcatenateJSON(first, second []byte) ([]byte, error) {

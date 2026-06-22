@@ -88,3 +88,65 @@ func TestStartServerGracefulShutdownDoesNotLogError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.NotContains(t, buf.String(), "failed to serve")
 }
+
+func TestStartServerSetsDefaultTimeouts(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	server := serverport.NewServer(serverPortDiscr, serverport.WithListener(listener))
+	var configured struct {
+		readHeaderTimeout time.Duration
+		readTimeout       time.Duration
+		writeTimeout      time.Duration
+		idleTimeout       time.Duration
+	}
+
+	stop, err := startServer(
+		logging.TestingContext(),
+		server,
+		http.NewServeMux(),
+		func(server *http.Server) {
+			configured.readHeaderTimeout = server.ReadHeaderTimeout
+			configured.readTimeout = server.ReadTimeout
+			configured.writeTimeout = server.WriteTimeout
+			configured.idleTimeout = server.IdleTimeout
+		},
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = stop(context.Background())
+	})
+
+	require.Equal(t, 10*time.Second, configured.readHeaderTimeout)
+	require.Zero(t, configured.readTimeout)
+	require.Zero(t, configured.writeTimeout)
+	require.Equal(t, 120*time.Second, configured.idleTimeout)
+}
+
+func TestStartServerAllowsReadTimeoutOverride(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	server := serverport.NewServer(serverPortDiscr, serverport.WithListener(listener))
+	var configured time.Duration
+
+	stop, err := startServer(
+		logging.TestingContext(),
+		server,
+		http.NewServeMux(),
+		func(server *http.Server) {
+			server.ReadTimeout = time.Minute
+			configured = server.ReadTimeout
+		},
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = stop(context.Background())
+	})
+
+	require.Equal(t, time.Minute, configured)
+}

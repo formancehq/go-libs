@@ -17,6 +17,8 @@ type LogrusLogger struct {
 		Debug(args ...any)
 		Infof(format string, args ...any)
 		Info(args ...any)
+		Warnf(format string, args ...any)
+		Warn(args ...any)
 		Errorf(format string, args ...any)
 		Error(args ...any)
 		WithFields(fields logrus.Fields) *logrus.Entry
@@ -55,6 +57,12 @@ func (l *LogrusLogger) Infof(fmt string, args ...any) {
 }
 func (l *LogrusLogger) Info(args ...any) {
 	l.entry.Info(args...)
+}
+func (l *LogrusLogger) Warnf(fmt string, args ...any) {
+	l.entry.Warnf(fmt, args...)
+}
+func (l *LogrusLogger) Warn(args ...any) {
+	l.entry.Warn(args...)
 }
 func (l *LogrusLogger) Errorf(fmt string, args ...any) {
 	l.entry.Errorf(fmt, args...)

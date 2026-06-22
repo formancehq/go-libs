@@ -3,6 +3,7 @@ package collections_test
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -96,6 +97,30 @@ func TestLinkedList(t *testing.T) {
 		require.Equal(t, 2, list.Length())
 	})
 
+	t.Run("RemoveFirstCallbackCanReenterList", func(t *testing.T) {
+		t.Parallel()
+		list := collectionutils.NewLinkedList[int]()
+		list.Append(1, 2, 3)
+
+		done := make(chan *collectionutils.LinkedListNode[int], 1)
+		go func() {
+			done <- list.RemoveFirst(func(i int) bool {
+				require.Equal(t, 3, list.Length())
+				require.Equal(t, []int{1, 2, 3}, list.Slice())
+				return i == 2
+			})
+		}()
+
+		select {
+		case node := <-done:
+			require.NotNil(t, node)
+			require.Equal(t, 2, node.Value())
+			require.Equal(t, []int{1, 3}, list.Slice())
+		case <-time.After(time.Second):
+			t.Fatal("RemoveFirst callback deadlocked when reentering the list")
+		}
+	})
+
 	t.Run("RemoveValue", func(t *testing.T) {
 		t.Parallel()
 		list := collectionutils.NewLinkedList[int]()
@@ -116,6 +141,43 @@ func TestLinkedList(t *testing.T) {
 		node = list.RemoveValue(99)
 		require.Nil(t, node)
 		require.Equal(t, 4, list.Length())
+	})
+
+	t.Run("RemoveValueNonComparable", func(t *testing.T) {
+		t.Parallel()
+		list := collectionutils.NewLinkedList[[]int]()
+		list.Append([]int{1}, []int{2})
+
+		require.NotPanics(t, func() {
+			node := list.RemoveValue([]int{1})
+			require.Nil(t, node)
+		})
+		require.Equal(t, [][]int{{1}, {2}}, list.Slice())
+
+		interfaceList := collectionutils.NewLinkedList[any]()
+		interfaceList.Append([]int{1}, "match")
+
+		require.NotPanics(t, func() {
+			node := interfaceList.RemoveValue([]int{1})
+			require.Nil(t, node)
+		})
+
+		node := interfaceList.RemoveValue("match")
+		require.NotNil(t, node)
+		require.Equal(t, "match", node.Value())
+		require.Equal(t, []any{[]int{1}}, interfaceList.Slice())
+
+		type interfaceField struct {
+			value any
+		}
+		structList := collectionutils.NewLinkedList[interfaceField]()
+		structList.Append(interfaceField{value: []int{1}})
+
+		require.NotPanics(t, func() {
+			node := structList.RemoveValue(interfaceField{value: []int{1}})
+			require.Nil(t, node)
+		})
+		require.Equal(t, []interfaceField{{value: []int{1}}}, structList.Slice())
 	})
 
 	t.Run("TakeFirst", func(t *testing.T) {
@@ -190,6 +252,33 @@ func TestLinkedList(t *testing.T) {
 		require.False(t, called)
 	})
 
+	t.Run("ForEachCallbackCanReenterList", func(t *testing.T) {
+		t.Parallel()
+		list := collectionutils.NewLinkedList[int]()
+		list.Append(1, 2, 3)
+
+		done := make(chan []int, 1)
+		go func() {
+			var values []int
+			list.ForEach(func(i int) {
+				values = append(values, i)
+				require.NotZero(t, list.Length())
+				if i == 2 {
+					list.Append(4)
+				}
+			})
+			done <- values
+		}()
+
+		select {
+		case values := <-done:
+			require.Equal(t, []int{1, 2, 3}, values)
+			require.Equal(t, []int{1, 2, 3, 4}, list.Slice())
+		case <-time.After(time.Second):
+			t.Fatal("ForEach callback deadlocked when reentering the list")
+		}
+	})
+
 	t.Run("Slice", func(t *testing.T) {
 		t.Parallel()
 		list := collectionutils.NewLinkedList[int]()
@@ -227,6 +316,7 @@ func TestLinkedList(t *testing.T) {
 		list.Append(1, 2, 3)
 
 		node = list.FirstNode().Next() // Node with value 2
+		node.Remove()
 		node.Remove()
 
 		require.Equal(t, 2, list.Length())
@@ -303,5 +393,36 @@ func TestLinkedList(t *testing.T) {
 		// Sum should be 10 * sum of numbers from 0 to 99
 		expectedSum := 10 * (99 * 100 / 2)
 		require.Equal(t, expectedSum, sum)
+	})
+
+	t.Run("ConcurrentTakeFirstSliceAndFirstNode", func(t *testing.T) {
+		t.Parallel()
+		list := collectionutils.NewLinkedList[int]()
+		list.Append(1, 2, 3, 4, 5)
+
+		var wg sync.WaitGroup
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func(base int) {
+				defer wg.Done()
+				for j := 0; j < 1000; j++ {
+					list.Append(base*1000 + j)
+					_ = list.TakeFirst()
+				}
+			}(i)
+		}
+
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < 1000; j++ {
+					_ = list.Slice()
+					_ = list.FirstNode()
+				}
+			}()
+		}
+
+		wg.Wait()
 	})
 }

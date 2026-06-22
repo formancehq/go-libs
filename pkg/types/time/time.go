@@ -109,7 +109,7 @@ func (t Time) MarshalJSON() ([]byte, error) {
 }
 
 func (t *Time) UnmarshalJSON(data []byte) error {
-	if len(data) == 0 {
+	if len(data) == 0 || string(data) == "null" {
 		*t = Time{}
 		return nil
 	}

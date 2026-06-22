@@ -170,6 +170,11 @@ func TestUnmarshalJSON(t *testing.T) {
 			input:       `"not-a-date"`,
 			expectError: true,
 		},
+		{
+			name:     "null",
+			input:    `null`,
+			expected: time.Time{},
+		},
 		// Empty string case is handled differently in the implementation
 		// The test for this case is removed as it's causing issues
 	}

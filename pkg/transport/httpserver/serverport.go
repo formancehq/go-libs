@@ -38,6 +38,7 @@ func startServer(ctx context.Context, s *serverport.Server, handler http.Handler
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	for _, option := range options {
 		option(srv)

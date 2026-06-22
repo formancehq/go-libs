@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/felixge/httpsnoop"
+
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
@@ -14,6 +16,10 @@ type loggingResponseWriter struct {
 
 func NewLoggingResponseWriter(w http.ResponseWriter) *loggingResponseWriter {
 	return &loggingResponseWriter{w, http.StatusOK}
+}
+
+func (lrw *loggingResponseWriter) Unwrap() http.ResponseWriter {
+	return lrw.ResponseWriter
 }
 
 func (lrw *loggingResponseWriter) WriteHeader(statusCode int) {
@@ -37,12 +43,14 @@ func LoggerMiddleware(l logging.Logger, opts ...Option) func(h http.Handler) htt
 			start := time.Now()
 			logger := logging.FromContext(r.Context())
 
-			rec := NewLoggingResponseWriter(w)
 			// copy
 			method := r.Method
 			path := r.URL.Path
 
-			h.ServeHTTP(rec, r)
+			// httpsnoop defaults Code to StatusOK when the handler returns
+			// without writing, matching net/http's implicit 200 response.
+			metrics := httpsnoop.CaptureMetrics(h, w, r)
+			statusCode := metrics.Code
 			latency := time.Since(start)
 
 			logger = logger.WithFields(map[string]interface{}{
@@ -50,9 +58,9 @@ func LoggerMiddleware(l logging.Logger, opts ...Option) func(h http.Handler) htt
 				"path":       path,
 				"latency":    latency,
 				"user_agent": r.UserAgent(),
-				"status":     rec.statusCode,
+				"status":     statusCode,
 			})
-			if rec.statusCode >= 400 {
+			if statusCode >= 400 {
 				logger.Error("Request")
 			} else {
 				logger.Info("Request")

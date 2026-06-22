@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 )
 
 type ServerInfo struct {
-	started chan struct{}
-	address string
+	started     chan struct{}
+	startedOnce sync.Once
+	address     string
 }
 
 type serverInfoContextKey string
@@ -49,9 +51,10 @@ func StartedServer(ctx context.Context, listener net.Listener, discr string) {
 		return
 	}
 
-	si.address = listener.Addr().String()
-
-	close(si.started)
+	si.startedOnce.Do(func() {
+		si.address = listener.Addr().String()
+		close(si.started)
+	})
 }
 
 type Server struct {
