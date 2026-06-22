@@ -174,6 +174,10 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 			)
 
 			sensitivePath := ho.isSensitivePath(r.URL.Path)
+			queryParams := r.URL.Query()
+			if sensitivePath {
+				queryParams = nil
+			}
 
 			if !isStreamRequest(r) && !sensitivePath {
 				body, requestBodyTruncated, err = captureRequestBody(r, ho.maxBodyBytes)
@@ -219,6 +223,7 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 					Request: audit.HTTPRequest{
 						Method:        r.Method,
 						Path:          r.URL.Path,
+						QueryParams:   queryParams,
 						Host:          r.Host,
 						Header:        requestHeaders,
 						Body:          string(body),
