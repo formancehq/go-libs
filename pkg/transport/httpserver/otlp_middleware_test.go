@@ -96,26 +96,31 @@ func TestOTLPMiddlewareDebugDoesNotPanicOnResponseWriteError(t *testing.T) {
 	})
 }
 
-func TestOTLPMiddlewareDebugRecordsSwitchingProtocolsStatus(t *testing.T) {
-	spanRecorder := tracetest.NewSpanRecorder()
-	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	previousTracerProvider := otel.GetTracerProvider()
-	otel.SetTracerProvider(tracerProvider)
-	t.Cleanup(func() {
-		otel.SetTracerProvider(previousTracerProvider)
-		require.NoError(t, tracerProvider.Shutdown(context.Background()))
-	})
+func TestOTLPMiddlewareRecordsSwitchingProtocolsStatus(t *testing.T) {
+	for _, debug := range []bool{false, true} {
+		t.Run(debugName(debug), func(t *testing.T) {
+			spanRecorder := tracetest.NewSpanRecorder()
+			tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+			previousTracerProvider := otel.GetTracerProvider()
+			otel.SetTracerProvider(tracerProvider)
+			t.Cleanup(func() {
+				otel.SetTracerProvider(previousTracerProvider)
+				require.NoError(t, tracerProvider.Shutdown(context.Background()))
+			})
 
-	handler := OTLPMiddleware("test-server", true)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusSwitchingProtocols)
-	}))
+			handler := OTLPMiddleware("test-server", debug)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusSwitchingProtocols)
+			}))
 
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/upgrade", nil))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/upgrade", nil))
+			require.NoError(t, tracerProvider.ForceFlush(context.Background()))
 
-	require.Equal(t, http.StatusSwitchingProtocols, rec.Code)
-	attrs := recordedSpanAttributes(t, spanRecorder)
-	require.Equal(t, int64(http.StatusSwitchingProtocols), attrs["http.response.status_code"].AsInt64())
+			require.Equal(t, http.StatusSwitchingProtocols, rec.Code)
+			attrs := recordedSpanAttributesWithKey(t, spanRecorder, "http.response.status_code")
+			require.Equal(t, int64(http.StatusSwitchingProtocols), attrs["http.response.status_code"].AsInt64())
+		})
+	}
 }
 
 func TestOTLPMiddlewareNonDebugRecordsImplicitOKStatus(t *testing.T) {

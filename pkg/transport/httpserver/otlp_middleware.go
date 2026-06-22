@@ -255,16 +255,6 @@ func OTLPMiddleware(serverName string, debug bool, opts ...Option) func(h http.H
 				}
 			}
 
-			if !debug {
-				// httpsnoop defaults Code to StatusOK when the handler returns
-				// without writing, matching net/http's implicit 200 response.
-				metrics := httpsnoop.CaptureMetricsFn(w, func(w http.ResponseWriter) {
-					h.ServeHTTP(w, r)
-				})
-				span.SetAttributes(attribute.Int("http.response.status_code", metrics.Code))
-				return
-			}
-
 			rw := &responseWriter{
 				data:        make([]byte, 0, 1024),
 				captureBody: captureBody,
