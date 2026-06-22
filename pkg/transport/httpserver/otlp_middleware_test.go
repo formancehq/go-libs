@@ -96,6 +96,28 @@ func TestOTLPMiddlewareDebugDoesNotPanicOnResponseWriteError(t *testing.T) {
 	})
 }
 
+func TestOTLPMiddlewareDebugPreservesRequestBodyReadError(t *testing.T) {
+	readErr := errors.New("request read failed")
+	requestBody := `{"partial":`
+	handler := OTLPMiddleware("test-server", true)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.ErrorIs(t, err, readErr)
+		require.Equal(t, requestBody, string(body))
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/test", &partialErrorReadCloser{
+		data: []byte(requestBody),
+		err:  readErr,
+	})
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestOTLPMiddlewareRecordsSwitchingProtocolsStatus(t *testing.T) {
 	for _, debug := range []bool{false, true} {
 		t.Run(debugName(debug), func(t *testing.T) {
@@ -355,3 +377,21 @@ func (w *failingResponseWriter) Write([]byte) (int, error) {
 }
 
 func (w *failingResponseWriter) WriteHeader(int) {}
+
+type partialErrorReadCloser struct {
+	data []byte
+	err  error
+}
+
+func (r *partialErrorReadCloser) Read(data []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, r.err
+	}
+	n := copy(data, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
+func (r *partialErrorReadCloser) Close() error {
+	return nil
+}

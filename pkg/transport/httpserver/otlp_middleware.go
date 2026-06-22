@@ -190,19 +190,43 @@ type bodyReadCloser struct {
 
 func captureDebugBody(body io.ReadCloser, limit int) ([]byte, bool, io.ReadCloser, error) {
 	data, err := io.ReadAll(io.LimitReader(body, int64(limit)+1))
+	if err != nil {
+		replacement := &bodyReadCloser{
+			Reader: &readErrorReplayReader{
+				reader: bytes.NewReader(data),
+				err:    err,
+			},
+			Closer: body,
+		}
+		return nil, false, replacement, err
+	}
+
 	replacement := &bodyReadCloser{
 		Reader: io.MultiReader(bytes.NewReader(data), body),
 		Closer: body,
 	}
-	if err != nil {
-		return nil, false, replacement, err
-	}
-
 	if len(data) > limit {
 		return data[:limit], true, replacement, nil
 	}
 
 	return data, false, replacement, nil
+}
+
+type readErrorReplayReader struct {
+	reader      *bytes.Reader
+	err         error
+	errReturned bool
+}
+
+func (r *readErrorReplayReader) Read(data []byte) (int, error) {
+	if r.reader.Len() > 0 {
+		return r.reader.Read(data)
+	}
+	if !r.errReturned {
+		r.errReturned = true
+		return 0, r.err
+	}
+	return 0, io.EOF
 }
 
 func OTLPMiddleware(serverName string, debug bool, opts ...Option) func(h http.Handler) http.Handler {
