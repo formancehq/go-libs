@@ -28,26 +28,6 @@ func TestMarshalJSONWithStatusWritesStatusWithoutBodyForNilJSONValues(t *testing
 			})(nil),
 			status: stdhttp.StatusAccepted,
 		},
-		{
-			name:   "nil map",
-			body:   map[string]string(nil),
-			status: stdhttp.StatusCreated,
-		},
-		{
-			name:   "nil slice",
-			body:   []string(nil),
-			status: stdhttp.StatusOK,
-		},
-		{
-			name:   "nil channel",
-			body:   (chan string)(nil),
-			status: stdhttp.StatusOK,
-		},
-		{
-			name:   "nil function",
-			body:   (func())(nil),
-			status: stdhttp.StatusOK,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -90,6 +70,16 @@ func TestMarshalJSONWithStatusWritesBodyForNonNilJSONValues(t *testing.T) {
 			body:     []string{},
 			expected: `[]`,
 		},
+		{
+			name:     "nil map",
+			body:     map[string]string(nil),
+			expected: `null`,
+		},
+		{
+			name:     "nil slice",
+			body:     []string(nil),
+			expected: `null`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -103,6 +93,37 @@ func TestMarshalJSONWithStatusWritesBodyForNonNilJSONValues(t *testing.T) {
 			require.Equal(t, stdhttp.StatusAccepted, recorder.Code)
 			require.JSONEq(t, tc.expected, recorder.Body.String())
 			require.Equal(t, "application/json", recorder.Header().Get("content-type"))
+		})
+	}
+}
+
+func TestMarshalJSONWithStatusReturnsMarshalErrorsForUnsupportedNilValues(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+		body any
+	}{
+		{
+			name: "nil channel",
+			body: (chan string)(nil),
+		},
+		{
+			name: "nil function",
+			body: (func())(nil),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorder := httptest.NewRecorder()
+
+			MarshalJSONWithStatus(recorder, tc.body, stdhttp.StatusAccepted)
+
+			require.Equal(t, stdhttp.StatusInternalServerError, recorder.Code)
+			require.Contains(t, recorder.Body.String(), "json: unsupported type")
 		})
 	}
 }

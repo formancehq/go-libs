@@ -118,6 +118,27 @@ func TestOTLPMiddlewareDebugRecordsSwitchingProtocolsStatus(t *testing.T) {
 	require.Equal(t, int64(http.StatusSwitchingProtocols), attrs["http.response.status_code"].AsInt64())
 }
 
+func TestOTLPMiddlewareNonDebugRecordsImplicitOKStatus(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	previousTracerProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousTracerProvider)
+		require.NoError(t, tracerProvider.Shutdown(context.Background()))
+	})
+
+	handler := OTLPMiddleware("test-server", false)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/empty", nil))
+	require.NoError(t, tracerProvider.ForceFlush(context.Background()))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	attrs := recordedSpanAttributesWithKey(t, spanRecorder, "http.response.status_code")
+	require.Equal(t, int64(http.StatusOK), attrs["http.response.status_code"].AsInt64())
+}
+
 func TestOTLPMiddlewarePreservesResponseWriterInterfaces(t *testing.T) {
 	for _, debug := range []bool{false, true} {
 		t.Run(debugName(debug), func(t *testing.T) {
@@ -175,7 +196,24 @@ func TestLoggingResponseWriterUnwrapsForResponseController(t *testing.T) {
 	require.Equal(t, testWriteDeadline, base.writeDeadline)
 }
 
+func TestLoggerMiddlewareRecordsImplicitOKStatus(t *testing.T) {
+	buf := &safeBuffer{}
+	logger := logging.NewDefaultLogger(buf, false, false, false)
+	handler := LoggerMiddleware(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/empty", nil))
+
+	require.Contains(t, buf.String(), "status=200")
+	require.NotContains(t, buf.String(), "status=0")
+}
+
 func recordedSpanAttributes(t *testing.T, spanRecorder *tracetest.SpanRecorder) map[string]attribute.Value {
+	t.Helper()
+
+	return recordedSpanAttributesWithKey(t, spanRecorder, "http.request.headers")
+}
+
+func recordedSpanAttributesWithKey(t *testing.T, spanRecorder *tracetest.SpanRecorder, key string) map[string]attribute.Value {
 	t.Helper()
 
 	for _, span := range spanRecorder.Ended() {
@@ -183,12 +221,12 @@ func recordedSpanAttributes(t *testing.T, spanRecorder *tracetest.SpanRecorder) 
 		for _, attr := range span.Attributes() {
 			attrs[string(attr.Key)] = attr.Value
 		}
-		if _, ok := attrs["http.request.headers"]; ok {
+		if _, ok := attrs[key]; ok {
 			return attrs
 		}
 	}
 
-	t.Fatalf("recorded span with OTLP debug attributes not found")
+	t.Fatalf("recorded span with %s attribute not found", key)
 	return nil
 }
 
