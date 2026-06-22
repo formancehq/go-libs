@@ -47,6 +47,8 @@ func LoggerMiddleware(l logging.Logger, opts ...Option) func(h http.Handler) htt
 			method := r.Method
 			path := r.URL.Path
 
+			// httpsnoop defaults Code to StatusOK when the handler returns
+			// without writing, matching net/http's implicit 200 response.
 			metrics := httpsnoop.CaptureMetrics(h, w, r)
 			statusCode := metrics.Code
 			latency := time.Since(start)
