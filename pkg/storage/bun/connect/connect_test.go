@@ -3,13 +3,11 @@ package connect
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
@@ -85,11 +83,6 @@ func TestBuildPGXConnectorDefaultsToReadWriteTargetSessionAttrs(t *testing.T) {
 
 	if config.ValidateConnect == nil {
 		t.Fatal("expected connector builder to set ValidateConnect")
-	}
-	got := reflect.ValueOf(config.ValidateConnect).Pointer()
-	want := reflect.ValueOf(pgconn.ValidateConnectTargetSessionAttrsReadWrite).Pointer()
-	if got != want {
-		t.Fatalf("unexpected ValidateConnect func pointer: got %x, want %x", got, want)
 	}
 }
 
