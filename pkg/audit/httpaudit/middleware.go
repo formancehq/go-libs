@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -27,12 +28,21 @@ type httpOptions struct {
 	eventPublisher      auditEventPublisher
 	handledHeaderSecret string
 	maxBodyBytes        int
+	maxQueryParamsBytes int
 }
 
-// DefaultMaxCapturedBodyBytes bounds how many bytes of each request and response
-// body are stored in an audit event when WithMaxBodyBytes is not set. It keeps the
-// serialized audit message well within broker payload limits (e.g. NATS max_payload).
-const DefaultMaxCapturedBodyBytes = 64 * 1024
+const (
+	// DefaultMaxCapturedBodyBytes bounds how many bytes of each request and
+	// response body are stored in an audit event when WithMaxBodyBytes is not
+	// set. It keeps the serialized audit message well within broker payload
+	// limits (e.g. NATS max_payload).
+	DefaultMaxCapturedBodyBytes = 64 * 1024
+
+	// DefaultMaxCapturedQueryParamsBytes bounds how many raw query string bytes
+	// are parsed into audit query parameters when WithMaxQueryParamsBytes is not
+	// set.
+	DefaultMaxCapturedQueryParamsBytes = DefaultMaxCapturedBodyBytes
+)
 
 // WithSensitivePaths sets path prefixes for which request and response bodies should not be captured.
 func WithSensitivePaths(paths ...string) HTTPOption {
@@ -54,6 +64,18 @@ func WithMaxBodyBytes(maxBytes int) HTTPOption {
 	return func(o *httpOptions) {
 		if maxBytes > 0 {
 			o.maxBodyBytes = maxBytes
+		}
+	}
+}
+
+// WithMaxQueryParamsBytes caps how many raw query string bytes are parsed into
+// audit query parameters. Query strings larger than the cap are truncated before
+// parsing and flagged via HTTPRequest.QueryParamsTruncated. A value <= 0 keeps
+// the default cap (DefaultMaxCapturedQueryParamsBytes).
+func WithMaxQueryParamsBytes(maxBytes int) HTTPOption {
+	return func(o *httpOptions) {
+		if maxBytes > 0 {
+			o.maxQueryParamsBytes = maxBytes
 		}
 	}
 }
@@ -117,8 +139,9 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 	auditOpts := audit.NewOptions(opts...)
 
 	ho := &httpOptions{
-		sensitivePaths: make(map[string]struct{}),
-		maxBodyBytes:   DefaultMaxCapturedBodyBytes,
+		sensitivePaths:      make(map[string]struct{}),
+		maxBodyBytes:        DefaultMaxCapturedBodyBytes,
+		maxQueryParamsBytes: DefaultMaxCapturedQueryParamsBytes,
 	}
 	for _, opt := range httpOpts {
 		opt(ho)
@@ -174,6 +197,11 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 			)
 
 			sensitivePath := ho.isSensitivePath(r.URL.Path)
+			queryParams, queryParamsTruncated := captureQueryParams(r.URL.RawQuery, ho.maxQueryParamsBytes)
+			if sensitivePath {
+				queryParams = nil
+				queryParamsTruncated = false
+			}
 
 			if !isStreamRequest(r) && !sensitivePath {
 				body, requestBodyTruncated, err = captureRequestBody(r, ho.maxBodyBytes)
@@ -217,12 +245,14 @@ func Middleware(publisher message.Publisher, topicName string, appName string, o
 				Actor:   actor,
 				HTTP: audit.HTTP{
 					Request: audit.HTTPRequest{
-						Method:        r.Method,
-						Path:          r.URL.Path,
-						Host:          r.Host,
-						Header:        requestHeaders,
-						Body:          string(body),
-						BodyTruncated: requestBodyTruncated,
+						Method:               r.Method,
+						Path:                 r.URL.Path,
+						QueryParams:          queryParams,
+						QueryParamsTruncated: queryParamsTruncated,
+						Host:                 r.Host,
+						Header:               requestHeaders,
+						Body:                 string(body),
+						BodyTruncated:        requestBodyTruncated,
 					},
 					Response: audit.HTTPResponse{
 						StatusCode:    rww.statusCode,
@@ -271,6 +301,34 @@ func pathMatchesPrefix(requestPath string, sensitivePath string) bool {
 func isStreamRequest(r *http.Request) bool {
 	ct := r.Header.Get("Content-Type")
 	return strings.HasPrefix(ct, "application/vnd.formance") && strings.HasSuffix(ct, "-stream")
+}
+
+func captureQueryParams(rawQuery string, maxBytes int) (url.Values, bool) {
+	if rawQuery == "" {
+		return nil, false
+	}
+
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxCapturedQueryParamsBytes
+	}
+
+	truncated := false
+	captured := rawQuery
+	if len(rawQuery) > maxBytes {
+		captured = trimIncompleteTrailingEscape(rawQuery[:maxBytes])
+		truncated = true
+	}
+
+	values, _ := url.ParseQuery(captured)
+	return values, truncated
+}
+
+func trimIncompleteTrailingEscape(s string) string {
+	percent := strings.LastIndexByte(s, '%')
+	if percent == -1 || len(s)-percent >= 3 {
+		return s
+	}
+	return s[:percent]
 }
 
 // captureRequestBody reads up to maxBytes of the request body for audit capture

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,6 +128,76 @@ func TestMiddleware_BasicCapture(t *testing.T) {
 	assert.Equal(t, `{"status":"ok"}`, payload.HTTP.Response.Body)
 	assert.False(t, payload.HTTP.Request.BodyTruncated)
 	assert.False(t, payload.HTTP.Response.BodyTruncated)
+}
+
+func TestMiddleware_QueryParamsCapture(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	handler := Middleware(pub, topic, "test-app", nil, WithEnabled(true))(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test?limit=10&status=pending&status=posted&empty=", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+	payload := auditPayloadFromMessage(t, messages[0])
+
+	assert.Equal(t, "/api/test", payload.HTTP.Request.Path)
+	assert.Equal(t, url.Values{
+		"limit":  {"10"},
+		"status": {"pending", "posted"},
+		"empty":  {""},
+	}, payload.HTTP.Request.QueryParams)
+	assert.False(t, payload.HTTP.Request.QueryParamsTruncated)
+}
+
+func TestMiddleware_CapsQueryParamsAndFlagsTruncation(t *testing.T) {
+	t.Parallel()
+
+	pub := publish.InMemory()
+	topic := "audit-events"
+
+	const limit = 24
+	handler := Middleware(pub, topic, "test-app", nil,
+		WithEnabled(true),
+		WithMaxQueryParamsBytes(limit),
+	)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	req := httptest.NewRequest("GET", "/api/test?first=one&large="+strings.Repeat("x", 100)+"&last=ignored", nil)
+	req = req.WithContext(logging.TestingContext())
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	messages := pub.AllMessages()[topic]
+	require.Len(t, messages, 1)
+	payload := auditPayloadFromMessage(t, messages[0])
+
+	assert.Equal(t, url.Values{
+		"first": {"one"},
+		"large": {strings.Repeat("x", 8)},
+	}, payload.HTTP.Request.QueryParams)
+	assert.True(t, payload.HTTP.Request.QueryParamsTruncated)
+	assert.NotContains(t, string(messages[0].Payload), "last")
+	assert.NotContains(t, string(messages[0].Payload), strings.Repeat("x", 20))
 }
 
 func TestMiddleware_CapsRequestBodyAndFlagsTruncation(t *testing.T) {
@@ -344,7 +415,7 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequest("POST", "/api/auth/oauth/token", strings.NewReader(`grant_type=client_credentials`))
+	req := httptest.NewRequest("POST", "/api/auth/oauth/token?client_secret=query-secret", strings.NewReader(`grant_type=client_credentials`))
 	req = req.WithContext(logging.TestingContext())
 
 	rr := httptest.NewRecorder()
@@ -364,8 +435,11 @@ func TestMiddleware_SensitivePaths(t *testing.T) {
 
 	assert.Empty(t, payload.HTTP.Response.Body)
 	assert.Empty(t, payload.HTTP.Request.Body)
+	assert.Empty(t, payload.HTTP.Request.QueryParams)
+	assert.False(t, payload.HTTP.Request.QueryParamsTruncated)
 	assert.NotContains(t, string(messages[0].Payload), "client_credentials")
 	assert.NotContains(t, string(messages[0].Payload), "access_token")
+	assert.NotContains(t, string(messages[0].Payload), "query-secret")
 }
 
 func TestMiddleware_SensitivePathsMatchPrefixAndPassRequestBodyThrough(t *testing.T) {

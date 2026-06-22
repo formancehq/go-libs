@@ -2,6 +2,7 @@ package audit
 
 import (
 	"net/http"
+	"net/url"
 
 	"github.com/formancehq/go-libs/v5/pkg/authn/oidc"
 )
@@ -44,12 +45,14 @@ type HTTP struct {
 }
 
 type HTTPRequest struct {
-	Method        string      `json:"method"`
-	Path          string      `json:"path"`
-	Host          string      `json:"host"`
-	Header        http.Header `json:"header"`
-	Body          string      `json:"body,omitempty"`
-	BodyTruncated bool        `json:"body_truncated,omitempty"`
+	Method               string      `json:"method"`
+	Path                 string      `json:"path"`
+	QueryParams          url.Values  `json:"query_params,omitempty"`
+	QueryParamsTruncated bool        `json:"query_params_truncated,omitempty"`
+	Host                 string      `json:"host"`
+	Header               http.Header `json:"header"`
+	Body                 string      `json:"body,omitempty"`
+	BodyTruncated        bool        `json:"body_truncated,omitempty"`
 }
 
 type HTTPResponse struct {
