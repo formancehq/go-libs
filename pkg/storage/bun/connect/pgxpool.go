@@ -54,14 +54,20 @@ func WithPgxPoolIAMAuth(awsConfig aws.Config) PgxPoolOption {
 }
 
 // BuildPgxPoolConfig parses dsn into a *pgxpool.Config wired with this
-// package's pgx tracer, then applies opts in order. The returned config can be
-// passed to pgxpool.NewWithConfig.
+// package's pgx tracer, then applies opts in order. ValidateConnect is set to
+// the same read-write probe the database/sql connector uses, so an endpoint
+// that resolves to a read replica/hot standby is rejected at connect time
+// (instead of letting a read-only connection through and failing later on the
+// first write). The returned config can be passed to pgxpool.NewWithConfig.
 func BuildPgxPoolConfig(ctx context.Context, dsn string, opts ...PgxPoolOption) (*pgxpool.Config, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse dsn: %w", err)
 	}
 	cfg.ConnConfig.Tracer = newPgxTracer()
+	if cfg.ConnConfig.ValidateConnect == nil {
+		cfg.ConnConfig.ValidateConnect = validateConnectTargetSessionAttrsReadWrite
+	}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -93,15 +99,18 @@ func PgxPoolConfigFromFlags(flags *pflag.FlagSet, ctx context.Context, opts ...P
 		return nil, err
 	}
 
+	// MaxConns: pgxpool requires >= 1, so we keep the >0 guard and fall back
+	// to pgxpool's default (max(4, NumCPU)) when the flag is unset/0.
 	if v, _ := flags.GetInt(PostgresMaxOpenConnsFlag); v > 0 {
 		cfg.MaxConns = int32(v)
 	}
-	if v, _ := flags.GetDuration(PostgresConnMaxIdleTimeFlag); v > 0 {
-		cfg.MaxConnIdleTime = v
-	}
-	if v, _ := flags.GetDuration(PostgresConnMaxLifetimeFlag); v > 0 {
-		cfg.MaxConnLifetime = v
-	}
+	// Durations: 0 means "no recycling" in pgxpool, matching the database/sql
+	// semantics of SetConnMaxIdleTime(0) / SetConnMaxLifetime(0). Apply
+	// unconditionally so an explicit 0 disables recycling instead of being
+	// silently shadowed by pgxpool's non-zero defaults (1h MaxConnLifetime,
+	// 30m MaxConnIdleTime).
+	cfg.MaxConnIdleTime, _ = flags.GetDuration(PostgresConnMaxIdleTimeFlag)
+	cfg.MaxConnLifetime, _ = flags.GetDuration(PostgresConnMaxLifetimeFlag)
 	return cfg, nil
 }
 

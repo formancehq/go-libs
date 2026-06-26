@@ -9,6 +9,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/spf13/pflag"
 )
 
 func TestBuildPgxPoolConfigParsesDSNAndSetsTracer(t *testing.T) {
@@ -24,6 +27,34 @@ func TestBuildPgxPoolConfigParsesDSNAndSetsTracer(t *testing.T) {
 	}
 	if cfg.ConnConfig.Tracer == nil {
 		t.Fatal("expected tracer to be set")
+	}
+	if cfg.ConnConfig.ValidateConnect == nil {
+		t.Fatal("expected ValidateConnect to default to the read-write probe, matching the database/sql connector")
+	}
+}
+
+func TestBuildPgxPoolConfigPreservesUserValidateConnect(t *testing.T) {
+	called := false
+	cfg, err := BuildPgxPoolConfig(context.Background(),
+		"postgres://u:p@db.example.com:5432/app",
+		func(c *pgxpool.Config) {
+			c.ConnConfig.ValidateConnect = func(ctx context.Context, _ *pgconn.PgConn) error {
+				called = true
+				return nil
+			}
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ConnConfig.ValidateConnect == nil {
+		t.Fatal("expected ValidateConnect to remain set")
+	}
+	if err := cfg.ConnConfig.ValidateConnect(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("expected the user-provided ValidateConnect to be invoked, not the default")
 	}
 }
 
@@ -160,3 +191,30 @@ var errFirstHook = stringErr("first hook failed")
 type stringErr string
 
 func (e stringErr) Error() string { return string(e) }
+
+func TestPgxPoolConfigFromFlagsAppliesZeroDurations(t *testing.T) {
+	// Flags default ConnMaxLifetime to 0; the pgxpool helper MUST honor that
+	// rather than letting pgxpool's 1-hour default win, so the behavior
+	// matches database/sql.SetConnMaxLifetime(0) = "no recycling".
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	AddFlags(flags)
+	if err := flags.Parse([]string{
+		"--postgres-uri=postgres://u:p@db.example.com:5432/app?sslmode=disable",
+		"--postgres-conn-max-lifetime=0",
+		"--postgres-conn-max-idle-time=0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := PgxPoolConfigFromFlags(flags, context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.MaxConnLifetime != 0 {
+		t.Fatalf("expected MaxConnLifetime to be 0 (no recycling), got %s", cfg.MaxConnLifetime)
+	}
+	if cfg.MaxConnIdleTime != 0 {
+		t.Fatalf("expected MaxConnIdleTime to be 0 (no idle recycling), got %s", cfg.MaxConnIdleTime)
+	}
+}
