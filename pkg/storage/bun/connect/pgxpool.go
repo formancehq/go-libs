@@ -37,14 +37,22 @@ func WithPgxPoolBeforeConnect(fn func(context.Context, *pgx.ConnConfig) error) P
 	}
 }
 
+// iamTokenMinter abstracts token generation so tests can inject a stub without
+// reaching to AWS. Production code uses buildIAMAuthToken via WithPgxPoolIAMAuth.
+type iamTokenMinter func(ctx context.Context, awsConfig aws.Config, endpoint, user string) (string, error)
+
 // WithPgxPoolIAMAuth installs a BeforeConnect hook that mints a fresh AWS RDS
 // IAM authentication token for every new connection acquired by the pool. RDS
 // IAM tokens are short-lived (15 min), so the per-connect refresh matches the
 // AWS-recommended usage pattern.
 func WithPgxPoolIAMAuth(awsConfig aws.Config) PgxPoolOption {
+	return withPgxPoolIAMAuthMinter(awsConfig, buildIAMAuthToken)
+}
+
+func withPgxPoolIAMAuthMinter(awsConfig aws.Config, mint iamTokenMinter) PgxPoolOption {
 	return WithPgxPoolBeforeConnect(func(ctx context.Context, cc *pgx.ConnConfig) error {
 		endpoint := fmt.Sprintf("%s:%d", cc.Host, cc.Port)
-		token, err := buildIAMAuthToken(ctx, awsConfig, endpoint, cc.User)
+		token, err := mint(ctx, awsConfig, endpoint, cc.User)
 		if err != nil {
 			return errors.Wrap(err, "building aws auth token")
 		}

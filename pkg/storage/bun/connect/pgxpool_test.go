@@ -2,6 +2,9 @@ package connect
 
 import (
 	"context"
+	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildPgxPoolConfigParsesDSNAndSetsTracer(t *testing.T) {
@@ -191,6 +195,83 @@ var errFirstHook = stringErr("first hook failed")
 type stringErr string
 
 func (e stringErr) Error() string { return string(e) }
+
+func TestBuildIAMAuthToken_ProducesValidSigV4PresignedURL(t *testing.T) {
+	t.Parallel()
+
+	awsCfg := aws.Config{
+		Region:      "eu-west-1",
+		Credentials: credentials.NewStaticCredentialsProvider("AKIATESTACCESSKEY", "SECRETTESTKEY", ""),
+	}
+
+	token, err := buildIAMAuthToken(context.Background(), awsCfg, "db.example.com:5432", "iam-user")
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+
+	// auth.BuildAuthToken returns "host:port/?query" — no scheme. Prepend a
+	// dummy one so net/url can parse it.
+	parsed, err := url.Parse("rds://" + token)
+	require.NoError(t, err, "token must parse as a URL")
+
+	require.Equal(t, "db.example.com:5432", parsed.Host, "token must carry the RDS endpoint")
+
+	q := parsed.Query()
+	require.Equal(t, "connect", q.Get("Action"), "Action must be 'connect' (rds-db connect verb)")
+	require.Equal(t, "iam-user", q.Get("DBUser"), "DBUser must match the connect user")
+	require.Equal(t, "AWS4-HMAC-SHA256", q.Get("X-Amz-Algorithm"), "must be SigV4-signed")
+	require.NotEmpty(t, q.Get("X-Amz-Date"), "must carry the signing timestamp")
+	require.NotEmpty(t, q.Get("X-Amz-Signature"), "must be signed")
+	require.True(t, regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(q.Get("X-Amz-Signature")),
+		"signature must be a 64-hex-char HMAC-SHA256")
+
+	credential := q.Get("X-Amz-Credential")
+	require.Contains(t, credential, "AKIATESTACCESSKEY/", "credential scope must start with the access key id")
+	require.Contains(t, credential, "/eu-west-1/rds-db/aws4_request",
+		"credential scope must target rds-db in the configured region")
+
+	require.NotEmpty(t, q.Get("X-Amz-Expires"), "must carry a lifetime")
+	expires, err := strconv.Atoi(q.Get("X-Amz-Expires"))
+	require.NoError(t, err)
+	require.LessOrEqual(t, expires, 900,
+		"RDS IAM tokens are documented as 15-minute (900s) lifetime — anything longer indicates a misconfigured signer")
+	require.Greater(t, expires, 0)
+}
+
+func TestWithPgxPoolIAMAuthMinter_PropagatesEndpointAndUser(t *testing.T) {
+	t.Parallel()
+
+	var gotEndpoint, gotUser string
+	cfg, err := BuildPgxPoolConfig(context.Background(),
+		"postgres://iam-user@db.example.com:6432/app?sslmode=require",
+		withPgxPoolIAMAuthMinter(aws.Config{}, func(_ context.Context, _ aws.Config, endpoint, user string) (string, error) {
+			gotEndpoint = endpoint
+			gotUser = user
+			return "stub-token", nil
+		}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, cfg.BeforeConnect(context.Background(), cfg.ConnConfig))
+
+	require.Equal(t, "db.example.com:6432", gotEndpoint, "minter must receive the parsed host:port")
+	require.Equal(t, "iam-user", gotUser, "minter must receive the parsed user")
+	require.Equal(t, "stub-token", cfg.ConnConfig.Password, "minter return value must land on ConnConfig.Password")
+}
+
+func TestWithPgxPoolIAMAuthMinter_WrapsMintError(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := BuildPgxPoolConfig(context.Background(),
+		"postgres://iam-user@db.example.com:5432/app",
+		withPgxPoolIAMAuthMinter(aws.Config{}, func(_ context.Context, _ aws.Config, _, _ string) (string, error) {
+			return "", errFirstHook
+		}),
+	)
+	require.NoError(t, err)
+
+	err = cfg.BeforeConnect(context.Background(), cfg.ConnConfig)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "building aws auth token", "minter error must be wrapped for diagnostics")
+}
 
 func TestPgxPoolConfigFromFlagsAppliesZeroDurations(t *testing.T) {
 	// Flags default ConnMaxLifetime to 0; the pgxpool helper MUST honor that
