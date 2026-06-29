@@ -7,12 +7,14 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
 	"github.com/xo/dburl"
 	"go.opentelemetry.io/otel"
 
+	otlp "github.com/formancehq/go-libs/v5/pkg/observe"
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
@@ -53,7 +55,23 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		return nil, errors.New("parsing dsn")
 	}
 
-	authenticationToken, err := buildIAMAuthToken(ctx, i.driver.awsConfig, databaseURL.Host, databaseURL.User.Username())
+	authenticationToken, err := func() (string, error) {
+		ctx, span := tracer.Start(ctx, "iam.build-auth-token")
+		defer span.End()
+
+		ret, err := auth.BuildAuthToken(
+			ctx,
+			databaseURL.Host,
+			i.driver.awsConfig.Region,
+			databaseURL.User.Username(),
+			i.driver.awsConfig.Credentials,
+		)
+		if err != nil {
+			otlp.RecordError(ctx, err)
+		}
+
+		return ret, err
+	}()
 	if err != nil {
 		return nil, errors.Wrap(err, "building aws auth token")
 	}
