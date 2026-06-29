@@ -5,16 +5,12 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
 
-	"github.com/formancehq/go-libs/v5/pkg/cloud/aws/iam"
 	otlp "github.com/formancehq/go-libs/v5/pkg/observe"
-	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
 
 // PgxPoolOption customizes a *pgxpool.Config built by this package.
@@ -79,46 +75,6 @@ func BuildPgxPoolConfig(ctx context.Context, dsn string, opts ...PgxPoolOption) 
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	return cfg, nil
-}
-
-// PgxPoolConfigFromFlags builds a *pgxpool.Config from the standard Postgres
-// flags (see AddFlags) plus the AWS IAM flags (see iam.AddFlags). When
-// PostgresAWSEnableIAMFlag is set, AWS IAM authentication is wired in via a
-// BeforeConnect hook. PostgresMaxIdleConnsFlag has no equivalent on pgxpool
-// and is ignored.
-func PgxPoolConfigFromFlags(flags *pflag.FlagSet, ctx context.Context, opts ...PgxPoolOption) (*pgxpool.Config, error) {
-	dsn, _ := flags.GetString(PostgresURIFlag)
-	if dsn == "" {
-		return nil, errors.New("missing postgres uri")
-	}
-
-	if awsEnable, _ := flags.GetBool(PostgresAWSEnableIAMFlag); awsEnable {
-		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, iam.LoadOptionFromFlags(flags))
-		if err != nil {
-			return nil, err
-		}
-		opts = append(opts, WithPgxPoolIAMAuth(awsCfg))
-		logging.FromContext(ctx).Debugf("pgxpool: AWS IAM authentication enabled")
-	}
-
-	cfg, err := BuildPgxPoolConfig(ctx, dsn, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	// MaxConns: pgxpool requires >= 1, so we keep the >0 guard and fall back
-	// to pgxpool's default (max(4, NumCPU)) when the flag is unset/0.
-	if v, _ := flags.GetInt(PostgresMaxOpenConnsFlag); v > 0 {
-		cfg.MaxConns = int32(v)
-	}
-	// Durations: 0 means "no recycling" in pgxpool, matching the database/sql
-	// semantics of SetConnMaxIdleTime(0) / SetConnMaxLifetime(0). Apply
-	// unconditionally so an explicit 0 disables recycling instead of being
-	// silently shadowed by pgxpool's non-zero defaults (1h MaxConnLifetime,
-	// 30m MaxConnIdleTime).
-	cfg.MaxConnIdleTime, _ = flags.GetDuration(PostgresConnMaxIdleTimeFlag)
-	cfg.MaxConnLifetime, _ = flags.GetDuration(PostgresConnMaxLifetimeFlag)
 	return cfg, nil
 }
 

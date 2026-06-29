@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -273,29 +272,3 @@ func TestWithPgxPoolIAMAuthMinter_WrapsMintError(t *testing.T) {
 	require.Contains(t, err.Error(), "building aws auth token", "minter error must be wrapped for diagnostics")
 }
 
-func TestPgxPoolConfigFromFlagsAppliesZeroDurations(t *testing.T) {
-	// Flags default ConnMaxLifetime to 0; the pgxpool helper MUST honor that
-	// rather than letting pgxpool's 1-hour default win, so the behavior
-	// matches database/sql.SetConnMaxLifetime(0) = "no recycling".
-	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	AddFlags(flags)
-	if err := flags.Parse([]string{
-		"--postgres-uri=postgres://u:p@db.example.com:5432/app?sslmode=disable",
-		"--postgres-conn-max-lifetime=0",
-		"--postgres-conn-max-idle-time=0",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := PgxPoolConfigFromFlags(flags, context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.MaxConnLifetime != 0 {
-		t.Fatalf("expected MaxConnLifetime to be 0 (no recycling), got %s", cfg.MaxConnLifetime)
-	}
-	if cfg.MaxConnIdleTime != 0 {
-		t.Fatalf("expected MaxConnIdleTime to be 0 (no idle recycling), got %s", cfg.MaxConnIdleTime)
-	}
-}
