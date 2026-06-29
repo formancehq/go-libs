@@ -271,4 +271,3 @@ func TestWithPgxPoolIAMAuthMinter_WrapsMintError(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "building aws auth token", "minter error must be wrapped for diagnostics")
 }
-
