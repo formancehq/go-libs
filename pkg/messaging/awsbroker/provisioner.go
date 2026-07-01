@@ -34,19 +34,28 @@ type QueueSpec struct {
 	// DLQMaxReceiveCount is the number of receive attempts before a message is
 	// moved to the DLQ. Defaults to 5 when EnableDLQ is true.
 	DLQMaxReceiveCount int
+	// AllowedSourceTopicArns lists SNS topic ARNs permitted to publish to this
+	// queue. When non-empty, EnsureQueue attaches an SQS resource policy
+	// allowing sqs:SendMessage from those topics. Required for real AWS —
+	// without it, SNS→SQS deliveries are silently dropped. LocalStack ignores
+	// queue policies, so leaving this empty is fine in local dev.
+	AllowedSourceTopicArns []string
 }
 
 // EnsureQueue creates the SQS queue if missing and returns its ARN.
 // When spec.EnableDLQ is true, a <name>-dlq queue is also created and a redrive
-// policy is attached to the main queue.
+// policy is attached to the main queue. When spec.AllowedSourceTopicArns is
+// non-empty, an SQS resource policy authorizing SNS→SQS delivery from those
+// topics is attached to the main queue (never the DLQ).
 func (p *Provisioner) EnsureQueue(ctx context.Context, spec QueueSpec) (queueArn string, err error) {
 	if spec.Name == "" {
 		return "", fmt.Errorf("queue name is required")
 	}
 
+	var mainAttrs map[string]string
 	if spec.EnableDLQ {
 		dlqName := spec.Name + "-dlq"
-		dlqArn, err := p.createQueueAndGetArn(ctx, dlqName, nil)
+		_, dlqArn, err := p.createQueueAndGetArn(ctx, dlqName, nil)
 		if err != nil {
 			return "", fmt.Errorf("ensure dlq %q: %w", dlqName, err)
 		}
@@ -61,15 +70,35 @@ func (p *Provisioner) EnsureQueue(ctx context.Context, spec QueueSpec) (queueArn
 		if err != nil {
 			return "", fmt.Errorf("marshal redrive policy: %w", err)
 		}
-		return p.createQueueAndGetArn(ctx, spec.Name, map[string]string{
+		mainAttrs = map[string]string{
 			string(sqstypes.QueueAttributeNameRedrivePolicy): string(redrive),
-		})
+		}
 	}
 
-	return p.createQueueAndGetArn(ctx, spec.Name, nil)
+	mainURL, mainArn, err := p.createQueueAndGetArn(ctx, spec.Name, mainAttrs)
+	if err != nil {
+		return "", err
+	}
+
+	if len(spec.AllowedSourceTopicArns) > 0 {
+		policy, err := renderSNSToSQSPolicy(mainArn, spec.AllowedSourceTopicArns)
+		if err != nil {
+			return "", fmt.Errorf("render queue policy for %q: %w", spec.Name, err)
+		}
+		if _, err := p.sqs.SetQueueAttributes(ctx, &sqs.SetQueueAttributesInput{
+			QueueUrl: aws.String(mainURL),
+			Attributes: map[string]string{
+				string(sqstypes.QueueAttributeNamePolicy): policy,
+			},
+		}); err != nil {
+			return "", fmt.Errorf("attach queue policy on %q: %w", spec.Name, err)
+		}
+	}
+
+	return mainArn, nil
 }
 
-func (p *Provisioner) createQueueAndGetArn(ctx context.Context, name string, attributes map[string]string) (string, error) {
+func (p *Provisioner) createQueueAndGetArn(ctx context.Context, name string, attributes map[string]string) (queueURL, queueArn string, err error) {
 	// CreateQueue is idempotent on AWS and LocalStack: if the queue exists with
 	// the same attributes, it returns 200 with the existing URL. If attributes
 	// differ, AWS returns QueueNameExists — we treat that as benign and rely on
@@ -82,7 +111,7 @@ func (p *Provisioner) createQueueAndGetArn(ctx context.Context, name string, att
 		// Fallback: queue exists with different attributes — look it up.
 		urlOut, urlErr := p.sqs.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{QueueName: aws.String(name)})
 		if urlErr != nil {
-			return "", fmt.Errorf("create queue %q: %w", name, err)
+			return "", "", fmt.Errorf("create queue %q: %w", name, err)
 		}
 		out = &sqs.CreateQueueOutput{QueueUrl: urlOut.QueueUrl}
 		if len(attributes) > 0 {
@@ -90,7 +119,7 @@ func (p *Provisioner) createQueueAndGetArn(ctx context.Context, name string, att
 				QueueUrl:   out.QueueUrl,
 				Attributes: attributes,
 			}); setErr != nil {
-				return "", fmt.Errorf("set attributes on existing queue %q: %w", name, setErr)
+				return "", "", fmt.Errorf("set attributes on existing queue %q: %w", name, setErr)
 			}
 		}
 	}
@@ -100,13 +129,41 @@ func (p *Provisioner) createQueueAndGetArn(ctx context.Context, name string, att
 		AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameQueueArn},
 	})
 	if err != nil {
-		return "", fmt.Errorf("get attributes for queue %q: %w", name, err)
+		return "", "", fmt.Errorf("get attributes for queue %q: %w", name, err)
 	}
 	arn, ok := attrOut.Attributes[string(sqstypes.QueueAttributeNameQueueArn)]
 	if !ok {
-		return "", fmt.Errorf("queue %q has no ARN attribute", name)
+		return "", "", fmt.Errorf("queue %q has no ARN attribute", name)
 	}
-	return arn, nil
+	return aws.ToString(out.QueueUrl), arn, nil
+}
+
+// renderSNSToSQSPolicy builds an SQS resource policy allowing sqs:SendMessage
+// from the given SNS topic ARNs. A single topic renders as a scalar SourceArn;
+// multiple topics render as a JSON array — both forms are accepted by IAM.
+func renderSNSToSQSPolicy(queueArn string, topicArns []string) (string, error) {
+	var sourceArn any = topicArns[0]
+	if len(topicArns) > 1 {
+		sourceArn = topicArns
+	}
+	doc := map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []map[string]any{{
+			"Sid":       "AllowSNSToSQS",
+			"Effect":    "Allow",
+			"Principal": map[string]string{"Service": "sns.amazonaws.com"},
+			"Action":    "sqs:SendMessage",
+			"Resource":  queueArn,
+			"Condition": map[string]any{
+				"ArnEquals": map[string]any{"aws:SourceArn": sourceArn},
+			},
+		}},
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 // LookupTopicArn returns the ARN of an existing SNS topic, looked up by name

@@ -46,6 +46,211 @@ func TestEnsureQueue_BasicCreatesAndReturnsArn(t *testing.T) {
 	assert.Equal(t, queueArn, got)
 }
 
+func TestEnsureQueue_AttachesResourcePolicyForSingleSourceTopic(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mockSQS := awsbroker.NewMockSQSAPI(ctrl)
+	mockSNS := awsbroker.NewMockSNSAPI(ctrl)
+
+	queueURL := "https://sqs.eu-west-1.amazonaws.com/123/main-queue"
+	queueArn := "arn:aws:sqs:eu-west-1:123:main-queue"
+	topicArn := "arn:aws:sns:eu-west-1:123:banking-bridge-channels"
+
+	mockSQS.EXPECT().
+		CreateQueue(gomock.Any(), gomock.Any()).
+		Return(&sqs.CreateQueueOutput{QueueUrl: aws.String(queueURL)}, nil)
+	mockSQS.EXPECT().
+		GetQueueAttributes(gomock.Any(), gomock.Any()).
+		Return(&sqs.GetQueueAttributesOutput{
+			Attributes: map[string]string{string(sqstypes.QueueAttributeNameQueueArn): queueArn},
+		}, nil)
+
+	mockSQS.EXPECT().
+		SetQueueAttributes(gomock.Any(), gomock.AssignableToTypeOf(&sqs.SetQueueAttributesInput{})).
+		DoAndReturn(func(_ context.Context, in *sqs.SetQueueAttributesInput, _ ...func(*sqs.Options)) (*sqs.SetQueueAttributesOutput, error) {
+			assert.Equal(t, queueURL, aws.ToString(in.QueueUrl))
+			raw, ok := in.Attributes[string(sqstypes.QueueAttributeNamePolicy)]
+			require.True(t, ok, "Policy attribute must be set")
+
+			var doc map[string]any
+			require.NoError(t, json.Unmarshal([]byte(raw), &doc))
+			assert.Equal(t, "2012-10-17", doc["Version"])
+			stmts := doc["Statement"].([]any)
+			require.Len(t, stmts, 1)
+			s := stmts[0].(map[string]any)
+			assert.Equal(t, "Allow", s["Effect"])
+			assert.Equal(t, "sqs:SendMessage", s["Action"])
+			assert.Equal(t, queueArn, s["Resource"])
+			assert.Equal(t, "sns.amazonaws.com", s["Principal"].(map[string]any)["Service"])
+			// Single topic ARN renders as a scalar, not an array.
+			cond := s["Condition"].(map[string]any)["ArnEquals"].(map[string]any)
+			assert.Equal(t, topicArn, cond["aws:SourceArn"])
+			return &sqs.SetQueueAttributesOutput{}, nil
+		})
+
+	p := awsbroker.NewProvisioner(mockSQS, mockSNS)
+	got, err := p.EnsureQueue(context.Background(), awsbroker.QueueSpec{
+		Name:                   "main-queue",
+		AllowedSourceTopicArns: []string{topicArn},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, queueArn, got)
+}
+
+func TestEnsureQueue_AttachesResourcePolicyForMultipleSourceTopics(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mockSQS := awsbroker.NewMockSQSAPI(ctrl)
+	mockSNS := awsbroker.NewMockSNSAPI(ctrl)
+
+	queueURL := "https://sqs.eu-west-1.amazonaws.com/123/multi"
+	queueArn := "arn:aws:sqs:eu-west-1:123:multi"
+	topics := []string{
+		"arn:aws:sns:eu-west-1:123:topic-a",
+		"arn:aws:sns:eu-west-1:123:topic-b",
+	}
+
+	mockSQS.EXPECT().
+		CreateQueue(gomock.Any(), gomock.Any()).
+		Return(&sqs.CreateQueueOutput{QueueUrl: aws.String(queueURL)}, nil)
+	mockSQS.EXPECT().
+		GetQueueAttributes(gomock.Any(), gomock.Any()).
+		Return(&sqs.GetQueueAttributesOutput{
+			Attributes: map[string]string{string(sqstypes.QueueAttributeNameQueueArn): queueArn},
+		}, nil)
+
+	mockSQS.EXPECT().
+		SetQueueAttributes(gomock.Any(), gomock.AssignableToTypeOf(&sqs.SetQueueAttributesInput{})).
+		DoAndReturn(func(_ context.Context, in *sqs.SetQueueAttributesInput, _ ...func(*sqs.Options)) (*sqs.SetQueueAttributesOutput, error) {
+			var doc map[string]any
+			require.NoError(t, json.Unmarshal([]byte(in.Attributes[string(sqstypes.QueueAttributeNamePolicy)]), &doc))
+			stmts := doc["Statement"].([]any)
+			cond := stmts[0].(map[string]any)["Condition"].(map[string]any)["ArnEquals"].(map[string]any)
+			arns, ok := cond["aws:SourceArn"].([]any)
+			require.True(t, ok, "multiple topics must render as a JSON array")
+			assert.ElementsMatch(t, []any{topics[0], topics[1]}, arns)
+			return &sqs.SetQueueAttributesOutput{}, nil
+		})
+
+	p := awsbroker.NewProvisioner(mockSQS, mockSNS)
+	_, err := p.EnsureQueue(context.Background(), awsbroker.QueueSpec{
+		Name:                   "multi",
+		AllowedSourceTopicArns: topics,
+	})
+	require.NoError(t, err)
+}
+
+func TestEnsureQueue_OmitsPolicyWhenNoSourceTopics(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mockSQS := awsbroker.NewMockSQSAPI(ctrl)
+	mockSNS := awsbroker.NewMockSNSAPI(ctrl)
+
+	mockSQS.EXPECT().
+		CreateQueue(gomock.Any(), gomock.Any()).
+		Return(&sqs.CreateQueueOutput{QueueUrl: aws.String("u")}, nil)
+	mockSQS.EXPECT().
+		GetQueueAttributes(gomock.Any(), gomock.Any()).
+		Return(&sqs.GetQueueAttributesOutput{
+			Attributes: map[string]string{string(sqstypes.QueueAttributeNameQueueArn): "arn:q"},
+		}, nil)
+	// No SetQueueAttributes call is expected — gomock will fail the test if one occurs.
+
+	p := awsbroker.NewProvisioner(mockSQS, mockSNS)
+	_, err := p.EnsureQueue(context.Background(), awsbroker.QueueSpec{Name: "q"})
+	require.NoError(t, err)
+}
+
+func TestEnsureQueue_PolicyAttachedOnlyToMainQueueNotDLQ(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mockSQS := awsbroker.NewMockSQSAPI(ctrl)
+	mockSNS := awsbroker.NewMockSNSAPI(ctrl)
+
+	dlqURL := "https://sqs.eu-west-1.amazonaws.com/123/q-dlq"
+	dlqArn := "arn:aws:sqs:eu-west-1:123:q-dlq"
+	mainURL := "https://sqs.eu-west-1.amazonaws.com/123/q"
+	mainArn := "arn:aws:sqs:eu-west-1:123:q"
+
+	// DLQ first (no attributes).
+	mockSQS.EXPECT().
+		CreateQueue(gomock.Any(), gomock.AssignableToTypeOf(&sqs.CreateQueueInput{})).
+		DoAndReturn(func(_ context.Context, in *sqs.CreateQueueInput, _ ...func(*sqs.Options)) (*sqs.CreateQueueOutput, error) {
+			assert.Equal(t, "q-dlq", aws.ToString(in.QueueName))
+			return &sqs.CreateQueueOutput{QueueUrl: aws.String(dlqURL)}, nil
+		})
+	mockSQS.EXPECT().
+		GetQueueAttributes(gomock.Any(), gomock.Any()).
+		Return(&sqs.GetQueueAttributesOutput{
+			Attributes: map[string]string{string(sqstypes.QueueAttributeNameQueueArn): dlqArn},
+		}, nil)
+	// Main queue with redrive.
+	mockSQS.EXPECT().
+		CreateQueue(gomock.Any(), gomock.AssignableToTypeOf(&sqs.CreateQueueInput{})).
+		DoAndReturn(func(_ context.Context, in *sqs.CreateQueueInput, _ ...func(*sqs.Options)) (*sqs.CreateQueueOutput, error) {
+			assert.Equal(t, "q", aws.ToString(in.QueueName))
+			_, ok := in.Attributes[string(sqstypes.QueueAttributeNameRedrivePolicy)]
+			assert.True(t, ok, "main queue must carry redrive policy")
+			return &sqs.CreateQueueOutput{QueueUrl: aws.String(mainURL)}, nil
+		})
+	mockSQS.EXPECT().
+		GetQueueAttributes(gomock.Any(), gomock.Any()).
+		Return(&sqs.GetQueueAttributesOutput{
+			Attributes: map[string]string{string(sqstypes.QueueAttributeNameQueueArn): mainArn},
+		}, nil)
+	// Exactly one SetQueueAttributes call — on the main queue, for the Policy.
+	mockSQS.EXPECT().
+		SetQueueAttributes(gomock.Any(), gomock.AssignableToTypeOf(&sqs.SetQueueAttributesInput{})).
+		DoAndReturn(func(_ context.Context, in *sqs.SetQueueAttributesInput, _ ...func(*sqs.Options)) (*sqs.SetQueueAttributesOutput, error) {
+			assert.Equal(t, mainURL, aws.ToString(in.QueueUrl), "policy must target main queue, never the DLQ")
+			_, ok := in.Attributes[string(sqstypes.QueueAttributeNamePolicy)]
+			assert.True(t, ok)
+			return &sqs.SetQueueAttributesOutput{}, nil
+		})
+
+	p := awsbroker.NewProvisioner(mockSQS, mockSNS)
+	got, err := p.EnsureQueue(context.Background(), awsbroker.QueueSpec{
+		Name:                   "q",
+		EnableDLQ:              true,
+		AllowedSourceTopicArns: []string{"arn:aws:sns:eu-west-1:123:topic"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, mainArn, got)
+}
+
+func TestEnsureQueue_PropagatesPolicyAttachError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mockSQS := awsbroker.NewMockSQSAPI(ctrl)
+	mockSNS := awsbroker.NewMockSNSAPI(ctrl)
+
+	mockSQS.EXPECT().
+		CreateQueue(gomock.Any(), gomock.Any()).
+		Return(&sqs.CreateQueueOutput{QueueUrl: aws.String("u")}, nil)
+	mockSQS.EXPECT().
+		GetQueueAttributes(gomock.Any(), gomock.Any()).
+		Return(&sqs.GetQueueAttributesOutput{
+			Attributes: map[string]string{string(sqstypes.QueueAttributeNameQueueArn): "arn:q"},
+		}, nil)
+
+	boom := errors.New("policy-boom")
+	mockSQS.EXPECT().
+		SetQueueAttributes(gomock.Any(), gomock.Any()).
+		Return(nil, boom)
+
+	p := awsbroker.NewProvisioner(mockSQS, mockSNS)
+	_, err := p.EnsureQueue(context.Background(), awsbroker.QueueSpec{
+		Name:                   "q",
+		AllowedSourceTopicArns: []string{"arn:topic"},
+	})
+	require.ErrorIs(t, err, boom)
+}
+
 func TestEnsureQueue_WithDLQAttachesRedrivePolicy(t *testing.T) {
 	t.Parallel()
 
