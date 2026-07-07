@@ -3,13 +3,13 @@ package connect
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/jackc/pgx/v5"
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
 	"github.com/formancehq/go-libs/v5/pkg/cloud/aws/iam"

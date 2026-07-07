@@ -24,7 +24,6 @@ import (
 	sqsservice "github.com/aws/aws-sdk-go-v2/service/sqs"
 	transport "github.com/aws/smithy-go/endpoints"
 	"github.com/nats-io/nats.go"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/uptrace/bun"
 	"github.com/xdg-go/scram"
@@ -89,7 +88,7 @@ func Module(topics map[string]string) fx.Option {
 				OnStop: func(ctx context.Context) error {
 					logging.FromContext(ctx).Infof("Stopping router...")
 					if err := router.Close(); err != nil {
-						return errors.Wrap(err, "stopping router")
+						return fmt.Errorf("stopping router: %w", err)
 					}
 					logging.FromContext(ctx).Infof("Router stopped...")
 

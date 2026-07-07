@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // This package provides a way to convert a string amount to a big.Int
@@ -30,11 +28,11 @@ var (
 
 func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.Int, error) {
 	if precision < 0 {
-		return nil, errors.Wrap(ErrInvalidPrecision, fmt.Sprintf("precision is negative: %d", precision))
+		return nil, fmt.Errorf("precision is negative: %d: %w", precision, ErrInvalidPrecision)
 	}
 
 	if amountString == "" {
-		return nil, errors.Wrap(ErrInvalidAmount, "amount string is empty")
+		return nil, fmt.Errorf("amount string is empty: %w", ErrInvalidAmount)
 	}
 
 	parts := strings.Split(amountString, ".")
@@ -42,7 +40,7 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 
 	if lengthParts > 2 || lengthParts == 0 {
 		// More than one dot, invalid amount
-		return nil, errors.Wrap(ErrInvalidAmount, fmt.Sprintf("got multiple dots in amount: %s", amountString))
+		return nil, fmt.Errorf("got multiple dots in amount: %s: %w", amountString, ErrInvalidAmount)
 	}
 
 	if lengthParts == 1 {
@@ -52,7 +50,7 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 		}
 		res, ok := new(big.Int).SetString(amountString, 10)
 		if !ok {
-			return nil, errors.Wrap(ErrInvalidAmount, fmt.Sprintf("invalid amount: %s", amountString))
+			return nil, fmt.Errorf("invalid amount: %s: %w", amountString, ErrInvalidAmount)
 		}
 		return res, nil
 	}
@@ -67,7 +65,7 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 		// concatenate the two parts and return the result
 		res, ok := new(big.Int).SetString(parts[0]+decimalPart, 10)
 		if !ok {
-			return nil, errors.Wrap(ErrInvalidAmount, fmt.Sprintf("invalid amount computed: %s from amount %s", parts[0]+decimalPart, amountString))
+			return nil, fmt.Errorf("invalid amount computed: %s from amount %s: %w", parts[0]+decimalPart, amountString, ErrInvalidAmount)
 		}
 		return res, nil
 
@@ -79,7 +77,7 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 		}
 		res, ok := new(big.Int).SetString(parts[0]+decimalPart, 10)
 		if !ok {
-			return nil, errors.Wrap(ErrInvalidAmount, fmt.Sprintf("invalid amount computed: %s from amount %s", parts[0]+decimalPart, amountString))
+			return nil, fmt.Errorf("invalid amount computed: %s from amount %s: %w", parts[0]+decimalPart, amountString, ErrInvalidAmount)
 		}
 		return res, nil
 
@@ -92,7 +90,7 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 
 func GetStringAmountFromBigIntWithPrecision(amount *big.Int, precision int) (string, error) {
 	if precision < 0 {
-		return "", errors.Wrap(ErrInvalidPrecision, fmt.Sprintf("precision is negative: %d", precision))
+		return "", fmt.Errorf("precision is negative: %d: %w", precision, ErrInvalidPrecision)
 	}
 	if amount == nil {
 		return "", fmt.Errorf("amount is nil")

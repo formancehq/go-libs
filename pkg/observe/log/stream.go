@@ -2,9 +2,8 @@ package logging
 
 import (
 	"bufio"
+	"errors"
 	"io"
-
-	"github.com/pkg/errors"
 )
 
 func StreamReader(logger Logger, r io.Reader, fn func(Logger, ...any)) {

@@ -3,6 +3,7 @@ package connect
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
-	"github.com/pkg/errors"
 	"github.com/xo/dburl"
 	"go.opentelemetry.io/otel"
 
@@ -73,7 +73,7 @@ func (i *iamConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		return ret, err
 	}()
 	if err != nil {
-		return nil, errors.Wrap(err, "building aws auth token")
+		return nil, fmt.Errorf("building aws auth token: %w", err)
 	}
 
 	dsn := buildIAMAuthDSN(&databaseURL.URL, authenticationToken)

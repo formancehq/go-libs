@@ -3,6 +3,7 @@ package pgtesting
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ory/dockertest/v3"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	sharedlogging "github.com/formancehq/go-libs/v5/pkg/observe/log"
@@ -295,14 +295,14 @@ func CreatePostgresServer(t T, pool *docker.Pool, opts ...Option) *PostgresServe
 			)
 			db, err := sql.Open("pgx", dsn)
 			if err != nil {
-				return errors.Wrap(err, "opening database")
+				return fmt.Errorf("opening database: %w", err)
 			}
 			defer func() {
 				_ = db.Close()
 			}()
 
 			if err := db.Ping(); err != nil {
-				return errors.Wrap(err, "pinging database")
+				return fmt.Errorf("pinging database: %w", err)
 			}
 
 			return nil

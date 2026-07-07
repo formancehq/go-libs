@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 type Context interface {
@@ -289,19 +287,19 @@ func mapMapToExpression(m map[string]any) (Builder, error) {
 	case "$and", "$or":
 		and, err := parseSet(operator, value)
 		if err != nil {
-			return nil, errors.Wrap(err, "parsing $and")
+			return nil, fmt.Errorf("parsing $and: %w", err)
 		}
 		return &and, nil
 	case "$match", "$gte", "$lte", "$gt", "$lt", "$exists", "$like", "$in":
 		match, err := parseKeyValue(operator, value)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parsing %s", operator)
+			return nil, fmt.Errorf("parsing %s: %w", operator, err)
 		}
 		return &match, nil
 	case "$not":
 		match, err := parseNot(value)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parsing %s", operator)
+			return nil, fmt.Errorf("parsing %s: %w", operator, err)
 		}
 		return &match, nil
 	default:
