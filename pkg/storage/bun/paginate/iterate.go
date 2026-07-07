@@ -2,9 +2,8 @@ package paginate
 
 import (
 	"context"
+	"fmt"
 	"reflect"
-
-	"github.com/pkg/errors"
 )
 
 func Iterate[T any, Q any](ctx context.Context, q Q, iterator func(ctx context.Context, q Q) (*Cursor[T], error), cb func(cursor *Cursor[T]) error) error {
@@ -25,7 +24,7 @@ func Iterate[T any, Q any](ctx context.Context, q Q, iterator func(ctx context.C
 
 		newQuery := reflect.New(reflect.TypeOf(q))
 		if err := UnmarshalCursor(cursor.Next, newQuery.Interface()); err != nil {
-			return errors.Wrap(err, "paginating next request")
+			return fmt.Errorf("paginating next request: %w", err)
 		}
 
 		q = newQuery.Elem().Interface().(Q)

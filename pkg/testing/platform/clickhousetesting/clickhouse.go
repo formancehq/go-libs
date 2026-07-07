@@ -10,7 +10,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/ory/dockertest/v3"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v5/pkg/testing/docker"
@@ -99,14 +98,14 @@ func CreateServer(pool *docker.Pool, opts ...ServerOption) *Server {
 
 			db, err := clickhouse.Open(options)
 			if err != nil {
-				return errors.Wrap(err, "opening database")
+				return fmt.Errorf("opening database: %w", err)
 			}
 			defer func() {
 				_ = db.Close()
 			}()
 
 			if err := db.Ping(context.Background()); err != nil {
-				return errors.Wrap(err, "pinging database")
+				return fmt.Errorf("pinging database: %w", err)
 			}
 
 			return nil

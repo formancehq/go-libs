@@ -3,10 +3,10 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/uptrace/bun"
 	"github.com/xo/dburl"
@@ -19,12 +19,12 @@ import (
 func isDatabaseExists(ctx context.Context, db *bun.DB, name string) (bool, error) {
 	row := db.QueryRowContext(ctx, `SELECT datname FROM pg_database WHERE datname = ?`, name)
 	if row.Err() != nil {
-		return false, errors.Wrap(row.Err(), "checking database list")
+		return false, fmt.Errorf("checking database list: %w", row.Err())
 	}
 
 	if err := row.Scan(pointer.For("")); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			return false, errors.Wrap(err, "scanning database row")
+			return false, fmt.Errorf("scanning database row: %w", err)
 		}
 
 		return false, nil
@@ -36,7 +36,7 @@ func isDatabaseExists(ctx context.Context, db *bun.DB, name string) (bool, error
 func onPostgresDB(ctx context.Context, connectionOptions bunconnect.ConnectionOptions, callback func(db *bun.DB) error) error {
 	url, err := dburl.Parse(connectionOptions.DatabaseSourceName)
 	if err != nil {
-		return errors.Wrapf(err, "parsing dsn: %s", connectionOptions.DatabaseSourceName)
+		return fmt.Errorf("parsing dsn: %s: %w", connectionOptions.DatabaseSourceName, err)
 	}
 
 	url.Path = "postgres" // notes(gfyrag): default "postgres" database (most of the time?)
@@ -44,7 +44,7 @@ func onPostgresDB(ctx context.Context, connectionOptions bunconnect.ConnectionOp
 
 	db, err := bunconnect.OpenSQLDB(ctx, connectionOptions)
 	if err != nil {
-		return errors.Wrap(err, "opening database")
+		return fmt.Errorf("opening database: %w", err)
 	}
 	defer func() {
 		err := db.Close()
@@ -61,18 +61,18 @@ func EnsureDatabaseNotExists(ctx context.Context, connectionOptions bunconnect.C
 
 		url, err := dburl.Parse(connectionOptions.DatabaseSourceName)
 		if err != nil {
-			return errors.Wrapf(err, "parsing dsn: %s", connectionOptions.DatabaseSourceName)
+			return fmt.Errorf("parsing dsn: %s: %w", connectionOptions.DatabaseSourceName, err)
 		}
 
 		databaseExists, err := isDatabaseExists(ctx, db, url.Path[1:])
 		if err != nil {
-			return errors.Wrap(err, "checking if database exists")
+			return fmt.Errorf("checking if database exists: %w", err)
 		}
 
 		if databaseExists {
 			_, err = db.ExecContext(ctx, fmt.Sprintf(`DROP DATABASE "%s"`, url.Path[1:]))
 			if err != nil {
-				return errors.Wrap(err, "dropping database")
+				return fmt.Errorf("dropping database: %w", err)
 			}
 		}
 
@@ -85,18 +85,18 @@ func EnsureDatabaseExists(ctx context.Context, connectionOptions bunconnect.Conn
 
 		url, err := dburl.Parse(connectionOptions.DatabaseSourceName)
 		if err != nil {
-			return errors.Wrapf(err, "parsing dsn: %s", connectionOptions.DatabaseSourceName)
+			return fmt.Errorf("parsing dsn: %s: %w", connectionOptions.DatabaseSourceName, err)
 		}
 
 		databaseExists, err := isDatabaseExists(ctx, db, url.Path[1:])
 		if err != nil {
-			return errors.Wrap(err, "checking if database exists")
+			return fmt.Errorf("checking if database exists: %w", err)
 		}
 
 		if !databaseExists {
 			_, err = db.ExecContext(ctx, fmt.Sprintf(`CREATE DATABASE "%s"`, url.Path[1:]))
 			if err != nil {
-				return errors.Wrap(err, "creating database")
+				return fmt.Errorf("creating database: %w", err)
 			}
 		}
 
@@ -113,19 +113,22 @@ func run(ctx context.Context, output io.Writer, args []string, connectionOptions
 
 	db, err := bunconnect.OpenSQLDB(ctx, *connectionOptions)
 	if err != nil {
-		return errors.Wrap(err, "opening database")
+		return fmt.Errorf("opening database: %w", err)
 	}
 	defer func() {
 		_ = db.Close()
 	}()
 
-	return errors.Wrap(executor(args, db), "executing migration")
+	if err := executor(args, db); err != nil {
+		return fmt.Errorf("executing migration: %w", err)
+	}
+	return nil
 }
 
 func Run(cmd *cobra.Command, args []string, executor Executor) error {
 	connectionOptions, err := bunconnect.ConnectionOptionsFromFlags(cmd.Flags(), cmd.Context())
 	if err != nil {
-		return errors.Wrap(err, "evaluating connection options")
+		return fmt.Errorf("evaluating connection options: %w", err)
 	}
 	return run(cmd.Context(), cmd.OutOrStdout(), args, connectionOptions, func(args []string, db *bun.DB) error {
 		return executor(cmd, args, db)

@@ -2,11 +2,11 @@ package time
 
 import (
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/invopop/jsonschema"
-	"github.com/pkg/errors"
 )
 
 const (

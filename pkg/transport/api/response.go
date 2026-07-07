@@ -3,12 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-
-	"github.com/pkg/errors"
 
 	bunpaginate "github.com/formancehq/go-libs/v5/pkg/storage/bun/paginate"
 )
@@ -75,7 +74,7 @@ func decodePaginatedResponse[T any](rsp *http.Response) (*BaseResponse[T], error
 	}
 	apiResponse := &BaseResponse[T]{}
 	if err := json.NewDecoder(rsp.Body).Decode(apiResponse); err != nil {
-		return nil, errors.Wrap(err, "decoding cursor")
+		return nil, fmt.Errorf("decoding cursor: %w", err)
 	}
 	if apiResponse.Cursor == nil {
 		return nil, errors.New("missing cursor in paginated response")

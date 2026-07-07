@@ -1,10 +1,11 @@
 package publish
 
 import (
+	"fmt"
+
 	"github.com/ThreeDotsLabs/watermill"
 	wNats "github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/nats-io/nats.go"
-	"github.com/pkg/errors"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 )
@@ -16,7 +17,7 @@ func NewNatsConn(config wNats.PublisherConfig) (*nats.Conn, error) {
 
 	conn, err := nats.Connect(config.URL, config.NatsOptions...)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot connect to nats-core")
+		return nil, fmt.Errorf("cannot connect to nats-core: %w", err)
 	}
 
 	return conn, nil

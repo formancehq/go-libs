@@ -2,10 +2,10 @@ package postgres
 
 import (
 	"database/sql"
+	"errors"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/pkg/errors"
 )
 
 // ResolveError is an helper to wrap postgres errors into storage errors

@@ -2,11 +2,11 @@ package elastictesting
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/ory/dockertest/v3"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	"github.com/formancehq/go-libs/v5/pkg/testing/docker"
@@ -63,7 +63,7 @@ func CreateServer(pool *docker.Pool, options ...Option) *Server {
 		CheckFn: func(ctx context.Context, resource *dockertest.Resource) error {
 			client, err := elastic.NewClient(elastic.SetURL("http://127.0.0.1:" + resource.GetPort("9200/tcp")))
 			if err != nil {
-				return errors.Wrap(err, "connecting to server")
+				return fmt.Errorf("connecting to server: %w", err)
 			}
 			client.Stop()
 			return nil

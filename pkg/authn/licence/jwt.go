@@ -4,10 +4,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/pkg/errors"
 )
 
 type validateTokenOptions struct {
@@ -40,7 +40,7 @@ func getKeyFromEmbeddedPublicKey() (interface{}, error) {
 
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse embedded Formance public key")
+		return nil, fmt.Errorf("failed to parse embedded Formance public key: %w", err)
 	}
 
 	rsaPub, ok := pub.(*rsa.PublicKey)

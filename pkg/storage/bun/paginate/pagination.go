@@ -3,12 +3,11 @@ package paginate
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
 	"strconv"
-
-	"github.com/pkg/errors"
 )
 
 const (
