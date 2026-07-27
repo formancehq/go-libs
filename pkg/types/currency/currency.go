@@ -332,6 +332,11 @@ func GetPrecision(currencies map[string]int, cur string) (int, error) {
 // GetCurrencyAndPrecisionFromAsset splits a "CUR/n" ledger asset and returns the
 // currency code together with the precision recorded for it in currencies.
 //
+// The returned code is upper-cased, matching the rest of this package, so it can
+// be keyed straight back into currencies or used to build another asset. Taking
+// it verbatim from the input would let "eur/2" yield "eur", which reassembles
+// into a "eur/2" asset that does not net against "EUR/2".
+//
 // The precision comes from currencies, not from the asset string: the "/n" part
 // only has to be present, and any mismatch with the table is ignored. On error
 // the returned precision is PrecisionUnknown (-1), never 0.
@@ -341,7 +346,7 @@ func GetCurrencyAndPrecisionFromAsset(currencies map[string]int, asset string) (
 		return "", PrecisionUnknown, fmt.Errorf("invalid asset: %s", asset)
 	}
 
-	currency := parts[0]
+	currency := strings.ToUpper(parts[0])
 	precision, err := GetPrecision(currencies, currency)
 	if err != nil {
 		return "", PrecisionUnknown, err

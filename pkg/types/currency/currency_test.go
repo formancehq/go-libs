@@ -1,6 +1,7 @@
 package currency
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,6 +79,28 @@ func TestFormatAssetConventionsDivergeAtZero(t *testing.T) {
 		"documented divergence: do not mix the two formatters on one ledger")
 }
 
+// TestGetCurrencyAndPrecisionFromAssetRoundTrips is why the returned code is
+// normalized: the code must be usable both to key back into the table and to
+// rebuild the same asset, whatever the input's casing.
+func TestGetCurrencyAndPrecisionFromAssetRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	for _, asset := range []string{"EUR/2", "eur/2", "eUr/2", "JPY/0", "jpy/0"} {
+		t.Run(asset, func(t *testing.T) {
+			t.Parallel()
+
+			cur, precision, err := GetCurrencyAndPrecisionFromAsset(ISO4217Currencies, asset)
+			require.NoError(t, err)
+
+			_, ok := ISO4217Currencies[cur]
+			assert.True(t, ok, "returned code %q must key back into the table", cur)
+
+			assert.Equal(t, strings.ToUpper(asset), FormatAssetWithPrecision(cur, precision),
+				"the code and precision must rebuild the same asset")
+		})
+	}
+}
+
 func TestGetCurrencyAndPrecisionFromAsset(t *testing.T) {
 	currencies := map[string]int{
 		"USD": 2,
@@ -91,11 +114,13 @@ func TestGetCurrencyAndPrecisionFromAsset(t *testing.T) {
 		expectedPre int
 		expectErr   bool
 	}{
-		"typical format": {"USD/2", "USD", 2, false},
+		"typical format":                                               {"USD/2", "USD", 2, false},
+		"lowercased asset is normalized":                               {"usd/2", "USD", 2, false},
+		"mixed case asset is normalized":                               {"uSd/2", "USD", 2, false},
 		"different precision provided than in currency list":           {"BTC/55", "BTC", 8, false},
 		"unexpected value after slash still returns correct precision": {"EUR/JPY", "EUR", 2, false},
-		"invalid value":  {"INVALID", "", PrecisionUnknown, true},
-		"too many parts": {"USD/4/2", "", PrecisionUnknown, true},
+		"invalid value":                                                {"INVALID", "", PrecisionUnknown, true},
+		"too many parts":                                               {"USD/4/2", "", PrecisionUnknown, true},
 	}
 
 	for testName, tt := range tests {
