@@ -32,6 +32,52 @@ func TestFormatAsset(t *testing.T) {
 	}
 }
 
+func TestFormatAssetWithPrecision(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		currency  string
+		precision int
+		expected  string
+	}{
+		"typical":     {"EUR", 2, "EUR/2"},
+		"lowercased":  {"eur", 2, "EUR/2"},
+		"not in list": {"BBB", 2, "BBB/2"},
+		// Unlike FormatAsset, the suffix is always present.
+		"zero precision": {"JPY", 0, "JPY/0"},
+		// PrecisionUnknown must render as a visibly broken asset rather than
+		// something a ledger would plausibly accept. This is what makes a
+		// dropped GetPrecision error fail loudly.
+		"unknown precision": {"USD", PrecisionUnknown, "USD/-1"},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expected, FormatAssetWithPrecision(tc.currency, tc.precision))
+		})
+	}
+}
+
+// TestFormatAssetConventionsDivergeAtZero pins the documented asymmetry between
+// the two formatters: at exponent 0 they produce different ledger assets, which
+// will not net against each other. If this ever starts passing with equal
+// values, the convention changed and existing ledgers need migrating.
+func TestFormatAssetConventionsDivergeAtZero(t *testing.T) {
+	t.Parallel()
+
+	const zeroDecimalCurrency = "JPY"
+
+	require.Equal(t, 0, ISO4217Currencies[zeroDecimalCurrency],
+		"%s is expected to be a zero-decimal currency", zeroDecimalCurrency)
+
+	bare := FormatAsset(ISO4217Currencies, zeroDecimalCurrency)
+	qualified := FormatAssetWithPrecision(zeroDecimalCurrency, 0)
+
+	assert.Equal(t, "JPY", bare)
+	assert.Equal(t, "JPY/0", qualified)
+	assert.NotEqual(t, bare, qualified,
+		"documented divergence: do not mix the two formatters on one ledger")
+}
+
 func TestGetCurrencyAndPrecisionFromAsset(t *testing.T) {
 	currencies := map[string]int{
 		"USD": 2,
