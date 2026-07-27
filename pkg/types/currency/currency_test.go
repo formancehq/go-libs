@@ -48,8 +48,8 @@ func TestGetCurrencyAndPrecisionFromAsset(t *testing.T) {
 		"typical format": {"USD/2", "USD", 2, false},
 		"different precision provided than in currency list":           {"BTC/55", "BTC", 8, false},
 		"unexpected value after slash still returns correct precision": {"EUR/JPY", "EUR", 2, false},
-		"invalid value":  {"INVALID", "", 0, true},
-		"too many parts": {"USD/4/2", "", 0, true},
+		"invalid value":  {"INVALID", "", PrecisionUnknown, true},
+		"too many parts": {"USD/4/2", "", PrecisionUnknown, true},
 	}
 
 	for testName, tt := range tests {
@@ -57,6 +57,8 @@ func TestGetCurrencyAndPrecisionFromAsset(t *testing.T) {
 			cur, pre, err := GetCurrencyAndPrecisionFromAsset(currencies, tt.asset)
 			if tt.expectErr {
 				assert.Error(t, err)
+				// The precision on the error path must be unusable, not 0.
+				assert.Equal(t, tt.expectedPre, pre)
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedCur, cur)
