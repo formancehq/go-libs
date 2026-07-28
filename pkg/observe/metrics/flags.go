@@ -17,6 +17,7 @@ const (
 	OtelMetricsExporterOTLPModeFlag                   = "otel-metrics-exporter-otlp-mode"
 	OtelMetricsExporterOTLPEndpointFlag               = "otel-metrics-exporter-otlp-endpoint"
 	OtelMetricsExporterOTLPInsecureFlag               = "otel-metrics-exporter-otlp-insecure"
+	OtelMetricsClassicHistogramsFlag                  = "otel-metrics-classic-histograms"
 )
 
 func AddFlags(flags *flag.FlagSet) {
@@ -30,6 +31,7 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.String(OtelMetricsExporterOTLPEndpointFlag, "", "OpenTelemetry metrics grpc endpoint")
 	flags.Bool(OtelMetricsExporterOTLPInsecureFlag, false, "OpenTelemetry metrics grpc insecure")
 	flags.Bool(OtelMetricsKeepInMemoryFlag, false, "Allow to keep metrics in memory")
+	flags.Bool(OtelMetricsClassicHistogramsFlag, false, "Use explicit-bucket (classic) histogram aggregation instead of exponential -- set this if metrics are exported through prometheusremotewriteexporter, which drops exponential histograms")
 }
 
 func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
@@ -41,6 +43,7 @@ func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
 	otlpMode, _ := flags.GetString(OtelMetricsExporterOTLPModeFlag)
 	otlpEndpoint, _ := flags.GetString(OtelMetricsExporterOTLPEndpointFlag)
 	otlpInsecure, _ := flags.GetBool(OtelMetricsExporterOTLPInsecureFlag)
+	classicHistograms, _ := flags.GetBool(OtelMetricsClassicHistogramsFlag)
 
 	return ModuleConfig{
 		Exporter: exporter,
@@ -53,5 +56,6 @@ func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
 		MinimumReadMemStatsInterval: minReadMemStats,
 		PushInterval:                pushInterval,
 		KeepInMemory:                keepInMemory,
+		ClassicHistograms:           classicHistograms,
 	}
 }
