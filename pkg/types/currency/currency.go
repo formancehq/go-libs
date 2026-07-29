@@ -30,13 +30,16 @@ var ErrMissingCurrencies = errors.New("missing currencies")
 //
 // Source URL: https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml
 // List published: 2026-01-01 (the Pblshd attribute of that XML)
-// Regenerated: 2026-07-27
+// Regenerated: 2026-07-29
 //
 // Do not hand-edit. testdata/list-one.csv holds the same data trimmed to
-// (code, minor_units), and TestISO4217CurrenciesMatchesListOne diffs this map
-// against it, so the table cannot drift from the CSV unnoticed. To update:
-// re-download the URL above, regenerate the CSV, apply the differences the test
-// reports, and bump Published and Regenerated in this comment.
+// (code, minor_units, numeric_code), and TestISO4217CurrenciesMatchesListOne
+// diffs this map against it, so the table cannot drift from the CSV unnoticed. To
+// update: re-download the URL above, regenerate the CSV, apply the differences
+// the test reports, and bump List published and Regenerated in this comment.
+//
+// The numeric codes from the third column live in ISO4217NumericCodes, which is
+// deliberately wider than this map — see the note there.
 //
 // Two membership decisions are deliberate, and the test enforces both.
 //
@@ -55,6 +58,12 @@ var ErrMissingCurrencies = errors.New("missing currencies")
 //     data still needs them; dropping them would turn a resolvable historical
 //     amount into a lookup failure. They are listed in ISO4217WithdrawnCodes so
 //     that a caller minting new amounts can reject them.
+//
+//     Their withdrawal dates come from ISO 4217 list three via
+//     testdata/list-three.csv, at the month granularity the standard publishes.
+//     That is the date ISO removed the code, which is not always the date the
+//     currency was replaced — SLL was redenominated to SLE on 2022-07-01 but both
+//     circulated until ISO withdrew SLL in 2023-12.
 var ISO4217Currencies = map[string]int{
 	// Active in ISO 4217 list one as of the published date above.
 	"AED": 2, // UAE Dirham
@@ -225,12 +234,12 @@ var ISO4217Currencies = map[string]int{
 
 	// Withdrawn from the standard, kept deliberately — see (2) above. These
 	// must not be used to denominate new amounts.
-	"ANG": 2, // Netherlands Antillean guilder — withdrawn 2025-03-31: replaced by XCG (Caribbean guilder)
-	"BGN": 2, // Bulgarian lev — withdrawn 2026-01-01: Bulgaria adopted the euro
-	"CUC": 2, // Cuban convertible peso — withdrawn 2021: Cuba's dual-currency system ended
-	"HRK": 2, // Croatian kuna — withdrawn 2023-01-01: Croatia adopted the euro
-	"SLL": 2, // Sierra Leonean leone (old) — withdrawn 2022-07-01: redenominated to SLE (1 SLE = 1000 SLL)
-	"ZWL": 2, // Zimbabwean dollar — withdrawn 2024-06-25: replaced by ZWG (Zimbabwe Gold)
+	"ANG": 2, // Netherlands Antillean guilder — withdrawn 2025-03: replaced by XCG (Caribbean guilder), which reuses numeric 532
+	"BGN": 2, // Bulgarian lev — withdrawn 2026-01: Bulgaria adopted the euro
+	"CUC": 2, // Cuban convertible peso — withdrawn 2021-06: Cuba's dual-currency system ended
+	"HRK": 2, // Croatian kuna — withdrawn 2023-01: Croatia adopted the euro
+	"SLL": 2, // Sierra Leonean leone (old) — withdrawn 2023-12: redenominated to SLE (1 SLE = 1000 SLL) on 2022-07-01; both circulated until withdrawal
+	"ZWL": 2, // Zimbabwean dollar — withdrawn 2024-09: replaced by ZWG (Zimbabwe Gold), introduced 2024-04
 }
 
 // ISO4217NoMinorUnitCodes is the set of ISO 4217 codes whose number of minor
@@ -263,12 +272,12 @@ var ISO4217NoMinorUnitCodes = map[string]struct{}{
 //
 // Look a code up here before accepting it for a new amount.
 var ISO4217WithdrawnCodes = map[string]struct{}{
-	"ANG": {}, // withdrawn 2025-03-31: replaced by XCG (Caribbean guilder)
-	"BGN": {}, // withdrawn 2026-01-01: Bulgaria adopted the euro
-	"CUC": {}, // withdrawn 2021: Cuba's dual-currency system ended
-	"HRK": {}, // withdrawn 2023-01-01: Croatia adopted the euro
-	"SLL": {}, // withdrawn 2022-07-01: redenominated to SLE (1 SLE = 1000 SLL)
-	"ZWL": {}, // withdrawn 2024-06-25: replaced by ZWG (Zimbabwe Gold)
+	"ANG": {}, // withdrawn 2025-03: replaced by XCG (Caribbean guilder), which reuses numeric 532
+	"BGN": {}, // withdrawn 2026-01: Bulgaria adopted the euro
+	"CUC": {}, // withdrawn 2021-06: Cuba's dual-currency system ended
+	"HRK": {}, // withdrawn 2023-01: Croatia adopted the euro
+	"SLL": {}, // withdrawn 2023-12: redenominated to SLE (1 SLE = 1000 SLL) on 2022-07-01; both circulated until withdrawal
+	"ZWL": {}, // withdrawn 2024-09: replaced by ZWG (Zimbabwe Gold), introduced 2024-04
 }
 
 // FormatAsset renders a currency code as a ledger asset qualified by its number
