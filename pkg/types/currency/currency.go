@@ -6,181 +6,296 @@ import (
 	"strings"
 )
 
-var (
-	ErrMissingCurrencies = errors.New("missing currencies")
+// PrecisionUnknown is the precision returned, alongside a non-nil error, when a
+// currency code has no known number of minor units.
+//
+// It is deliberately negative rather than 0. A precision is a decimal exponent,
+// so 0 is the most dangerous possible sentinel: a caller that drops the error
+// and scales by 10^0 turns "1234.56" into 1234, destroying the minor units
+// silently and plausibly. -1 fails loudly instead — scaling by it is rejected by
+// GetAmountWithPrecisionFromString with ErrInvalidPrecision, and
+// FormatAssetWithPrecision renders it as a visibly broken "XYZ/-1" asset.
+const PrecisionUnknown = -1
 
-	ISO4217Currencies = map[string]int{
-		"AFN": 2, //  Afghan afghani
-		"EUR": 2, //  Euro
-		"ALL": 2, //  Albanian lek
-		"DZD": 2, //  Algerian dinar
-		"USD": 2, //  United States dollar
-		"AOA": 2, //  Angolan kwanza
-		"XCD": 2, //  East Caribbean dollar
-		"ARS": 2, //  Argentine peso
-		"AMD": 2, //  Armenian dram
-		"AWG": 2, //  Aruban florin
-		"AUD": 2, //  Australian dollar
-		"AZN": 2, //  Azerbaijani manat
-		"BSD": 2, //  Bahamian dollar
-		"BHD": 3, //  Bahraini dinar
-		"BDT": 2, //  Bangladeshi taka
-		"BBD": 2, //  Barbados dollar
-		"BYN": 2, //  Belarusian ruble
-		"BZD": 2, //  Belize dollar
-		"XOF": 0, //  West African CFA franc
-		"BMD": 2, //  Bermudian dollar
-		"INR": 2, //  Indian rupee
-		"BTN": 2, //  Bhutanese ngultrum
-		"BOB": 2, //  Bolivian boliviano
-		"BOV": 2, //  Bolivian Mvdol (funds code)
-		"BAM": 2, //  Bosnia and Herzegovina convertible mark
-		"BWP": 2, //  Botswana pula
-		"NOK": 2, //  Norwegian krone
-		"BRL": 2, //  Brazilian real
-		"BND": 2, //  Brunei dollar
-		"BGN": 2, //  Bulgarian lev
-		"BIF": 0, //  Burundian franc
-		"CVE": 2, //  Cape Verdean escudo
-		"KHR": 2, //  Cambodian riel
-		"XAF": 0, //  Central African CFA franc
-		"CAD": 2, //  Canadian dollar
-		"KYD": 2, //  Cayman Islands dollar
-		"CLP": 0, //  Chilean peso
-		"CLF": 4, //  Unidad de Fomento (funds code)
-		"CNY": 2, //  Chinese yuan
-		"COP": 2, //  Colombian peso
-		"COU": 2, //  Unidad de Valor Real (UVR) (funds code)[7]
-		"KMF": 0, //  Comoro franc
-		"CDF": 2, //  Congolese franc
-		"NZD": 2, //  New Zealand dollar
-		"CRC": 2, //  Costa Rican colon
-		"HRK": 2, //  Croatian kuna
-		"CUP": 2, //  Cuban peso
-		"CUC": 2, //  Cuban convertible peso
-		"ANG": 2, //  Netherlands Antillean guilder
-		"CZK": 2, //  Czech koruna
-		"DKK": 2, //  Danish krone
-		"DJF": 0, //  Djiboutian franc
-		"DOP": 2, //  Dominican peso
-		"EGP": 2, //  Egyptian pound
-		"SVC": 2, //  Salvadoran colón
-		"ERN": 2, //  Eritrean nakfa
-		"SZL": 2, //  Swazi lilangeni
-		"ETB": 2, //  Ethiopian birr
-		"FKP": 2, //  Falkland Islands pound
-		"FJD": 2, //  Fiji dollar
-		"XPF": 0, //  CFP franc
-		"GMD": 2, //  Gambian dalasi
-		"GEL": 2, //  Georgian lari
-		"GHS": 2, //  Ghanaian cedi
-		"GIP": 2, //  Gibraltar pound
-		"GTQ": 2, //  Guatemalan quetzal
-		"GBP": 2, //  Pound sterling
-		"GNF": 0, //  Guinean franc
-		"GYD": 2, //  Guyanese dollar
-		"HTG": 2, //  Haitian gourde
-		"HNL": 2, //  Honduran lempira
-		"HKD": 2, //  Hong Kong dollar
-		"HUF": 2, //  Hungarian forint
-		"ISK": 0, //  Icelandic króna
-		"IDR": 2, //  Indonesian rupiah
-		"IRR": 2, //  Iranian rial
-		"IQD": 3, //  Iraqi dinar
-		"ILS": 2, //  Israeli new shekel
-		"JMD": 2, //  Jamaican dollar
-		"JPY": 0, //  Japanese yen
-		"JOD": 3, //  Jordanian dinar
-		"KZT": 2, //  Kazakhstani tenge
-		"KES": 2, //  Kenyan shilling
-		"KPW": 2, //  North Korean won
-		"KRW": 0, //  South Korean won
-		"KWD": 3, //  Kuwaiti dinar
-		"KGS": 2, //  Kyrgyzstani som
-		"LAK": 2, //  Lao kip
-		"LBP": 2, //  Lebanese pound
-		"LSL": 2, //  Lesotho loti
-		"ZAR": 2, //  South African rand
-		"LRD": 2, //  Liberian dollar
-		"LYD": 3, //  Libyan dinar
-		"CHF": 2, //  Swiss franc
-		"MOP": 2, //  Macanese pataca
-		"MKD": 2, //  Macedonian denar
-		"MGA": 2, //  Malagasy ariary
-		"MWK": 2, //  Malawian kwacha
-		"MYR": 2, //  Malaysian ringgit
-		"MVR": 2, //  Maldivian rufiyaa
-		"MRU": 2, //  Mauritanian ouguiya
-		"MUR": 2, //  Mauritian rupee
-		"MXN": 2, //  Mexican peso
-		"MXV": 2, //  Mexican Unidad de Inversion (UDI) (funds code)
-		"MDL": 2, //  Moldovan leu
-		"MNT": 2, //  Mongolian tögrög
-		"MAD": 2, //  Moroccan dirham
-		"MZN": 2, //  Mozambican metical
-		"MMK": 2, //  Burmese kyat
-		"NAD": 2, //  Namibian dollar
-		"NPR": 2, //  Nepalese rupee
-		"NIO": 2, //  Nicaraguan córdoba
-		"NGN": 2, //  Nigerian naira
-		"OMR": 3, //  Omani rial
-		"PKR": 2, //  Pakistani rupee
-		"PAB": 2, //  Panamanian balboa
-		"PGK": 2, //  Papua New Guinean kina
-		"PYG": 0, //  Paraguayan guaraní
-		"PEN": 2, //  Peruvian sol
-		"PHP": 2, //  Philippine peso
-		"PLN": 2, //  Polish złoty
-		"QAR": 2, //  Qatari riyal
-		"RON": 2, //  Romanian leu
-		"RUB": 2, //  Russian ruble
-		"RWF": 0, //  Rwandan franc
-		"SHP": 2, //  Saint Helena pound
-		"WST": 2, //  Samoan tala
-		"STN": 2, //  São Tomé and Príncipe dobra
-		"SAR": 2, //  Saudi riyal
-		"RSD": 2, //  Serbian dinar
-		"SCR": 2, //  Seychelles rupee
-		"SLL": 2, //  Sierra Leonean leone
-		"SGD": 2, //  Singapore dollar
-		"SBD": 2, //  Solomon Islands dollar
-		"SOS": 2, //  Somali shilling
-		"SSP": 2, //  South Sudanese pound
-		"LKR": 2, //  Sri Lankan rupee
-		"SDG": 2, //  Sudanese pound
-		"SRD": 2, //  Surinamese dollar
-		"SEK": 2, //  Swedish krona/kronor
-		"CHE": 2, //  WIR Euro (complementary currency)
-		"CHW": 2, //  WIR Franc (complementary currency)
-		"SYP": 2, //  Syrian pound
-		"TWD": 2, //  New Taiwan dollar
-		"TJS": 2, //  Tajikistani somoni
-		"TZS": 2, //  Tanzanian shilling
-		"THB": 2, //  Thai baht
-		"TOP": 2, //  Tongan paʻanga
-		"TTD": 2, //  Trinidad and Tobago dollar
-		"TND": 3, //  Tunisian dinar
-		"TRY": 2, //  Turkish lira
-		"TMT": 2, //  Turkmenistan manat
-		"UGX": 0, //  Ugandan shilling
-		"UAH": 2, //  Ukrainian hryvnia
-		"AED": 2, //  United Arab Emirates dirham
-		"USN": 2, //  United States dollar (next day) (funds code)
-		"UYU": 2, //  Uruguayan peso
-		"UYI": 0, //  Uruguay Peso en Unidades Indexadas (URUIURUI) (funds code)
-		"UYW": 4, //  Unidad previsional[9]
-		"UZS": 2, //  Uzbekistan som
-		"VUV": 0, //  Vanuatu vatu
-		"VES": 2, //  Venezuelan bolívar soberano
-		"VND": 0, //  Vietnamese đồng
-		"YER": 2, //  Yemeni rial
-		"ZMW": 2, //  Zambian kwacha
-		"ZWL": 2, //  Zimbabwean dollar A/10
-	}
-)
+// ErrMissingCurrencies is returned when a currency code is absent from the
+// currency table it was looked up in.
+var ErrMissingCurrencies = errors.New("missing currencies")
 
+// ISO4217Currencies maps an ISO 4217 alphabetic currency code to its number of
+// minor units: the decimal exponent that converts a human-readable amount into
+// an integer amount of minor units ("1234.56" EUR -> 123456 with exponent 2).
+//
+// Generated from ISO 4217 list one, as published by SIX Group, the ISO 4217
+// maintenance agency.
+//
+// Source URL: https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml
+// List published: 2026-01-01 (the Pblshd attribute of that XML)
+// Regenerated: 2026-07-29
+//
+// Do not hand-edit. testdata/list-one.csv holds the same data trimmed to
+// (code, minor_units, numeric_code), and TestISO4217CurrenciesMatchesListOne
+// diffs this map against it, so the table cannot drift from the CSV unnoticed. To
+// update: re-download the URL above, regenerate the CSV, apply the differences
+// the test reports, and bump List published and Regenerated in this comment.
+//
+// The numeric codes from the third column live in ISO4217NumericCodes, which is
+// deliberately wider than this map — see the note there.
+//
+// Two membership decisions are deliberate, and the test enforces both.
+//
+//  1. Codes whose minor units are "N.A." in the standard are NOT in this map.
+//     map[string]int cannot express "no minor unit defined", and 0 is not a
+//     truthful stand-in: 0 asserts that the currency has no sub-unit, the way
+//     JPY genuinely has none. That is wrong for XAU (gold is traded by weight,
+//     not in hundredths) and actively misleading for XXX, which denotes that no
+//     currency is involved at all. Leaving them out makes GetPrecision error,
+//     which is the honest answer — there is no exponent by which to scale an
+//     amount of gold. The codes are still recorded, in ISO4217NoMinorUnitCodes.
+//
+//  2. Codes withdrawn from the standard are KEPT, and marked below. Their
+//     exponents were correct while they were current and remain correct for the
+//     amounts that were denominated in them, so a consumer replaying historical
+//     data still needs them; dropping them would turn a resolvable historical
+//     amount into a lookup failure. They are listed in ISO4217WithdrawnCodes so
+//     that a caller minting new amounts can reject them.
+//
+//     Their withdrawal dates come from ISO 4217 list three via
+//     testdata/list-three.csv, at the month granularity the standard publishes.
+//     That is the date ISO removed the code, which is not always the date the
+//     currency was replaced — SLL was redenominated to SLE on 2022-07-01 but both
+//     circulated until ISO withdrew SLL in 2023-12.
+var ISO4217Currencies = map[string]int{
+	// Active in ISO 4217 list one as of the published date above.
+	"AED": 2, // UAE Dirham
+	"AFN": 2, // Afghani
+	"ALL": 2, // Lek
+	"AMD": 2, // Armenian Dram
+	"AOA": 2, // Kwanza
+	"ARS": 2, // Argentine Peso
+	"AUD": 2, // Australian Dollar
+	"AWG": 2, // Aruban Florin
+	"AZN": 2, // Azerbaijan Manat
+	"BAM": 2, // Convertible Mark
+	"BBD": 2, // Barbados Dollar
+	"BDT": 2, // Taka
+	"BHD": 3, // Bahraini Dinar
+	"BIF": 0, // Burundi Franc
+	"BMD": 2, // Bermudian Dollar
+	"BND": 2, // Brunei Dollar
+	"BOB": 2, // Boliviano
+	"BOV": 2, // Mvdol (funds code)
+	"BRL": 2, // Brazilian Real
+	"BSD": 2, // Bahamian Dollar
+	"BTN": 2, // Ngultrum
+	"BWP": 2, // Pula
+	"BYN": 2, // Belarusian Ruble
+	"BZD": 2, // Belize Dollar
+	"CAD": 2, // Canadian Dollar
+	"CDF": 2, // Congolese Franc
+	"CHE": 2, // WIR Euro (funds code)
+	"CHF": 2, // Swiss Franc
+	"CHW": 2, // WIR Franc (funds code)
+	"CLF": 4, // Unidad de Fomento (funds code)
+	"CLP": 0, // Chilean Peso
+	"CNY": 2, // Yuan Renminbi
+	"COP": 2, // Colombian Peso
+	"COU": 2, // Unidad de Valor Real (funds code)
+	"CRC": 2, // Costa Rican Colon
+	"CUP": 2, // Cuban Peso
+	"CVE": 2, // Cabo Verde Escudo
+	"CZK": 2, // Czech Koruna
+	"DJF": 0, // Djibouti Franc
+	"DKK": 2, // Danish Krone
+	"DOP": 2, // Dominican Peso
+	"DZD": 2, // Algerian Dinar
+	"EGP": 2, // Egyptian Pound
+	"ERN": 2, // Nakfa
+	"ETB": 2, // Ethiopian Birr
+	"EUR": 2, // Euro
+	"FJD": 2, // Fiji Dollar
+	"FKP": 2, // Falkland Islands Pound
+	"GBP": 2, // Pound Sterling
+	"GEL": 2, // Lari
+	"GHS": 2, // Ghana Cedi
+	"GIP": 2, // Gibraltar Pound
+	"GMD": 2, // Dalasi
+	"GNF": 0, // Guinean Franc
+	"GTQ": 2, // Quetzal
+	"GYD": 2, // Guyana Dollar
+	"HKD": 2, // Hong Kong Dollar
+	"HNL": 2, // Lempira
+	"HTG": 2, // Gourde
+	"HUF": 2, // Forint
+	"IDR": 2, // Rupiah
+	"ILS": 2, // New Israeli Sheqel
+	"INR": 2, // Indian Rupee
+	"IQD": 3, // Iraqi Dinar
+	"IRR": 2, // Iranian Rial
+	"ISK": 0, // Iceland Krona
+	"JMD": 2, // Jamaican Dollar
+	"JOD": 3, // Jordanian Dinar
+	"JPY": 0, // Yen
+	"KES": 2, // Kenyan Shilling
+	"KGS": 2, // Som
+	"KHR": 2, // Riel
+	"KMF": 0, // Comorian Franc
+	"KPW": 2, // North Korean Won
+	"KRW": 0, // Won
+	"KWD": 3, // Kuwaiti Dinar
+	"KYD": 2, // Cayman Islands Dollar
+	"KZT": 2, // Tenge
+	"LAK": 2, // Lao Kip
+	"LBP": 2, // Lebanese Pound
+	"LKR": 2, // Sri Lanka Rupee
+	"LRD": 2, // Liberian Dollar
+	"LSL": 2, // Loti
+	"LYD": 3, // Libyan Dinar
+	"MAD": 2, // Moroccan Dirham
+	"MDL": 2, // Moldovan Leu
+	"MGA": 2, // Malagasy Ariary
+	"MKD": 2, // Denar
+	"MMK": 2, // Kyat
+	"MNT": 2, // Tugrik
+	"MOP": 2, // Pataca
+	"MRU": 2, // Ouguiya
+	"MUR": 2, // Mauritius Rupee
+	"MVR": 2, // Rufiyaa
+	"MWK": 2, // Malawi Kwacha
+	"MXN": 2, // Mexican Peso
+	"MXV": 2, // Mexican Unidad de Inversion (UDI) (funds code)
+	"MYR": 2, // Malaysian Ringgit
+	"MZN": 2, // Mozambique Metical
+	"NAD": 2, // Namibia Dollar
+	"NGN": 2, // Naira
+	"NIO": 2, // Cordoba Oro
+	"NOK": 2, // Norwegian Krone
+	"NPR": 2, // Nepalese Rupee
+	"NZD": 2, // New Zealand Dollar
+	"OMR": 3, // Rial Omani
+	"PAB": 2, // Balboa
+	"PEN": 2, // Sol
+	"PGK": 2, // Kina
+	"PHP": 2, // Philippine Peso
+	"PKR": 2, // Pakistan Rupee
+	"PLN": 2, // Zloty
+	"PYG": 0, // Guarani
+	"QAR": 2, // Qatari Rial
+	"RON": 2, // Romanian Leu
+	"RSD": 2, // Serbian Dinar
+	"RUB": 2, // Russian Ruble
+	"RWF": 0, // Rwanda Franc
+	"SAR": 2, // Saudi Riyal
+	"SBD": 2, // Solomon Islands Dollar
+	"SCR": 2, // Seychelles Rupee
+	"SDG": 2, // Sudanese Pound
+	"SEK": 2, // Swedish Krona
+	"SGD": 2, // Singapore Dollar
+	"SHP": 2, // Saint Helena Pound
+	"SLE": 2, // Leone
+	"SOS": 2, // Somali Shilling
+	"SRD": 2, // Surinam Dollar
+	"SSP": 2, // South Sudanese Pound
+	"STN": 2, // Dobra
+	"SVC": 2, // El Salvador Colon
+	"SYP": 2, // Syrian Pound
+	"SZL": 2, // Lilangeni
+	"THB": 2, // Baht
+	"TJS": 2, // Somoni
+	"TMT": 2, // Turkmenistan New Manat
+	"TND": 3, // Tunisian Dinar
+	"TOP": 2, // Pa’anga
+	"TRY": 2, // Turkish Lira
+	"TTD": 2, // Trinidad and Tobago Dollar
+	"TWD": 2, // New Taiwan Dollar
+	"TZS": 2, // Tanzanian Shilling
+	"UAH": 2, // Hryvnia
+	"UGX": 0, // Uganda Shilling
+	"USD": 2, // US Dollar
+	"USN": 2, // US Dollar (Next day) (funds code)
+	"UYI": 0, // Uruguay Peso en Unidades Indexadas (UI) (funds code)
+	"UYU": 2, // Peso Uruguayo
+	"UYW": 4, // Unidad Previsional
+	"UZS": 2, // Uzbekistan Sum
+	"VED": 2, // Bolívar Soberano
+	"VES": 2, // Bolívar Soberano
+	"VND": 0, // Dong
+	"VUV": 0, // Vatu
+	"WST": 2, // Tala
+	"XAD": 2, // Arab Accounting Dinar
+	"XAF": 0, // CFA Franc BEAC
+	"XCD": 2, // East Caribbean Dollar
+	"XCG": 2, // Caribbean Guilder
+	"XOF": 0, // CFA Franc BCEAO
+	"XPF": 0, // CFP Franc
+	"YER": 2, // Yemeni Rial
+	"ZAR": 2, // Rand
+	"ZMW": 2, // Zambian Kwacha
+	"ZWG": 2, // Zimbabwe Gold
+
+	// Withdrawn from the standard, kept deliberately — see (2) above. These
+	// must not be used to denominate new amounts.
+	"ANG": 2, // Netherlands Antillean guilder — withdrawn 2025-03: replaced by XCG (Caribbean guilder), which reuses numeric 532
+	"BGN": 2, // Bulgarian lev — withdrawn 2026-01: Bulgaria adopted the euro
+	"CUC": 2, // Cuban convertible peso — withdrawn 2021-06: Cuba's dual-currency system ended
+	"HRK": 2, // Croatian kuna — withdrawn 2023-01: Croatia adopted the euro
+	"SLL": 2, // Sierra Leonean leone (old) — withdrawn 2023-12: redenominated to SLE (1 SLE = 1000 SLL) on 2022-07-01; both circulated until withdrawal
+	"ZWL": 2, // Zimbabwean dollar — withdrawn 2024-09: replaced by ZWG (Zimbabwe Gold), introduced 2024-04
+}
+
+// ISO4217NoMinorUnitCodes is the set of ISO 4217 codes whose number of minor
+// units the standard gives as "N.A." — precious metals, fund and bond-market
+// units of account, and the testing/no-currency codes. They are absent from
+// ISO4217Currencies on purpose; see decision (1) there.
+//
+// Membership means "this is a real ISO 4217 code that has no minor-unit
+// exponent", which is different from "unknown code". Use it to tell a caller
+// that an amount in XAU cannot be scaled, rather than that XAU is unrecognised.
+var ISO4217NoMinorUnitCodes = map[string]struct{}{
+	"XAG": {}, // Silver
+	"XAU": {}, // Gold
+	"XBA": {}, // Bond Markets Unit European Composite Unit (EURCO)
+	"XBB": {}, // Bond Markets Unit European Monetary Unit (E.M.U.-6)
+	"XBC": {}, // Bond Markets Unit European Unit of Account 9 (E.U.A.-9)
+	"XBD": {}, // Bond Markets Unit European Unit of Account 17 (E.U.A.-17)
+	"XDR": {}, // SDR (Special Drawing Right)
+	"XPD": {}, // Palladium
+	"XPT": {}, // Platinum
+	"XSU": {}, // Sucre
+	"XTS": {}, // Codes specifically reserved for testing purposes
+	"XUA": {}, // ADB Unit of Account
+	"XXX": {}, // The codes assigned for transactions where no currency is involved
+}
+
+// ISO4217WithdrawnCodes is the set of codes present in ISO4217Currencies that
+// ISO 4217 list one no longer contains. Their exponents are retained so
+// historical amounts stay resolvable; see decision (2) on ISO4217Currencies.
+//
+// Look a code up here before accepting it for a new amount.
+var ISO4217WithdrawnCodes = map[string]struct{}{
+	"ANG": {}, // withdrawn 2025-03: replaced by XCG (Caribbean guilder), which reuses numeric 532
+	"BGN": {}, // withdrawn 2026-01: Bulgaria adopted the euro
+	"CUC": {}, // withdrawn 2021-06: Cuba's dual-currency system ended
+	"HRK": {}, // withdrawn 2023-01: Croatia adopted the euro
+	"SLL": {}, // withdrawn 2023-12: redenominated to SLE (1 SLE = 1000 SLL) on 2022-07-01; both circulated until withdrawal
+	"ZWL": {}, // withdrawn 2024-09: replaced by ZWG (Zimbabwe Gold), introduced 2024-04
+}
+
+// FormatAsset renders a currency code as a ledger asset qualified by its number
+// of minor units, looked up in currencies: "EUR" becomes "EUR/2".
+//
+// It returns the bare code with no "/n" suffix in two cases: when the code's
+// exponent is 0, so "JPY" becomes "JPY"; and when the code is absent from
+// currencies, so "BBB" becomes "BBB". Note that the two are indistinguishable in
+// the result — use GetPrecision if you need to know whether the code was found.
+//
+// Both forms are valid ledger assets, but "JPY" and "JPY/0" are two DIFFERENT
+// assets and amounts posted to them will not net against each other. Do not mix
+// FormatAsset and FormatAssetWithPrecision for the same currency: for JPY this
+// one yields "JPY" while FormatAssetWithPrecision("JPY", 0) yields "JPY/0".
+// Choose one convention per ledger and keep to it. The asymmetry is preserved
+// for compatibility with assets already written to existing ledgers.
 func FormatAsset(currencies map[string]int, cur string) string {
-	asset := strings.ToUpper(string(cur))
+	asset := strings.ToUpper(cur)
 
 	def, ok := currencies[asset]
 	if !ok {
@@ -194,32 +309,56 @@ func FormatAsset(currencies map[string]int, cur string) string {
 	return fmt.Sprintf("%s/%d", asset, def)
 }
 
+// FormatAssetWithPrecision renders a currency code as a ledger asset qualified by
+// the given precision. The suffix is always present, so a precision of 0 yields
+// "JPY/0".
+//
+// This differs from FormatAsset, which omits the suffix entirely when the
+// exponent is 0. See FormatAsset for why mixing the two conventions on one
+// ledger produces assets that do not net.
 func FormatAssetWithPrecision(cur string, precision int) string {
-	asset := strings.ToUpper(string(cur))
+	asset := strings.ToUpper(cur)
 	return fmt.Sprintf("%s/%d", asset, precision)
 }
 
+// GetPrecision returns the number of minor units recorded for cur in currencies.
+//
+// On a miss it returns PrecisionUnknown (-1) and an error wrapping
+// ErrMissingCurrencies. The precision is deliberately not 0 on the error path,
+// so that a caller who drops the error corrupts nothing quietly; see
+// PrecisionUnknown.
 func GetPrecision(currencies map[string]int, cur string) (int, error) {
-	asset := strings.ToUpper(string(cur))
+	asset := strings.ToUpper(cur)
 
 	def, ok := currencies[asset]
 	if !ok {
-		return 0, fmt.Errorf("%s: %w", asset, ErrMissingCurrencies)
+		return PrecisionUnknown, fmt.Errorf("%s: %w", asset, ErrMissingCurrencies)
 	}
 
 	return def, nil
 }
 
+// GetCurrencyAndPrecisionFromAsset splits a "CUR/n" ledger asset and returns the
+// currency code together with the precision recorded for it in currencies.
+//
+// The returned code is upper-cased, matching the rest of this package, so it can
+// be keyed straight back into currencies or used to build another asset. Taking
+// it verbatim from the input would let "eur/2" yield "eur", which reassembles
+// into a "eur/2" asset that does not net against "EUR/2".
+//
+// The precision comes from currencies, not from the asset string: the "/n" part
+// only has to be present, and any mismatch with the table is ignored. On error
+// the returned precision is PrecisionUnknown (-1), never 0.
 func GetCurrencyAndPrecisionFromAsset(currencies map[string]int, asset string) (string, int, error) {
 	parts := strings.Split(asset, "/")
 	if len(parts) != 2 {
-		return "", 0, fmt.Errorf("invalid asset: %s", asset)
+		return "", PrecisionUnknown, fmt.Errorf("invalid asset: %s", asset)
 	}
 
-	currency := parts[0]
+	currency := strings.ToUpper(parts[0])
 	precision, err := GetPrecision(currencies, currency)
 	if err != nil {
-		return "", 0, err
+		return "", PrecisionUnknown, err
 	}
 
 	return currency, precision, nil

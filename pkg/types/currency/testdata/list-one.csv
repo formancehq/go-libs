@@ -1,0 +1,206 @@
+# ISO 4217 list one (active codes), trimmed to (code, minor_units, numeric_code).
+#
+# Source:      https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml
+#              Published by SIX Group, the ISO 4217 maintenance agency.
+# Published:   2026-01-01 (the Pblshd attribute of the list one XML)
+# Regenerated: 2026-07-29
+#
+# One row per distinct alphabetic code. The source lists one entry per country,
+# so shared codes such as EUR and XOF appear many times there and once here.
+#
+# minor_units is copied verbatim from CcyMnrUnts, including the literal N.A.
+# used for codes that have no minor unit at all - see ISO4217NoMinorUnitCodes
+# in currency.go for why those are kept out of the ISO4217Currencies map.
+#
+# numeric_code is copied verbatim from CcyNbr, keeping the leading zeros: 16 of
+# these codes have one, and 008 is the canonical form of ALL, not 8. Every code
+# has a numeric code, including the N.A. ones, so ISO4217NumericCodes is wider
+# than ISO4217Currencies on purpose.
+#
+# To regenerate, from this directory:
+#
+#   curl -sSL -o /tmp/list-one.xml "$URL"   # the Source URL above
+#   python3 -c 'import xml.etree.ElementTree as ET; r = ET.parse("/tmp/list-one.xml").getroot(); c = {e.findtext("Ccy"): (e.findtext("CcyMnrUnts"), e.findtext("CcyNbr")) for e in r.iter("CcyNtry") if e.findtext("Ccy")}; print("code,minor_units,numeric_code"); [print(k + "," + c[k][0] + "," + c[k][1]) for k in sorted(c)]' > rows.csv
+#
+# then splice rows.csv in below this header, updating Published and
+# Regenerated. The tests in iso4217_test.go report exactly which entries of
+# ISO4217Currencies and ISO4217NumericCodes to change.
+code,minor_units,numeric_code
+AED,2,784
+AFN,2,971
+ALL,2,008
+AMD,2,051
+AOA,2,973
+ARS,2,032
+AUD,2,036
+AWG,2,533
+AZN,2,944
+BAM,2,977
+BBD,2,052
+BDT,2,050
+BHD,3,048
+BIF,0,108
+BMD,2,060
+BND,2,096
+BOB,2,068
+BOV,2,984
+BRL,2,986
+BSD,2,044
+BTN,2,064
+BWP,2,072
+BYN,2,933
+BZD,2,084
+CAD,2,124
+CDF,2,976
+CHE,2,947
+CHF,2,756
+CHW,2,948
+CLF,4,990
+CLP,0,152
+CNY,2,156
+COP,2,170
+COU,2,970
+CRC,2,188
+CUP,2,192
+CVE,2,132
+CZK,2,203
+DJF,0,262
+DKK,2,208
+DOP,2,214
+DZD,2,012
+EGP,2,818
+ERN,2,232
+ETB,2,230
+EUR,2,978
+FJD,2,242
+FKP,2,238
+GBP,2,826
+GEL,2,981
+GHS,2,936
+GIP,2,292
+GMD,2,270
+GNF,0,324
+GTQ,2,320
+GYD,2,328
+HKD,2,344
+HNL,2,340
+HTG,2,332
+HUF,2,348
+IDR,2,360
+ILS,2,376
+INR,2,356
+IQD,3,368
+IRR,2,364
+ISK,0,352
+JMD,2,388
+JOD,3,400
+JPY,0,392
+KES,2,404
+KGS,2,417
+KHR,2,116
+KMF,0,174
+KPW,2,408
+KRW,0,410
+KWD,3,414
+KYD,2,136
+KZT,2,398
+LAK,2,418
+LBP,2,422
+LKR,2,144
+LRD,2,430
+LSL,2,426
+LYD,3,434
+MAD,2,504
+MDL,2,498
+MGA,2,969
+MKD,2,807
+MMK,2,104
+MNT,2,496
+MOP,2,446
+MRU,2,929
+MUR,2,480
+MVR,2,462
+MWK,2,454
+MXN,2,484
+MXV,2,979
+MYR,2,458
+MZN,2,943
+NAD,2,516
+NGN,2,566
+NIO,2,558
+NOK,2,578
+NPR,2,524
+NZD,2,554
+OMR,3,512
+PAB,2,590
+PEN,2,604
+PGK,2,598
+PHP,2,608
+PKR,2,586
+PLN,2,985
+PYG,0,600
+QAR,2,634
+RON,2,946
+RSD,2,941
+RUB,2,643
+RWF,0,646
+SAR,2,682
+SBD,2,090
+SCR,2,690
+SDG,2,938
+SEK,2,752
+SGD,2,702
+SHP,2,654
+SLE,2,925
+SOS,2,706
+SRD,2,968
+SSP,2,728
+STN,2,930
+SVC,2,222
+SYP,2,760
+SZL,2,748
+THB,2,764
+TJS,2,972
+TMT,2,934
+TND,3,788
+TOP,2,776
+TRY,2,949
+TTD,2,780
+TWD,2,901
+TZS,2,834
+UAH,2,980
+UGX,0,800
+USD,2,840
+USN,2,997
+UYI,0,940
+UYU,2,858
+UYW,4,927
+UZS,2,860
+VED,2,926
+VES,2,928
+VND,0,704
+VUV,0,548
+WST,2,882
+XAD,2,396
+XAF,0,950
+XAG,N.A.,961
+XAU,N.A.,959
+XBA,N.A.,955
+XBB,N.A.,956
+XBC,N.A.,957
+XBD,N.A.,958
+XCD,2,951
+XCG,2,532
+XDR,N.A.,960
+XOF,0,952
+XPD,N.A.,964
+XPF,0,953
+XPT,N.A.,962
+XSU,N.A.,994
+XTS,N.A.,963
+XUA,N.A.,965
+XXX,N.A.,999
+YER,2,886
+ZAR,2,710
+ZMW,2,967
+ZWG,2,924

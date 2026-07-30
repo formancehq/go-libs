@@ -1,0 +1,34 @@
+# ISO 4217 list three (withdrawn codes), trimmed to the codes this package
+# still retains, as (code, numeric_code, withdrawn).
+#
+# Source:      https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-three.xml
+#              Published by SIX Group, the ISO 4217 maintenance agency.
+# Published:   2026-01-01 (the Pblshd attribute of the list three XML)
+# Regenerated: 2026-07-29
+#
+# These are the codes ISO 4217 has withdrawn but ISO4217Currencies keeps, so
+# that historical amounts stay resolvable. This file is the source for their
+# numeric codes and for the withdrawal dates in the comments in currency.go.
+#
+# withdrawn is CcyNbr-year-month from WthdrwlDt, at the month granularity the
+# standard publishes. It is the date ISO removed the code, which is not always
+# the date the currency itself was replaced: SLL was redenominated to SLE on
+# 2022-07-01 but both circulated until ISO withdrew SLL in 2023-12.
+#
+# A code may appear several times in the source when it was withdrawn, reused
+# and withdrawn again (ANG and HRK both did). The latest date is the one kept
+# here.
+#
+# To regenerate, from this directory:
+#
+#   curl -sSL -o /tmp/list-three.xml "$URL"   # the Source URL above
+#   python3 -c 'import xml.etree.ElementTree as ET; r = ET.parse("/tmp/list-three.xml").getroot(); rows = {}; [rows.setdefault(e.findtext("Ccy"), []).append((e.findtext("CcyNbr"), e.findtext("WthdrwlDt"))) for e in r.iter("HstrcCcyNtry") if e.findtext("Ccy")]; print("code,numeric_code,withdrawn"); [print(k + "," + rows[k][0][0] + "," + max(w for _, w in rows[k])) for k in sorted(rows)]' > all-historic.csv
+#
+# then keep only the rows for the codes in ISO4217WithdrawnCodes.
+code,numeric_code,withdrawn
+ANG,532,2025-03
+BGN,975,2026-01
+CUC,931,2021-06
+HRK,191,2023-01
+SLL,694,2023-12
+ZWL,932,2024-09
