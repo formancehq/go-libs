@@ -4,9 +4,10 @@ on:
   push:
     branches:
       - releases/*
+      - release/*
       - main
   pull_request:
-    types: [ assigned, opened, synchronize, reopened, labeled ]
+    types: [ assigned, opened, synchronize, reopened, labeled, edited ]
 
 permissions:
   contents: read
@@ -16,16 +17,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  PR:
+    if: github.event_name == 'pull_request'
+    uses: formancehq/ci/.github/workflows/go-pr.yml@main
+    permissions:
+      pull-requests: read
+      statuses: write
+
   Dirty:
-    runs-on: "namespace-profile-linux-amd64-4vcpu"
+    runs-on: namespace-profile-linux-amd64-4vcpu
     steps:
-      - uses: 'namespacelabs/nscloud-checkout-action@v9'
+      - uses: namespacelabs/nscloud-checkout-action@v9
         with:
           fetch-depth: 0
-      - name: Setup Env
-        uses: ./.github/actions/env
-      - run: >
-          nix develop --impure --command just pre-commit
+          dissociate: true
+
+      - uses: formancehq/ci/actions/setup-nix@main
+
+      - run: nix develop --impure --command just pre-commit
+
       - name: Check for uncommitted changes
         shell: bash
         run: |
@@ -38,16 +48,18 @@ jobs:
           fi
 
   Tests:
-    runs-on: "namespace-profile-linux-amd64-4vcpu"
+    needs: [Dirty]
+    runs-on: namespace-profile-linux-amd64-4vcpu
     steps:
-      - uses: 'namespacelabs/nscloud-checkout-action@v9'
+      - uses: namespacelabs/nscloud-checkout-action@v9
         with:
           fetch-depth: 0
-      - name: Setup Env
-        uses: ./.github/actions/env
-      - run: >
-          nix develop --impure --command just tests
-      - name: Upload coverage reports to Codecov with GitHub Action
-        uses: codecov/codecov-action@v7.0.0
+          dissociate: true
+
+      - uses: formancehq/ci/actions/setup-nix@main
+
+      - run: nix develop --impure --command just tests
+
+      - uses: codecov/codecov-action@v7.0.0
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
