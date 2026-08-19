@@ -64,13 +64,11 @@ func TestMetricsModuleDoesNotProvideZeroRuntimeMetricsInterval(t *testing.T) {
 	require.Zero(t, runtimeOptionsCount)
 }
 
-// histogramAggregationKind starts a MetricsModule with the given
-// ClassicHistograms setting, records one observation on a histogram with the
-// given unit, force-flushes through the in-memory exporter, and returns the
-// concrete metricdata type the SDK actually produced.
-func histogramAggregationKind(t *testing.T, classic bool, unit string) any {
-	t.Helper()
-
+// TestMetricsModuleUsesExponentialHistograms pins that every histogram
+// instrument gets Base2ExponentialHistogram aggregation unconditionally --
+// there is no backend-specific opt-out, matching every other package in this
+// module (none of them special-case aggregation for a particular exporter).
+func TestMetricsModuleUsesExponentialHistograms(t *testing.T) {
 	var (
 		exporter      *metrics.InMemoryExporter
 		meterProvider *sdkmetric.MeterProvider
@@ -78,17 +76,14 @@ func histogramAggregationKind(t *testing.T, classic bool, unit string) any {
 
 	app := fxtest.New(t,
 		observefx.ResourceModule(observe.Config{ServiceName: "histogram-aggregation-test"}),
-		observefx.MetricsModule(metrics.ModuleConfig{
-			KeepInMemory:      true,
-			ClassicHistograms: classic,
-		}),
+		observefx.MetricsModule(metrics.ModuleConfig{KeepInMemory: true}),
 		fx.Populate(&exporter, &meterProvider),
 		fx.NopLogger,
 	)
 	app.RequireStart()
 	defer app.RequireStop()
 
-	hist, err := otel.Meter("histogram-aggregation-test").Float64Histogram("test.histogram", otelmetric.WithUnit(unit))
+	hist, err := otel.Meter("histogram-aggregation-test").Float64Histogram("test.histogram", otelmetric.WithUnit("s"))
 	require.NoError(t, err)
 	hist.Record(context.Background(), 1.5, otelmetric.WithAttributes())
 
@@ -100,46 +95,12 @@ func histogramAggregationKind(t *testing.T, classic bool, unit string) any {
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
 			if m.Name == "test.histogram" {
-				return m.Data
+				_, ok := m.Data.(metricdata.ExponentialHistogram[float64])
+				require.True(t, ok, "every histogram must use exponential aggregation")
+				return
 			}
 		}
 	}
 
 	t.Fatal("test.histogram not found in exported metrics")
-
-	return nil
-}
-
-func TestMetricsModuleDefaultsToExponentialHistograms(t *testing.T) {
-	_, ok := histogramAggregationKind(t, false, "s").(metricdata.ExponentialHistogram[float64])
-	require.True(t, ok, "default (ClassicHistograms: false) must produce an exponential histogram")
-}
-
-func TestMetricsModuleClassicHistogramsUsesExplicitBuckets(t *testing.T) {
-	_, ok := histogramAggregationKind(t, true, "1").(metricdata.Histogram[float64])
-	require.True(t, ok, "ClassicHistograms: true must produce an explicit-bucket histogram")
-}
-
-// wantSecondsHistogramBoundaries mirrors observefx's unexported
-// secondsHistogramBoundaries -- kept in sync by these tests failing if either
-// side drifts from the other.
-var wantSecondsHistogramBoundaries = []float64{
-	0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 240,
-}
-
-func TestMetricsModuleClassicHistogramsUsesSecondsBoundariesForSecondsUnit(t *testing.T) {
-	data := histogramAggregationKind(t, true, "s")
-	hist, ok := data.(metricdata.Histogram[float64])
-	require.True(t, ok, "ClassicHistograms: true must produce an explicit-bucket histogram")
-	require.NotEmpty(t, hist.DataPoints)
-	require.Equal(t, wantSecondsHistogramBoundaries, hist.DataPoints[0].Bounds)
-}
-
-func TestMetricsModuleClassicHistogramsLeavesNonSecondsUnitAtSDKDefault(t *testing.T) {
-	data := histogramAggregationKind(t, true, "1")
-	hist, ok := data.(metricdata.Histogram[float64])
-	require.True(t, ok, "ClassicHistograms: true must produce an explicit-bucket histogram")
-	require.NotEmpty(t, hist.DataPoints)
-	require.NotEqual(t, wantSecondsHistogramBoundaries, hist.DataPoints[0].Bounds,
-		"a non-seconds-unit histogram should keep the SDK's default boundaries, not the seconds-tuned ones")
 }

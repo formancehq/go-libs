@@ -28,16 +28,6 @@ const (
 	OTLPMetricsPeriodicReaderOptionsKey = `group:"_otlpMetricsPeriodicReaderOptions"`
 )
 
-// secondsHistogramBoundaries are the explicit bucket boundaries (in seconds)
-// applied to seconds-unit histograms under ClassicHistograms. Dense
-// resolution from 5ms to a few seconds resolves the fast, page/call-bounded
-// happy path; boundaries out to 240s cover the retry/backoff tail (a single
-// HTTP call in a connectivity plugin can legitimately take minutes under
-// sustained upstream rate-limiting).
-var secondsHistogramBoundaries = []float64{
-	0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 240,
-}
-
 func ProvideMetricsProviderOption(v any, annotations ...fx.Annotation) fx.Option {
 	annotations = append(annotations, fx.ResultTags(metricsProviderOptionKey))
 	return fx.Provide(fx.Annotate(v, annotations...))
@@ -54,42 +44,26 @@ func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
 		fx.Supply(cfg),
 		fx.Provide(func(mp *sdkmetric.MeterProvider) metric.MeterProvider { return mp }),
 		fx.Provide(fx.Annotate(func(options ...sdkmetric.Option) *sdkmetric.MeterProvider {
-			os := options
-			if !cfg.ClassicHistograms {
-				var view sdkmetric.View = func(i sdkmetric.Instrument) (sdkmetric.Stream, bool) {
-					s := sdkmetric.Stream{Name: i.Name, Description: i.Description, Unit: i.Unit}
-					if i.Kind == sdkmetric.InstrumentKindHistogram {
-						s.Aggregation = sdkmetric.AggregationBase2ExponentialHistogram{
-							MaxSize:  160,
-							MaxScale: 20,
-						}
-						return s, true
+			// Histograms use Base2ExponentialHistogram rather than the SDK's
+			// default explicit-bucket aggregation: higher resolution, cheaper
+			// to export, and every backend this library's consumers export to
+			// (VictoriaMetrics >= v1.143.0, or a plain OTLP/native-histogram
+			// destination) can now ingest it, so there's no exporter-specific
+			// exception to carry here -- same as every other package in this
+			// module, which doesn't special-case aggregation for a particular
+			// backend either.
+			var view sdkmetric.View = func(i sdkmetric.Instrument) (sdkmetric.Stream, bool) {
+				s := sdkmetric.Stream{Name: i.Name, Description: i.Description, Unit: i.Unit}
+				if i.Kind == sdkmetric.InstrumentKindHistogram {
+					s.Aggregation = sdkmetric.AggregationBase2ExponentialHistogram{
+						MaxSize:  160,
+						MaxScale: 20,
 					}
-					return s, false
+					return s, true
 				}
-				os = append(os, sdkmetric.WithView(view))
-			} else {
-				// The SDK's own default explicit-bucket boundaries are
-				// unitless numbers tuned for millisecond-scale values (first
-				// non-zero boundary: 5). A seconds-unit histogram under that
-				// default has its first bucket cover 0-5s, which swallows
-				// nearly every sample from this codebase's job/request
-				// duration histograms -- those measure page- or call-bounded
-				// units of work that normally finish in well under a second.
-				// Give seconds-unit histograms boundaries shaped for that
-				// distribution instead of the SDK default.
-				var view sdkmetric.View = func(i sdkmetric.Instrument) (sdkmetric.Stream, bool) {
-					s := sdkmetric.Stream{Name: i.Name, Description: i.Description, Unit: i.Unit}
-					if i.Kind == sdkmetric.InstrumentKindHistogram && i.Unit == "s" {
-						s.Aggregation = sdkmetric.AggregationExplicitBucketHistogram{
-							Boundaries: secondsHistogramBoundaries,
-						}
-						return s, true
-					}
-					return s, false
-				}
-				os = append(os, sdkmetric.WithView(view))
+				return s, false
 			}
+			os := append(options, sdkmetric.WithView(view))
 
 			ret := sdkmetric.NewMeterProvider(os...)
 			otel.SetMeterProvider(ret)
