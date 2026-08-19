@@ -29,8 +29,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/formancehq/go-libs/v5/pkg/observe"
 )
 
 const instrumentationName = "github.com/formancehq/go-libs/v5/pkg/observe/job"
@@ -55,8 +53,10 @@ type Desc struct {
 	// job.duration/job.errors/job.inflight be filtered or grouped by source
 	// even though every connectivity plugin shares one OTel service.name
 	// resource attribute -- component_name identifies the plugin
-	// independently of that process-wide service.name, which still reaches
-	// the same data points via observe.ResourceAttributes.
+	// independently of that process-wide service.name. The collector, not
+	// this package, is responsible for promoting service.name and other
+	// resource attributes onto the same data points (e.g. via
+	// resource_to_telemetry_conversion for a Prometheus remote-write target).
 	ComponentName string
 	// Description documents what the job does; used only for humans
 	// reading the declared job list, never emitted as telemetry.
@@ -86,14 +86,17 @@ type Job struct {
 }
 
 // baseAttrs returns the fixed attributes every span and metric for a job
-// carries: the job name, the component name, and whatever
-// observe.ResourceAttributes reports (OTEL_RESOURCE_ATTRIBUTES plus any
-// programmatically configured resource attributes).
+// carries: the job name and the component name. Process-level identity
+// (service.name, deployment.environment, ...) lives on the OTel Resource,
+// not here -- a collector-side resource_to_telemetry_conversion setting is
+// the right place to promote that onto Prometheus/VictoriaMetrics labels, so
+// this package does not duplicate it onto every span and metric data point
+// itself.
 func baseAttrs(jobName, componentName string) []attribute.KeyValue {
-	return append([]attribute.KeyValue{
+	return []attribute.KeyValue{
 		attribute.String("job_name", jobName),
 		attribute.String("component_name", componentName),
-	}, observe.ResourceAttributes()...)
+	}
 }
 
 // Start begins a job: it opens a span as a child of whatever span is already

@@ -17,7 +17,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/formancehq/go-libs/v5/pkg/observe"
 	"github.com/formancehq/go-libs/v5/pkg/observe/job"
 )
 
@@ -28,26 +27,12 @@ import (
 // recording provider of each kind here, and individual tests isolate
 // themselves by using a unique job name and filtering the shared recorder/
 // reader down to just that name, rather than each swapping providers.
-//
-// OTEL_RESOURCE_ATTRIBUTES is set here too, before m.Run(), for the same
-// reason: job.go reads it through a sync.OnceValue that caches whatever the
-// first caller observes, matching how a real process only ever configures it
-// once at startup.
-const (
-	wantDeploymentEnvironment = "test"
-	wantStack                 = "unittest"
-)
-
 var (
 	spanRecorder = tracetest.NewSpanRecorder()
 	metricReader = sdkmetric.NewManualReader()
 )
 
 func TestMain(m *testing.M) {
-	if err := os.Setenv("OTEL_RESOURCE_ATTRIBUTES", fmt.Sprintf("deployment.environment=%s,stack=%s", wantDeploymentEnvironment, wantStack)); err != nil {
-		panic(err)
-	}
-
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder)))
 	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader)))
 
@@ -102,18 +87,6 @@ func spanAttr(span sdktrace.ReadOnlySpan, key string) (attribute.Value, bool) {
 	return attribute.Value{}, false
 }
 
-func requireResourceAttrs(t *testing.T, attrs attribute.Set) {
-	t.Helper()
-
-	deploymentEnv, ok := attrs.Value(attribute.Key("deployment.environment"))
-	require.True(t, ok, "expected a deployment.environment attribute from OTEL_RESOURCE_ATTRIBUTES")
-	require.Equal(t, wantDeploymentEnvironment, deploymentEnv.AsString())
-
-	stack, ok := attrs.Value(attribute.Key("stack"))
-	require.True(t, ok, "expected a stack attribute from OTEL_RESOURCE_ATTRIBUTES")
-	require.Equal(t, wantStack, stack.AsString())
-}
-
 func TestRunNestsSpanUnderCallerSpan(t *testing.T) {
 	tracer := otel.Tracer("test")
 	ctx, parentSpan := tracer.Start(context.Background(), "TestRunNestsSpanUnderCallerSpan.parent")
@@ -136,13 +109,6 @@ func TestRunNestsSpanUnderCallerSpan(t *testing.T) {
 	componentNameAttr, ok := spanAttr(jobSpan, "component_name")
 	require.True(t, ok, "job span must carry a component_name attribute")
 	require.Equal(t, "test-service", componentNameAttr.AsString())
-
-	deploymentEnv, ok := spanAttr(jobSpan, "deployment.environment")
-	require.True(t, ok, "job span must carry the deployment.environment attribute from OTEL_RESOURCE_ATTRIBUTES")
-	require.Equal(t, wantDeploymentEnvironment, deploymentEnv.AsString())
-	stack, ok := spanAttr(jobSpan, "stack")
-	require.True(t, ok, "job span must carry the stack attribute from OTEL_RESOURCE_ATTRIBUTES")
-	require.Equal(t, wantStack, stack.AsString())
 }
 
 func TestRunRecordsErrorOnSpan(t *testing.T) {
@@ -185,7 +151,6 @@ func TestRunRecordsMetrics(t *testing.T) {
 	componentNameAttr, ok := errDP.Attributes.Value(attribute.Key("component_name"))
 	require.True(t, ok, "job.errors data point must carry a component_name attribute")
 	require.Equal(t, componentName, componentNameAttr.AsString())
-	requireResourceAttrs(t, errDP.Attributes)
 
 	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])
 	require.True(t, ok)
@@ -195,91 +160,6 @@ func TestRunRecordsMetrics(t *testing.T) {
 	componentNameAttr, ok = inflightDP.Attributes.Value(attribute.Key("component_name"))
 	require.True(t, ok, "job.inflight data point must carry a component_name attribute")
 	require.Equal(t, componentName, componentNameAttr.AsString())
-	requireResourceAttrs(t, inflightDP.Attributes)
-}
-
-func TestSetResourceAttributesMergesWithEnvResourceAttrs(t *testing.T) {
-	const jobName = "test.job.configured-resource-attrs"
-	const componentName = "test-service"
-
-	observe.SetResourceAttributes(attribute.String("region", "us-east-1"))
-	t.Cleanup(func() { observe.SetResourceAttributes() })
-
-	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
-		return nil
-	}))
-
-	jobSpans := spansNamed(jobName)
-	require.Len(t, jobSpans, 1)
-
-	regionAttr, ok := spanAttr(jobSpans[0], "region")
-	require.True(t, ok, "job span must carry the configured region attribute")
-	require.Equal(t, "us-east-1", regionAttr.AsString())
-
-	deploymentEnv, ok := spanAttr(jobSpans[0], "deployment.environment")
-	require.True(t, ok, "job span must still carry the OTEL_RESOURCE_ATTRIBUTES-derived attribute alongside the configured one")
-	require.Equal(t, wantDeploymentEnvironment, deploymentEnv.AsString())
-
-	byName := collectMetrics(t)
-	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])
-	require.True(t, ok)
-	inflightDP, found := dataPointForJob(t, inflightSum, jobName)
-	require.True(t, found, "expected a job.inflight data point for %q", jobName)
-	regionAttr, ok = inflightDP.Attributes.Value(attribute.Key("region"))
-	require.True(t, ok, "job.inflight data point must carry the configured region attribute")
-	require.Equal(t, "us-east-1", regionAttr.AsString())
-	requireResourceAttrs(t, inflightDP.Attributes)
-}
-
-// A resource attribute named component_name reaches the same key baseAttrs
-// sets from Desc.ComponentName. Because resource attributes are appended
-// after Desc's and attribute.NewSet keeps the last duplicate, an unfiltered
-// one silently replaces the component name in the SDK -- before any exporter
-// is involved -- and every job gets attributed to the process instead of the
-// plugin. service.name, by contrast, is a different, complementary identity
-// (the process, not the plugin) and is expected to reach the same data point
-// alongside component_name rather than being filtered.
-func TestConfiguredResourceAttrsCannotOverrideJobComponentName(t *testing.T) {
-	const jobName = "test.job.component-name-collision"
-	const componentName = "test-service"
-
-	observe.SetResourceAttributes(
-		attribute.String("component_name", "the-whole-process"),
-		attribute.String("job_name", "someone-elses-job"),
-		attribute.String("service.name", "the-whole-process"),
-	)
-	t.Cleanup(func() { observe.SetResourceAttributes() })
-
-	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
-		return nil
-	}))
-
-	jobSpans := spansNamed(jobName)
-	require.Len(t, jobSpans, 1)
-
-	componentNameAttr, ok := spanAttr(jobSpans[0], "component_name")
-	require.True(t, ok, "job span must carry a component_name attribute")
-	require.Equal(t, componentName, componentNameAttr.AsString(),
-		"component_name must come from Desc.ComponentName, not from a configured resource attribute")
-
-	jobNameAttr, ok := spanAttr(jobSpans[0], "job_name")
-	require.True(t, ok, "job span must carry a job_name attribute")
-	require.Equal(t, jobName, jobNameAttr.AsString(),
-		"job_name must come from Desc.Name, not from a configured resource attribute")
-
-	serviceNameAttr, ok := spanAttr(jobSpans[0], "service.name")
-	require.True(t, ok, "job span must still carry the process's service.name -- it identifies the process, independently of component_name")
-	require.Equal(t, "the-whole-process", serviceNameAttr.AsString())
-
-	byName := collectMetrics(t)
-	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])
-	require.True(t, ok)
-	inflightDP, found := dataPointForJob(t, inflightSum, jobName)
-	require.True(t, found, "expected a job.inflight data point for %q", jobName)
-	metricComponentName, ok := inflightDP.Attributes.Value(attribute.Key("component_name"))
-	require.True(t, ok, "job.inflight data point must carry a component_name attribute")
-	require.Equal(t, componentName, metricComponentName.AsString(),
-		"metrics must be attributed to the component that ran the job, not the process")
 }
 
 func TestEndIsSafeToCallOnceAndIgnoresNilJob(t *testing.T) {
@@ -312,6 +192,31 @@ func TestEndIsIdempotentUnderConcurrency(t *testing.T) {
 	inflightDP, found := dataPointForJob(t, inflightSum, jobName)
 	require.True(t, found, "expected a job.inflight data point for %q", jobName)
 	require.Equal(t, int64(0), inflightDP.Value, "inflight must be decremented exactly once despite concurrent End calls")
+}
+
+// baseAttrs must be a pure function of (jobName, componentName), with no
+// dependency on mutable process state -- otherwise Start's +1 and End's -1
+// could be computed with different attribute sets (e.g. if some external
+// input changed between the two calls) and land on two distinct series
+// instead of netting to zero on one.
+func TestInflightIncrementAndDecrementNetToASingleZeroSeries(t *testing.T) {
+	const jobName = "test.job.inflight-single-series"
+
+	_, j := job.Start(context.Background(), job.Desc{Name: jobName, ComponentName: "test-service"})
+	j.End(nil)
+
+	byName := collectMetrics(t)
+	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+
+	var matches int
+	for _, dp := range inflightSum.DataPoints {
+		if v, ok := dp.Attributes.Value(attribute.Key("job_name")); ok && v.AsString() == jobName {
+			matches++
+			require.Equal(t, int64(0), dp.Value, "the +1 from Start and the -1 from End must land on the same series and net to zero")
+		}
+	}
+	require.Equal(t, 1, matches, "Start and End must produce identical attribute sets for the same job, collapsing into exactly one series")
 }
 
 func TestRunEndsJobEvenIfFnPanics(t *testing.T) {

@@ -9,20 +9,9 @@ import (
 )
 
 func ResourceModule(cfg observe.Config) fx.Option {
-	return fx.Options(
-		fx.Provide(func() (*resource.Resource, error) {
-			return observe.BuildResource(cfg.ServiceName, cfg.ResourceAttributes, cfg.ServiceVersion)
-		}),
-		fx.Invoke(func(res *resource.Resource) {
-			// Lets any instrumentation using observe.ResourceAttributes
-			// (pkg/observe/job, internal/httpx) attach the configured
-			// resource's attributes to its own spans/metrics, matching what
-			// it already does for OTEL_RESOURCE_ATTRIBUTES -- necessary
-			// since resource attributes configured this way (e.g. via
-			// observe.Config.ResourceAttributes) never touch that env var.
-			observe.SetResourceAttributes(res.Attributes()...)
-		}),
-	)
+	return fx.Provide(func() (*resource.Resource, error) {
+		return observe.BuildResource(cfg.ServiceName, cfg.ResourceAttributes, cfg.ServiceVersion)
+	})
 }
 
 func ResourceModuleFromFlags(cmd *cobra.Command, opts ...observe.Option) fx.Option {
