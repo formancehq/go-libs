@@ -10,7 +10,7 @@
 // running fn (and any goroutine fn starts) -- the Start/End pattern gets no
 // labels, since there is no call for them to be scoped to. See Run.
 //
-// Job names and service names are metric labels, so they must come from a
+// Job names and component names are metric labels, so they must come from a
 // small, fixed set declared ahead of time by the caller (see Desc) -- never
 // built from runtime data (a cursor, a tx hash, a page number). That kind of
 // detail belongs on the span as an attribute, which does not carry the same
@@ -48,14 +48,16 @@ type Desc struct {
 	// the same name rather than renaming it -- so a literal "job" attribute
 	// here would never survive to VictoriaMetrics.
 	Name string
-	// ServiceName identifies which component this job belongs to -- e.g.
+	// ComponentName identifies which component this job belongs to -- e.g.
 	// "bankingbridge" for a connectivity plugin, but this package is not
 	// plugin-specific, so keep it generic to whatever is calling Run/Start.
-	// It becomes the "service_name" span and metric attribute, letting
+	// It becomes the "component_name" span and metric attribute, letting
 	// job.duration/job.errors/job.inflight be filtered or grouped by source
 	// even though every connectivity plugin shares one OTel service.name
-	// resource attribute.
-	ServiceName string
+	// resource attribute -- component_name identifies the plugin
+	// independently of that process-wide service.name, which still reaches
+	// the same data points via observe.ResourceAttributes.
+	ComponentName string
 	// Description documents what the job does; used only for humans
 	// reading the declared job list, never emitted as telemetry.
 	Description string
@@ -76,21 +78,21 @@ var (
 
 // Job is a started, not-yet-ended unit of work returned by Start.
 type Job struct {
-	span        trace.Span
-	start       time.Time
-	name        string
-	serviceName string
-	endOnce     sync.Once
+	span          trace.Span
+	start         time.Time
+	name          string
+	componentName string
+	endOnce       sync.Once
 }
 
 // baseAttrs returns the fixed attributes every span and metric for a job
-// carries: the job name, the service name, and whatever
+// carries: the job name, the component name, and whatever
 // observe.ResourceAttributes reports (OTEL_RESOURCE_ATTRIBUTES plus any
 // programmatically configured resource attributes).
-func baseAttrs(jobName, serviceName string) []attribute.KeyValue {
+func baseAttrs(jobName, componentName string) []attribute.KeyValue {
 	return append([]attribute.KeyValue{
 		attribute.String("job_name", jobName),
-		attribute.String("service_name", serviceName),
+		attribute.String("component_name", componentName),
 	}, observe.ResourceAttributes()...)
 }
 
@@ -110,15 +112,15 @@ func baseAttrs(jobName, serviceName string) []attribute.KeyValue {
 // Unlike Run, Start installs no pprof labels -- the work it covers has no
 // call boundary to scope them to. A caller that wants its job's work
 // attributed in a continuous profiler has to wrap the goroutine body itself,
-// e.g. pprof.Do(ctx, pprof.Labels("job", d.Name, "service_name",
-// d.ServiceName), ...).
+// e.g. pprof.Do(ctx, pprof.Labels("job", d.Name, "component_name",
+// d.ComponentName), ...).
 func Start(ctx context.Context, d Desc, attrs ...attribute.KeyValue) (context.Context, *Job) {
-	spanAttrs := append(baseAttrs(d.Name, d.ServiceName), attrs...)
+	spanAttrs := append(baseAttrs(d.Name, d.ComponentName), attrs...)
 	ctx, span := tracer.Start(ctx, d.Name, trace.WithAttributes(spanAttrs...))
 
-	jobInflight.Add(ctx, 1, otelmetric.WithAttributes(baseAttrs(d.Name, d.ServiceName)...))
+	jobInflight.Add(ctx, 1, otelmetric.WithAttributes(baseAttrs(d.Name, d.ComponentName)...))
 
-	return ctx, &Job{span: span, start: time.Now(), name: d.Name, serviceName: d.ServiceName}
+	return ctx, &Job{span: span, start: time.Now(), name: d.Name, componentName: d.ComponentName}
 }
 
 // End completes the job: it records the job's duration, marks it no longer
@@ -135,7 +137,7 @@ func (j *Job) End(err error) {
 
 	j.endOnce.Do(func() {
 		ctx := context.Background()
-		jobAttrs := baseAttrs(j.name, j.serviceName)
+		jobAttrs := baseAttrs(j.name, j.componentName)
 
 		jobDuration.Record(ctx, time.Since(j.start).Seconds(), otelmetric.WithAttributes(jobAttrs...))
 		jobInflight.Add(ctx, -1, otelmetric.WithAttributes(jobAttrs...))
@@ -151,10 +153,10 @@ func (j *Job) End(err error) {
 }
 
 // Run wraps fn as a single job: a span (parented via ctx), duration/error
-// metrics, and pprof labels ("job" = d.Name, "service_name" = d.ServiceName)
-// scoped to fn's execution so a continuous profiler (e.g. pyroscope, which
-// samples goroutine pprof labels) can filter CPU/allocation samples by job
-// name or by service.
+// metrics, and pprof labels ("job" = d.Name, "component_name" =
+// d.ComponentName) scoped to fn's execution so a continuous profiler (e.g.
+// pyroscope, which samples goroutine pprof labels) can filter CPU/allocation
+// samples by job name or by component.
 //
 // The function's returned error is both what Run returns and what gets
 // recorded on the job (span event + status + error counter). A panic from fn
@@ -169,7 +171,7 @@ func Run(ctx context.Context, d Desc, fn func(ctx context.Context) error, attrs 
 		j.End(err)
 	}()
 
-	pprof.Do(ctx, pprof.Labels("job", d.Name, "service_name", d.ServiceName), func(ctx context.Context) {
+	pprof.Do(ctx, pprof.Labels("job", d.Name, "component_name", d.ComponentName), func(ctx context.Context) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = panicError(r)

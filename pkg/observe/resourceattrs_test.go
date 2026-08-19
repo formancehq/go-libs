@@ -16,18 +16,19 @@ func TestResourceAttributesDropsCollidingKeys(t *testing.T) {
 	SetResourceAttributes(
 		// Every spelling that lands on an attribute pkg/observe/job sets
 		// itself, dotted and underscored.
-		attribute.String("service.name", "the-whole-process"),
-		attribute.String("service_name", "the-whole-process"),
+		attribute.String("component.name", "the-whole-process"),
+		attribute.String("component_name", "the-whole-process"),
 		attribute.String("job.name", "someone-elses-job"),
 		attribute.String("job_name", "someone-elses-job"),
 		// Neither of these collides with anything job sets.
+		attribute.String("service.name", "the-whole-process"),
 		attribute.String("service.version", "1.0.0"),
 		attribute.String("stack", "connectivity"),
 	)
 
 	got := ResourceAttributes()
 
-	for _, dropped := range []attribute.Key{"service.name", "service_name", "job.name", "job_name"} {
+	for _, dropped := range []attribute.Key{"component.name", "component_name", "job.name", "job_name"} {
 		for _, kv := range got {
 			require.NotEqual(t, dropped, kv.Key,
 				"%q reaches an attribute pkg/observe/job sets from Desc -- attribute.NewSet keeps the last duplicate, and baseAttrs appends resource attributes after Desc's, so leaving it in silently replaces the per-job value", dropped)
@@ -38,13 +39,15 @@ func TestResourceAttributesDropsCollidingKeys(t *testing.T) {
 		"non-colliding resource attributes must still reach data points")
 	require.Contains(t, got, attribute.String("service.version", "1.0.0"),
 		"service.version does not collide with any attribute job sets, so it must survive")
+	require.Contains(t, got, attribute.String("service.name", "the-whole-process"),
+		"service.name identifies the process, a complementary identity to component_name, so it must survive to reach the data point alongside it")
 }
 
 func TestAppendNonColliding(t *testing.T) {
 	t.Parallel()
 
 	src := []attribute.KeyValue{
-		attribute.String("service.name", "dropped"),
+		attribute.String("component.name", "dropped"),
 		attribute.String("stack", "kept"),
 	}
 
@@ -53,7 +56,7 @@ func TestAppendNonColliding(t *testing.T) {
 		appendNonColliding(nil, src))
 
 	require.Equal(t, src, []attribute.KeyValue{
-		attribute.String("service.name", "dropped"),
+		attribute.String("component.name", "dropped"),
 		attribute.String("stack", "kept"),
 	}, "the source slice must not be mutated")
 }

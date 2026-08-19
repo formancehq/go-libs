@@ -39,7 +39,7 @@ func TestResourceModuleRegistersResourceAttributesWithJob(t *testing.T) {
 	defer app.RequireStop()
 
 	const jobName = "resource-test.job"
-	_, j := job.Start(t.Context(), job.Desc{Name: jobName, ServiceName: "resource-test"})
+	_, j := job.Start(t.Context(), job.Desc{Name: jobName, ComponentName: "resource-test"})
 	j.End(nil)
 
 	var jobSpan sdktrace.ReadOnlySpan
@@ -63,11 +63,12 @@ func TestResourceModuleRegistersResourceAttributesWithJob(t *testing.T) {
 
 // The SDK resource always carries service.name -- BuildResource sets it from
 // Config.ServiceName, and resource.Default() supplies one regardless. Copying
-// it onto job data points would collide with the service_name attribute job
-// sets from Desc.ServiceName: both normalize to the same Prometheus label, so
-// the process-wide name could overwrite the per-component one and attribute
-// every job to the process instead of the plugin that ran it.
-func TestResourceModuleDoesNotOverrideJobServiceName(t *testing.T) {
+// it onto job data points does not collide with the component_name attribute
+// job sets from Desc.ComponentName: the two identify different things (the
+// process vs. the plugin that ran the job), and a caller needing to tell one
+// plugin's jobs apart from another's even though every connectivity plugin
+// shares one process-wide service.name wants both values on the data point.
+func TestResourceModuleDoesNotOverrideJobComponentName(t *testing.T) {
 	t.Cleanup(func() { observe.SetResourceAttributes() })
 
 	app := fxtest.New(t,
@@ -80,8 +81,8 @@ func TestResourceModuleDoesNotOverrideJobServiceName(t *testing.T) {
 	app.RequireStart()
 	defer app.RequireStop()
 
-	const jobName = "service-name-collision.job"
-	_, j := job.Start(t.Context(), job.Desc{Name: jobName, ServiceName: "myplugin"})
+	const jobName = "component-name-collision.job"
+	_, j := job.Start(t.Context(), job.Desc{Name: jobName, ComponentName: "myplugin"})
 	j.End(nil)
 
 	var jobSpan sdktrace.ReadOnlySpan
@@ -97,10 +98,10 @@ func TestResourceModuleDoesNotOverrideJobServiceName(t *testing.T) {
 		attrs[a.Key] = a.Value.AsString()
 	}
 
-	require.NotContains(t, attrs, attribute.Key("service.name"),
-		"the resource's service.name must not be copied onto job data points -- it collapses onto the same label as service_name at export")
-	require.Equal(t, "myplugin", attrs["service_name"],
-		"service_name must still identify the component that ran the job")
+	require.Equal(t, "the-whole-process", attrs["service.name"],
+		"the resource's service.name must reach job data points -- it identifies the process, independently of component_name")
+	require.Equal(t, "myplugin", attrs["component_name"],
+		"component_name must still identify the plugin that ran the job")
 	require.Equal(t, "stack-456", attrs["stack.id"],
 		"non-colliding configured resource attributes must still reach the job")
 }

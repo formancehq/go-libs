@@ -51,7 +51,7 @@ func parseResourceAttrs(raw string) []attribute.KeyValue {
 // collidingResourceKeys are resource attribute keys ResourceAttributes must
 // never hand out, because each one reaches an attribute the instrumentation
 // already sets from its own, more specific source. pkg/observe/job sets
-// job_name from Desc.Name and service_name from Desc.ServiceName, so both
+// job_name from Desc.Name and component_name from Desc.ComponentName, so both
 // spellings of each are filtered: the underscored form collides directly, and
 // the dotted form collides once the OTel-to-Prometheus translation normalizes
 // dots to underscores.
@@ -65,17 +65,21 @@ func parseResourceAttrs(raw string) []attribute.KeyValue {
 // ran them, which is the collision Desc.Name already documents for the
 // reserved "job" label.
 //
-// service.name in particular is unavoidable rather than merely possible: the
-// SDK resource always carries one, since BuildResource sets it from
-// Config.ServiceName and resource.Default() supplies a fallback regardless.
+// service.name is deliberately not in this list: it identifies the process
+// (the SDK resource always carries one, via BuildResource/resource.Default),
+// which is a different, complementary identity from component_name -- a
+// caller that needs to tell one plugin's jobs apart from another's, even
+// though every connectivity plugin shares one process-wide service.name,
+// wants both values to reach the data point rather than have one overwrite
+// the other.
 //
 // Filtered here rather than at the observefx call site so the same guard
-// covers OTEL_RESOURCE_ATTRIBUTES="service.name=..." and friends.
+// covers OTEL_RESOURCE_ATTRIBUTES="component_name=..." and friends.
 var collidingResourceKeys = map[attribute.Key]struct{}{
-	"service.name": {},
-	"service_name": {},
-	"job.name":     {},
-	"job_name":     {},
+	"component.name": {},
+	"component_name": {},
+	"job.name":       {},
+	"job_name":       {},
 }
 
 // appendNonColliding appends every attribute in src that is safe to duplicate

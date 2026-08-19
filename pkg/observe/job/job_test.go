@@ -118,7 +118,7 @@ func TestRunNestsSpanUnderCallerSpan(t *testing.T) {
 	tracer := otel.Tracer("test")
 	ctx, parentSpan := tracer.Start(context.Background(), "TestRunNestsSpanUnderCallerSpan.parent")
 
-	err := job.Run(ctx, job.Desc{Name: "test.job.nesting", ServiceName: "test-service"}, func(ctx context.Context) error {
+	err := job.Run(ctx, job.Desc{Name: "test.job.nesting", ComponentName: "test-service"}, func(ctx context.Context) error {
 		return nil
 	})
 	require.NoError(t, err)
@@ -133,9 +133,9 @@ func TestRunNestsSpanUnderCallerSpan(t *testing.T) {
 	require.Equal(t, parentSpan.SpanContext().SpanID(), jobSpan.Parent().SpanID(),
 		"job span must be parented to the caller's span")
 
-	serviceNameAttr, ok := spanAttr(jobSpan, "service_name")
-	require.True(t, ok, "job span must carry a service_name attribute")
-	require.Equal(t, "test-service", serviceNameAttr.AsString())
+	componentNameAttr, ok := spanAttr(jobSpan, "component_name")
+	require.True(t, ok, "job span must carry a component_name attribute")
+	require.Equal(t, "test-service", componentNameAttr.AsString())
 
 	deploymentEnv, ok := spanAttr(jobSpan, "deployment.environment")
 	require.True(t, ok, "job span must carry the deployment.environment attribute from OTEL_RESOURCE_ATTRIBUTES")
@@ -147,7 +147,7 @@ func TestRunNestsSpanUnderCallerSpan(t *testing.T) {
 
 func TestRunRecordsErrorOnSpan(t *testing.T) {
 	wantErr := errors.New("boom")
-	err := job.Run(context.Background(), job.Desc{Name: "test.job.err", ServiceName: "test-service"}, func(ctx context.Context) error {
+	err := job.Run(context.Background(), job.Desc{Name: "test.job.err", ComponentName: "test-service"}, func(ctx context.Context) error {
 		return wantErr
 	})
 	require.ErrorIs(t, err, wantErr)
@@ -160,14 +160,14 @@ func TestRunRecordsErrorOnSpan(t *testing.T) {
 
 func TestRunRecordsMetrics(t *testing.T) {
 	const jobName = "test.job.metrics"
-	const serviceName = "test-service"
+	const componentName = "test-service"
 
-	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ServiceName: serviceName}, func(ctx context.Context) error {
+	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
 		return nil
 	}))
 
 	failing := fmt.Errorf("wrapped: %w", errors.New("root cause"))
-	err := job.Run(context.Background(), job.Desc{Name: jobName, ServiceName: serviceName}, func(ctx context.Context) error {
+	err := job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
 		return failing
 	})
 	require.ErrorIs(t, err, failing)
@@ -182,9 +182,9 @@ func TestRunRecordsMetrics(t *testing.T) {
 	errDP, found := dataPointForJob(t, errorSum, jobName)
 	require.True(t, found, "expected a job.errors data point for %q", jobName)
 	require.Equal(t, int64(1), errDP.Value)
-	serviceNameAttr, ok := errDP.Attributes.Value(attribute.Key("service_name"))
-	require.True(t, ok, "job.errors data point must carry a service_name attribute")
-	require.Equal(t, serviceName, serviceNameAttr.AsString())
+	componentNameAttr, ok := errDP.Attributes.Value(attribute.Key("component_name"))
+	require.True(t, ok, "job.errors data point must carry a component_name attribute")
+	require.Equal(t, componentName, componentNameAttr.AsString())
 	requireResourceAttrs(t, errDP.Attributes)
 
 	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])
@@ -192,20 +192,20 @@ func TestRunRecordsMetrics(t *testing.T) {
 	inflightDP, found := dataPointForJob(t, inflightSum, jobName)
 	require.True(t, found, "expected a job.inflight data point for %q", jobName)
 	require.Equal(t, int64(0), inflightDP.Value, "inflight must return to zero once both runs end")
-	serviceNameAttr, ok = inflightDP.Attributes.Value(attribute.Key("service_name"))
-	require.True(t, ok, "job.inflight data point must carry a service_name attribute")
-	require.Equal(t, serviceName, serviceNameAttr.AsString())
+	componentNameAttr, ok = inflightDP.Attributes.Value(attribute.Key("component_name"))
+	require.True(t, ok, "job.inflight data point must carry a component_name attribute")
+	require.Equal(t, componentName, componentNameAttr.AsString())
 	requireResourceAttrs(t, inflightDP.Attributes)
 }
 
 func TestSetResourceAttributesMergesWithEnvResourceAttrs(t *testing.T) {
 	const jobName = "test.job.configured-resource-attrs"
-	const serviceName = "test-service"
+	const componentName = "test-service"
 
 	observe.SetResourceAttributes(attribute.String("region", "us-east-1"))
 	t.Cleanup(func() { observe.SetResourceAttributes() })
 
-	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ServiceName: serviceName}, func(ctx context.Context) error {
+	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
 		return nil
 	}))
 
@@ -231,46 +231,54 @@ func TestSetResourceAttributesMergesWithEnvResourceAttrs(t *testing.T) {
 	requireResourceAttrs(t, inflightDP.Attributes)
 }
 
-// A resource attribute named service_name reaches the same key baseAttrs sets
-// from Desc.ServiceName. Because resource attributes are appended after Desc's
-// and attribute.NewSet keeps the last duplicate, an unfiltered one silently
-// replaces the component name in the SDK -- before any exporter is involved --
-// and every job gets attributed to the process instead of the plugin.
-func TestConfiguredResourceAttrsCannotOverrideJobServiceName(t *testing.T) {
-	const jobName = "test.job.service-name-collision"
-	const serviceName = "test-service"
+// A resource attribute named component_name reaches the same key baseAttrs
+// sets from Desc.ComponentName. Because resource attributes are appended
+// after Desc's and attribute.NewSet keeps the last duplicate, an unfiltered
+// one silently replaces the component name in the SDK -- before any exporter
+// is involved -- and every job gets attributed to the process instead of the
+// plugin. service.name, by contrast, is a different, complementary identity
+// (the process, not the plugin) and is expected to reach the same data point
+// alongside component_name rather than being filtered.
+func TestConfiguredResourceAttrsCannotOverrideJobComponentName(t *testing.T) {
+	const jobName = "test.job.component-name-collision"
+	const componentName = "test-service"
 
 	observe.SetResourceAttributes(
-		attribute.String("service_name", "the-whole-process"),
+		attribute.String("component_name", "the-whole-process"),
 		attribute.String("job_name", "someone-elses-job"),
+		attribute.String("service.name", "the-whole-process"),
 	)
 	t.Cleanup(func() { observe.SetResourceAttributes() })
 
-	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ServiceName: serviceName}, func(ctx context.Context) error {
+	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
 		return nil
 	}))
 
 	jobSpans := spansNamed(jobName)
 	require.Len(t, jobSpans, 1)
 
-	serviceNameAttr, ok := spanAttr(jobSpans[0], "service_name")
-	require.True(t, ok, "job span must carry a service_name attribute")
-	require.Equal(t, serviceName, serviceNameAttr.AsString(),
-		"service_name must come from Desc.ServiceName, not from a configured resource attribute")
+	componentNameAttr, ok := spanAttr(jobSpans[0], "component_name")
+	require.True(t, ok, "job span must carry a component_name attribute")
+	require.Equal(t, componentName, componentNameAttr.AsString(),
+		"component_name must come from Desc.ComponentName, not from a configured resource attribute")
 
 	jobNameAttr, ok := spanAttr(jobSpans[0], "job_name")
 	require.True(t, ok, "job span must carry a job_name attribute")
 	require.Equal(t, jobName, jobNameAttr.AsString(),
 		"job_name must come from Desc.Name, not from a configured resource attribute")
 
+	serviceNameAttr, ok := spanAttr(jobSpans[0], "service.name")
+	require.True(t, ok, "job span must still carry the process's service.name -- it identifies the process, independently of component_name")
+	require.Equal(t, "the-whole-process", serviceNameAttr.AsString())
+
 	byName := collectMetrics(t)
 	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])
 	require.True(t, ok)
 	inflightDP, found := dataPointForJob(t, inflightSum, jobName)
 	require.True(t, found, "expected a job.inflight data point for %q", jobName)
-	metricServiceName, ok := inflightDP.Attributes.Value(attribute.Key("service_name"))
-	require.True(t, ok, "job.inflight data point must carry a service_name attribute")
-	require.Equal(t, serviceName, metricServiceName.AsString(),
+	metricComponentName, ok := inflightDP.Attributes.Value(attribute.Key("component_name"))
+	require.True(t, ok, "job.inflight data point must carry a component_name attribute")
+	require.Equal(t, componentName, metricComponentName.AsString(),
 		"metrics must be attributed to the component that ran the job, not the process")
 }
 
@@ -282,7 +290,7 @@ func TestEndIsSafeToCallOnceAndIgnoresNilJob(t *testing.T) {
 func TestEndIsIdempotentUnderConcurrency(t *testing.T) {
 	const jobName = "test.job.concurrent-end"
 
-	_, j := job.Start(context.Background(), job.Desc{Name: jobName, ServiceName: "test-service"})
+	_, j := job.Start(context.Background(), job.Desc{Name: jobName, ComponentName: "test-service"})
 
 	const goroutines = 50
 	var wg sync.WaitGroup
@@ -308,13 +316,13 @@ func TestEndIsIdempotentUnderConcurrency(t *testing.T) {
 
 func TestRunEndsJobEvenIfFnPanics(t *testing.T) {
 	const jobName = "test.job.panic"
-	const serviceName = "test-service"
+	const componentName = "test-service"
 
 	var recovered any
 	func() {
 		defer func() { recovered = recover() }()
 
-		_ = job.Run(context.Background(), job.Desc{Name: jobName, ServiceName: serviceName}, func(ctx context.Context) error {
+		_ = job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
 			panic("boom")
 		})
 	}()
@@ -347,7 +355,7 @@ func TestRunEndsJobEvenIfFnIsNil(t *testing.T) {
 	func() {
 		defer func() { recovered = recover() }()
 
-		_ = job.Run(context.Background(), job.Desc{Name: jobName, ServiceName: "test-service"}, nil)
+		_ = job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: "test-service"}, nil)
 	}()
 	require.NotNil(t, recovered, "calling a nil fn must panic, and Run must rethrow it")
 

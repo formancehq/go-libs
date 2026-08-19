@@ -9,7 +9,7 @@ background-loop iteration -- as one uniform signal:
 - a `job.errors` counter, tagged with a best-effort root error type
 - a `job.inflight` up-down counter
 
-`Run` additionally installs `job` and `service_name` pprof labels for the
+`Run` additionally installs `job` and `component_name` pprof labels for the
 duration of the call, so a continuous profiler (e.g. Pyroscope) can attribute
 CPU/allocations back to the job by name. These come from `pprof.Do`, so they
 cover the goroutine running the wrapped function and any goroutine it starts
@@ -34,18 +34,18 @@ package instrumentation
 
 import "github.com/formancehq/go-libs/v5/pkg/observe/job"
 
-const serviceName = "myplugin"
+const componentName = "myplugin"
 
 var (
 	HTTPGet = job.Desc{
-		Name:        "myplugin.http_get",
-		ServiceName: serviceName,
-		Description: "A single authenticated GET against the upstream API",
+		Name:          "myplugin.http_get",
+		ComponentName: componentName,
+		Description:   "A single authenticated GET against the upstream API",
 	}
 	ListPage = job.Desc{
-		Name:        "myplugin.list_page",
-		ServiceName: serviceName,
-		Description: "List one page of an upstream resource stream",
+		Name:          "myplugin.list_page",
+		ComponentName: componentName,
+		Description:   "List one page of an upstream resource stream",
 	}
 )
 
@@ -59,7 +59,7 @@ func TestAllJobsAreDeclaredAndUnique(t *testing.T) {
 	seen := make(map[string]bool, len(instrumentation.All))
 	for _, d := range instrumentation.All {
 		require.NotEmpty(t, d.Name, "job descriptor missing a Name")
-		require.NotEmpty(t, d.ServiceName, "job %q missing a ServiceName", d.Name)
+		require.NotEmpty(t, d.ComponentName, "job %q missing a ComponentName", d.Name)
 		require.NotEmpty(t, d.Description, "job %q missing a Description", d.Name)
 		require.False(t, seen[d.Name], "duplicate job name %q", d.Name)
 		seen[d.Name] = true
@@ -177,7 +177,7 @@ wrap whichever goroutine actually burns the CPU:
 ```go
 pprof.Do(ctx, pprof.Labels(
 	"job", instrumentation.WebhookDelivery.Name,
-	"service_name", instrumentation.WebhookDelivery.ServiceName,
+	"component_name", instrumentation.WebhookDelivery.ComponentName,
 ), func(ctx context.Context) {
 	transport.Send(ctx, d)
 })
