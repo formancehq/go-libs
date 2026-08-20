@@ -7,8 +7,7 @@
 // Run additionally installs pprof labels for the duration of the call, so a
 // continuous profiler can attribute allocations/CPU back to the same job
 // name. Those labels come from pprof.Do, which only labels the goroutine
-// running fn (and any goroutine fn starts) -- the Start/End pattern gets no
-// labels, since there is no call for them to be scoped to. See Run.
+// running fn (and any goroutine fn starts). See Run.
 //
 // Job names and component names are metric labels, so they must come from a
 // small, fixed set declared ahead of time by the caller (see Desc) -- never
@@ -21,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"runtime/pprof"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -48,7 +46,7 @@ type Desc struct {
 	Name string
 	// ComponentName identifies which component this job belongs to -- e.g.
 	// "bankingbridge" for a connectivity plugin, but this package is not
-	// plugin-specific, so keep it generic to whatever is calling Run/Start.
+	// plugin-specific, so keep it generic to whatever is calling Run.
 	// It becomes the "component_name" span and metric attribute, letting
 	// job.duration/job.errors/job.inflight be filtered or grouped by source
 	// even though every connectivity plugin shares one OTel service.name
@@ -76,15 +74,6 @@ var (
 		otelmetric.WithDescription("Number of jobs currently running"))
 )
 
-// Job is a started, not-yet-ended unit of work returned by Start.
-type Job struct {
-	span          trace.Span
-	start         time.Time
-	name          string
-	componentName string
-	endOnce       sync.Once
-}
-
 // baseAttrs returns the fixed attributes every span and metric for a job
 // carries: the job name and the component name. Process-level identity
 // (service.name, deployment.environment, ...) lives on the OTel Resource,
@@ -99,62 +88,6 @@ func baseAttrs(jobName, componentName string) []attribute.KeyValue {
 	}
 }
 
-// Start begins a job: it opens a span as a child of whatever span is already
-// in ctx (so it nests correctly under an inbound gRPC call, for instance),
-// and marks the job in-flight. The returned ctx carries the new span and
-// must be threaded into any work done as part of the job so further child
-// spans nest correctly.
-//
-// Prefer Run when the job is a single function call; use Start/End directly
-// only when one unit of work genuinely spans more than one call -- it begins
-// in one place and finishes in another, e.g. started on dispatch and ended by
-// a later acknowledgement callback. Work that fits inside one callback body
-// is a Run, not a Start/End: hoisting a single Job outside a recurring
-// callback records only the first invocation, since End is idempotent.
-//
-// Unlike Run, Start installs no pprof labels -- the work it covers has no
-// call boundary to scope them to. A caller that wants its job's work
-// attributed in a continuous profiler has to wrap the goroutine body itself,
-// e.g. pprof.Do(ctx, pprof.Labels("job", d.Name, "component_name",
-// d.ComponentName), ...).
-func Start(ctx context.Context, d Desc, attrs ...attribute.KeyValue) (context.Context, *Job) {
-	spanAttrs := append(baseAttrs(d.Name, d.ComponentName), attrs...)
-	ctx, span := tracer.Start(ctx, d.Name, trace.WithAttributes(spanAttrs...))
-
-	jobInflight.Add(ctx, 1, otelmetric.WithAttributes(baseAttrs(d.Name, d.ComponentName)...))
-
-	return ctx, &Job{span: span, start: time.Now(), name: d.Name, componentName: d.ComponentName}
-}
-
-// End completes the job: it records the job's duration, marks it no longer
-// in-flight, and -- if err is non-nil -- records the error on the span and
-// increments the error counter, tagged with a best-effort error type.
-//
-// End is idempotent and safe to call concurrently: only the first call's err
-// is recorded, and later (or concurrent) calls are no-ops once that first
-// call's teardown has run.
-func (j *Job) End(err error) {
-	if j == nil {
-		return
-	}
-
-	j.endOnce.Do(func() {
-		ctx := context.Background()
-		jobAttrs := baseAttrs(j.name, j.componentName)
-
-		jobDuration.Record(ctx, time.Since(j.start).Seconds(), otelmetric.WithAttributes(jobAttrs...))
-		jobInflight.Add(ctx, -1, otelmetric.WithAttributes(jobAttrs...))
-
-		if err != nil {
-			j.span.RecordError(err)
-			j.span.SetStatus(codes.Error, err.Error())
-			jobErrors.Add(ctx, 1, otelmetric.WithAttributes(append(jobAttrs, attribute.String("error_type", rootType(err)))...))
-		}
-
-		j.span.End()
-	})
-}
-
 // Run wraps fn as a single job: a span (parented via ctx), duration/error
 // metrics, and pprof labels ("job" = d.Name, "component_name" =
 // d.ComponentName) scoped to fn's execution so a continuous profiler (e.g.
@@ -167,11 +100,28 @@ func (j *Job) End(err error) {
 // so the job is still closed out -- span ended, error counted, no longer
 // in-flight -- before the panic continues to unwind through Run's caller.
 func Run(ctx context.Context, d Desc, fn func(ctx context.Context) error, attrs ...attribute.KeyValue) error {
-	ctx, j := Start(ctx, d, attrs...)
+	jobAttrs := baseAttrs(d.Name, d.ComponentName)
+
+	spanAttrs := append(append([]attribute.KeyValue{}, jobAttrs...), attrs...)
+	ctx, span := tracer.Start(ctx, d.Name, trace.WithAttributes(spanAttrs...))
+
+	start := time.Now()
+	jobInflight.Add(ctx, 1, otelmetric.WithAttributes(jobAttrs...))
 
 	var err error
 	defer func() {
-		j.End(err)
+		endCtx := context.Background()
+
+		jobDuration.Record(endCtx, time.Since(start).Seconds(), otelmetric.WithAttributes(jobAttrs...))
+		jobInflight.Add(endCtx, -1, otelmetric.WithAttributes(jobAttrs...))
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			jobErrors.Add(endCtx, 1, otelmetric.WithAttributes(append(jobAttrs, attribute.String("error_type", rootType(err)))...))
+		}
+
+		span.End()
 	}()
 
 	pprof.Do(ctx, pprof.Labels("job", d.Name, "component_name", d.ComponentName), func(ctx context.Context) {
@@ -188,7 +138,7 @@ func Run(ctx context.Context, d Desc, fn func(ctx context.Context) error, attrs 
 	return err
 }
 
-// panicError converts a recovered panic value into an error for End to
+// panicError converts a recovered panic value into an error for Run to
 // record, preserving it as-is when it already is one (e.g. the
 // runtime.Error from calling a nil fn) so rootType still reports its real
 // underlying type rather than a generic wrapper.

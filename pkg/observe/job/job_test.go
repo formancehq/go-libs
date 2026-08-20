@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -162,48 +161,17 @@ func TestRunRecordsMetrics(t *testing.T) {
 	require.Equal(t, componentName, componentNameAttr.AsString())
 }
 
-func TestEndIsSafeToCallOnceAndIgnoresNilJob(t *testing.T) {
-	var nilJob *job.Job
-	require.NotPanics(t, func() { nilJob.End(nil) })
-}
-
-func TestEndIsIdempotentUnderConcurrency(t *testing.T) {
-	const jobName = "test.job.concurrent-end"
-
-	_, j := job.Start(context.Background(), job.Desc{Name: jobName, ComponentName: "test-service"})
-
-	const goroutines = 50
-	var wg sync.WaitGroup
-	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
-		go func() {
-			defer wg.Done()
-			j.End(nil)
-		}()
-	}
-	wg.Wait()
-
-	jobSpans := spansNamed(jobName)
-	require.Len(t, jobSpans, 1, "concurrent End calls must only end the span once")
-
-	byName := collectMetrics(t)
-	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])
-	require.True(t, ok)
-	inflightDP, found := dataPointForJob(t, inflightSum, jobName)
-	require.True(t, found, "expected a job.inflight data point for %q", jobName)
-	require.Equal(t, int64(0), inflightDP.Value, "inflight must be decremented exactly once despite concurrent End calls")
-}
-
 // baseAttrs must be a pure function of (jobName, componentName), with no
-// dependency on mutable process state -- otherwise Start's +1 and End's -1
-// could be computed with different attribute sets (e.g. if some external
-// input changed between the two calls) and land on two distinct series
-// instead of netting to zero on one.
+// dependency on mutable process state -- otherwise Run's +1 and -1 could be
+// computed with different attribute sets (e.g. if some external input
+// changed between the two calls) and land on two distinct series instead of
+// netting to zero on one.
 func TestInflightIncrementAndDecrementNetToASingleZeroSeries(t *testing.T) {
 	const jobName = "test.job.inflight-single-series"
 
-	_, j := job.Start(context.Background(), job.Desc{Name: jobName, ComponentName: "test-service"})
-	j.End(nil)
+	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: "test-service"}, func(ctx context.Context) error {
+		return nil
+	}))
 
 	byName := collectMetrics(t)
 	inflightSum, ok := byName["job.inflight"].Data.(metricdata.Sum[int64])

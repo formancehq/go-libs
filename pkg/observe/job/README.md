@@ -12,9 +12,7 @@ background-loop iteration -- as one uniform signal:
 `Run` additionally installs `job` and `component_name` pprof labels for the
 duration of the call, so a continuous profiler (e.g. Pyroscope) can attribute
 CPU/allocations back to the job by name. These come from `pprof.Do`, so they
-cover the goroutine running the wrapped function and any goroutine it starts
--- but *not* the `Start`/`End` pattern below, which has no call boundary to
-scope them to.
+cover the goroutine running the wrapped function and any goroutine it starts.
 
 Job names are a metric label, so they must come from a small, fixed set
 declared ahead of time -- never built from runtime data (a cursor, a tx hash,
@@ -115,70 +113,4 @@ return job.Run(ctx, instrumentation.HydrateDeposits, func(ctx context.Context) e
 
 	return firstErr
 }, attribute.String("resource", resource), attribute.Int("items", len(items)))
-```
-
-## 3. Start/End directly (advanced)
-
-Use `Start`/`End` instead of `Run` only when one unit of work genuinely spans
-more than one function call -- it begins in one place and finishes in another,
-so there is no single call for `Run` to wrap. Dispatching to a transport and
-completing on a later acknowledgement is the usual shape:
-
-```go
-// One job per delivery, started on dispatch and ended by whichever
-// acknowledgement comes back for it.
-var inflight sync.Map // delivery ID -> *job.Job
-
-transport.OnAck(func(ack Ack) {
-	if j, ok := inflight.LoadAndDelete(ack.DeliveryID); ok {
-		j.(*job.Job).End(ack.Err)
-	}
-})
-
-// ... and on each dispatch:
-ctx, j := job.Start(ctx, instrumentation.WebhookDelivery)
-inflight.Store(d.ID, j)
-transport.Send(ctx, d)
-```
-
-Each delivery gets its own `Job`, because each delivery is its own unit of
-work. Do **not** hoist a single `Job` outside a recurring callback:
-
-```go
-// WRONG -- one job shared across every event.
-ctx, j := job.Start(ctx, instrumentation.WebhookDelivery)
-
-subscribe(ctx, func(event Event) {
-	j.End(handle(ctx, event))
-})
-```
-
-`End` is idempotent, so the first event closes the job and every later one is
-silently dropped: the span, the duration sample, and the error count describe
-one delivery no matter how many actually ran.
-
-When the work does fit inside the callback body, that's not a `Start`/`End`
-case at all -- reach for `Run`, which scopes the job to the call and installs
-pprof labels for you:
-
-```go
-subscribe(ctx, func(event Event) {
-	_ = job.Run(ctx, instrumentation.WebhookDelivery, func(ctx context.Context) error {
-		return handle(ctx, event)
-	})
-})
-```
-
-Jobs built with `Start`/`End` carry the span and all three metrics but no
-pprof labels, since there is no call boundary for `pprof.Do` to wrap. To get
-profiler attribution for work shaped like the dispatch/ack example above,
-wrap whichever goroutine actually burns the CPU:
-
-```go
-pprof.Do(ctx, pprof.Labels(
-	"job", instrumentation.WebhookDelivery.Name,
-	"component_name", instrumentation.WebhookDelivery.ComponentName,
-), func(ctx context.Context) {
-	transport.Send(ctx, d)
-})
 ```
