@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/exemplar"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -34,7 +35,16 @@ var (
 
 func TestMain(m *testing.M) {
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder)))
-	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricReader)))
+	// Pinned explicitly rather than left to the SDK default: NewMeterProvider
+	// honors OTEL_METRICS_EXEMPLAR_FILTER from the environment, so on a
+	// machine/CI job with that set to "always_off" the suite would otherwise
+	// test exemplar behavior against a filter that never records any -- a
+	// pass or fail decided by an operator's env var instead of Run's own
+	// behavior.
+	otel.SetMeterProvider(sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(metricReader),
+		sdkmetric.WithExemplarFilter(exemplar.TraceBasedFilter),
+	))
 
 	os.Exit(m.Run())
 }
