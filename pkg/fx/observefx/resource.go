@@ -9,11 +9,9 @@ import (
 )
 
 func ResourceModule(cfg observe.Config) fx.Option {
-	return fx.Options(
-		fx.Provide(func() (*resource.Resource, error) {
-			return observe.BuildResource(cfg.ServiceName, cfg.ResourceAttributes, cfg.ServiceVersion)
-		}),
-	)
+	return fx.Provide(func() (*resource.Resource, error) {
+		return observe.BuildResource(cfg.ServiceName, cfg.ResourceAttributes, cfg.ServiceVersion)
+	})
 }
 
 func ResourceModuleFromFlags(cmd *cobra.Command, opts ...observe.Option) fx.Option {

@@ -44,6 +44,14 @@ func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
 		fx.Supply(cfg),
 		fx.Provide(func(mp *sdkmetric.MeterProvider) metric.MeterProvider { return mp }),
 		fx.Provide(fx.Annotate(func(options ...sdkmetric.Option) *sdkmetric.MeterProvider {
+			// Histograms use Base2ExponentialHistogram rather than the SDK's
+			// default explicit-bucket aggregation: higher resolution, cheaper
+			// to export, and every backend this library's consumers export to
+			// (VictoriaMetrics >= v1.143.0, or a plain OTLP/native-histogram
+			// destination) can now ingest it, so there's no exporter-specific
+			// exception to carry here -- same as every other package in this
+			// module, which doesn't special-case aggregation for a particular
+			// backend either.
 			var view sdkmetric.View = func(i sdkmetric.Instrument) (sdkmetric.Stream, bool) {
 				s := sdkmetric.Stream{Name: i.Name, Description: i.Description, Unit: i.Unit}
 				if i.Kind == sdkmetric.InstrumentKindHistogram {
@@ -55,8 +63,8 @@ func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
 				}
 				return s, false
 			}
-
 			os := append(options, sdkmetric.WithView(view))
+
 			ret := sdkmetric.NewMeterProvider(os...)
 			otel.SetMeterProvider(ret)
 
