@@ -110,15 +110,17 @@ func Run(ctx context.Context, d Desc, fn func(ctx context.Context) error, attrs 
 
 	var err error
 	defer func() {
-		endCtx := context.Background()
-
-		jobDuration.Record(endCtx, time.Since(start).Seconds(), otelmetric.WithAttributes(jobAttrs...))
-		jobInflight.Add(endCtx, -1, otelmetric.WithAttributes(jobAttrs...))
+		// ctx still carries the job span (span.End() hasn't run yet), so
+		// Record/Add here can attach the job's trace/span IDs as exemplars.
+		// A context.Background() would discard that even though the span is
+		// still active.
+		jobDuration.Record(ctx, time.Since(start).Seconds(), otelmetric.WithAttributes(jobAttrs...))
+		jobInflight.Add(ctx, -1, otelmetric.WithAttributes(jobAttrs...))
 
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			jobErrors.Add(endCtx, 1, otelmetric.WithAttributes(append(jobAttrs, attribute.String("error_type", rootType(err)))...))
+			jobErrors.Add(ctx, 1, otelmetric.WithAttributes(append(jobAttrs, attribute.String("error_type", rootType(err)))...))
 		}
 
 		span.End()
