@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/formancehq/go-libs/v5/pkg/observe/job"
 )
@@ -159,6 +160,48 @@ func TestRunRecordsMetrics(t *testing.T) {
 	componentNameAttr, ok = inflightDP.Attributes.Value(attribute.Key("component_name"))
 	require.True(t, ok, "job.inflight data point must carry a component_name attribute")
 	require.Equal(t, componentName, componentNameAttr.AsString())
+}
+
+// Dashboard-to-trace correlation (jumping from a latency spike on job.duration
+// straight to the trace that produced it) is a supported feature of this
+// package, not an accident of implementation: Run deliberately records
+// job.duration/job.errors on the context that still carries the job's span so
+// the OTel SDK's trace-based exemplar filter can attach that span's
+// trace/span ID to the data point. Recording on a context stripped of the
+// span (e.g. context.Background(), or a future "detached context" that drops
+// values instead of just cancellation) would silently turn this back off
+// without failing any other test, so pin the behavior here.
+func TestRunAttachesTraceExemplarToDurationMetric(t *testing.T) {
+	const jobName = "test.job.exemplar"
+	const componentName = "test-service"
+
+	require.NoError(t, job.Run(context.Background(), job.Desc{Name: jobName, ComponentName: componentName}, func(ctx context.Context) error {
+		return nil
+	}))
+
+	jobSpans := spansNamed(jobName)
+	require.Len(t, jobSpans, 1)
+	jobSpan := jobSpans[0]
+	require.True(t, jobSpan.SpanContext().IsSampled(), "the recorder's default sampler must sample the job span for the trace-based exemplar filter to pick it up")
+
+	byName := collectMetrics(t)
+	durationHist, ok := byName["job.duration"].Data.(metricdata.Histogram[float64])
+	require.True(t, ok)
+
+	var dp metricdata.HistogramDataPoint[float64]
+	var found bool
+	for _, d := range durationHist.DataPoints {
+		if v, ok := d.Attributes.Value(attribute.Key("job_name")); ok && v.AsString() == jobName {
+			dp = d
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected a job.duration data point for %q", jobName)
+
+	require.NotEmpty(t, dp.Exemplars, "job.duration must carry a trace exemplar pointing back to the job's span")
+	require.Equal(t, jobSpan.SpanContext().TraceID(), trace.TraceID(dp.Exemplars[0].TraceID))
+	require.Equal(t, jobSpan.SpanContext().SpanID(), trace.SpanID(dp.Exemplars[0].SpanID))
 }
 
 // baseAttrs must be a pure function of (jobName, componentName), with no
