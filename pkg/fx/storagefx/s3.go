@@ -6,7 +6,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
@@ -20,27 +19,21 @@ func S3ModuleFromFlags(cmd *cobra.Command) fx.Option {
 
 	awsEnabled, _ := cmd.Flags().GetBool(s3bucket.S3BucketAWSEnabledFlag)
 	endpointOverride, _ := cmd.Flags().GetString(s3bucket.S3BucketEndpointOverrideFlag)
+	pathStyle, _ := cmd.Flags().GetBool(s3bucket.S3BucketPathStyleFlag)
 	if awsEnabled {
 		options = append(options,
 			fx.Supply(fx.Annotate(iam.LoadOptionFromFlags(cmd.Flags()), fx.ResultTags(`name:"s3-bucket-aws-enabled"`))),
-			s3AWSModule(cmd, endpointOverride),
+			s3AWSModule(cmd, endpointOverride, pathStyle),
 		)
 	}
 	return fx.Options(options...)
 }
 
-func s3AWSModule(cmd *cobra.Command, s3EndpointOverride string) fx.Option {
+func s3AWSModule(cmd *cobra.Command, s3EndpointOverride string, pathStyle bool) fx.Option {
 	return fx.Options(
 		fx.Provide(
 			fx.Annotate(func(optFn func(*config.LoadOptions) error) []func(*config.LoadOptions) error {
-				loadOptions := []func(*config.LoadOptions) error{optFn}
-				if s3EndpointOverride != "" {
-					// if we are overriding the endpoint assume we are in a dev context
-					loadOptions = append(loadOptions, config.WithCredentialsProvider(
-						credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy"),
-					))
-				}
-				return loadOptions
+				return []func(*config.LoadOptions) error{optFn}
 			}, fx.ParamTags(`name:"s3-bucket-aws-enabled"`), fx.ResultTags(`name:"s3-bucket-load-opts"`)),
 		),
 		fx.Provide(
@@ -56,6 +49,10 @@ func s3AWSModule(cmd *cobra.Command, s3EndpointOverride string) fx.Option {
 			fx.Annotate(func() ([]func(*s3.Options), error) {
 				s3Opts := []func(*s3.Options){}
 				if s3EndpointOverride == "" {
+					// Real AWS S3: always use path style
+					s3Opts = append(s3Opts, func(o *s3.Options) {
+						o.UsePathStyle = true
+					})
 					return s3Opts, nil
 				}
 
@@ -64,9 +61,13 @@ func s3AWSModule(cmd *cobra.Command, s3EndpointOverride string) fx.Option {
 					return s3Opts, fmt.Errorf("unable to parse s3 url %q", s3EndpointOverride)
 				}
 				s3Opts = append(s3Opts, func(o *s3.Options) {
-					o.UsePathStyle = true
 					o.BaseEndpoint = aws.String(s3Url.String())
 				})
+				if pathStyle {
+					s3Opts = append(s3Opts, func(o *s3.Options) {
+						o.UsePathStyle = true
+					})
+				}
 				return s3Opts, nil
 			}, fx.ResultTags(`name:"s3-bucket-aws-opts"`, ``)),
 		),
