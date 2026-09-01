@@ -11,9 +11,17 @@ func TestBindEnvBeforeRunRejectsMalformedSelectedEnvironment(t *testing.T) {
 	t.Setenv("GRPC_PORT", "not-an-integer")
 
 	runCalled := false
+	persistentPreRunCalled := false
+	preRunCalled := false
 	root := &cobra.Command{Use: "service"}
+	root.PersistentPreRun = func(*cobra.Command, []string) {
+		persistentPreRunCalled = true
+	}
 	run := &cobra.Command{
 		Use: "run",
+		PreRun: func(*cobra.Command, []string) {
+			preRunCalled = true
+		},
 		Run: func(*cobra.Command, []string) {
 			runCalled = true
 		},
@@ -30,6 +38,8 @@ func TestBindEnvBeforeRunRejectsMalformedSelectedEnvironment(t *testing.T) {
 	require.ErrorContains(t, err, "GRPC_PORT")
 	require.ErrorContains(t, err, "--grpc-port")
 	require.False(t, runCalled)
+	require.False(t, persistentPreRunCalled)
+	require.False(t, preRunCalled)
 }
 
 func TestBindEnvBeforeRunPreservesExplicitFlagPrecedence(t *testing.T) {

@@ -24,8 +24,12 @@ func BindEnvToCommand(cmd *cobra.Command) {
 }
 
 // BindEnvToCommandWithError binds environment variables to every flag
-// registered on cmd and its descendants. Explicitly changed flags are left
-// untouched so command-line values retain precedence over environment values.
+// registered on cmd and its descendants. Call it after Cobra has parsed
+// command-line arguments; explicitly changed flags are then left untouched so
+// command-line values retain precedence over environment values. Callers using
+// service.Execute should use Execute's integrated binding instead, which keeps
+// environment values available during command initialization while deferring
+// malformed-value rejection until after CLI parsing.
 func BindEnvToCommandWithError(cmd *cobra.Command) error {
 	if err := BindEnvToFlagSetWithError(cmd.Flags()); err != nil {
 		return err
@@ -51,9 +55,11 @@ func BindEnvToFlagSet(set *pflag.FlagSet) {
 	_ = bindEnvToFlagSet(set, false)
 }
 
-// BindEnvToFlagSetWithError binds environment variables to flags in set.
-// Explicitly changed flags are left untouched so command-line values retain
-// precedence over environment values.
+// BindEnvToFlagSetWithError binds environment variables to flags in set. Call
+// it after parsing command-line arguments; explicitly changed flags are then
+// left untouched so command-line values retain precedence over environment
+// values. Callers using service.Execute should use Execute's integrated
+// binding instead.
 func BindEnvToFlagSetWithError(set *pflag.FlagSet) error {
 	return bindEnvToFlagSet(set, true)
 }
