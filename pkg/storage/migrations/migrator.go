@@ -354,7 +354,7 @@ func (m *Migrator) startMigrationProgressListener(ctx context.Context, conn migr
 
 	if err := conn.Raw(func(driverConn any) error {
 		channel := "migrations-" + m.GetSchema()
-		logging.FromContext(ctx).Debugf("Listening for migrations notifications on " + channel)
+		logging.FromContext(ctx).Debugf("%s", "Listening for migrations notifications on "+channel)
 
 		listener := pgxlisten.Listener{
 			Connect: func(ctx context.Context) (*pgx.Conn, error) {

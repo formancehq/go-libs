@@ -147,7 +147,7 @@ func TestHandleMessageInjectsLoggerAndPropagatesTraceContext(t *testing.T) {
 		// Verify trace propagation: Extract() should populate ctx with trace/span from metadata
 		sc := trace.SpanFromContext(ctx).SpanContext()
 		logging.FromContext(ctx).Infof(
-			fmt.Sprintf("trace_id=%s span_id=%s", sc.TraceID().String(), sc.SpanID().String()),
+			"%s", fmt.Sprintf("trace_id=%s span_id=%s", sc.TraceID().String(), sc.SpanID().String()),
 		)
 		close(done)
 		return nil
