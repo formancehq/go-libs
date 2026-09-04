@@ -9,7 +9,7 @@ on:
 
 jobs:
   CodeQL:
-    uses: formancehq/ci/.github/workflows/go-codeql.yml@main
+    uses: formancehq/ci/.github/workflows/go-codeql.yml@v1
     permissions:
       security-events: write
       packages: read
