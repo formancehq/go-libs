@@ -185,3 +185,17 @@ All packages comply with the FX isolation rule. The only exception is
 
 The module path is `github.com/formancehq/go-libs/v5`.
 This is a breaking change from v4 to enforce the new structure.
+
+## Service shutdown budget
+
+`service.App.Run` applies `--total-stop-timeout` to the complete Fx stop
+operation. Every `OnStop` hook receives the same deadline, including the
+`--grace-period` hook. Shutdown uses a fresh context so cancellation of the
+command context does not cancel cleanup immediately; logger and lifecycle
+context values are preserved.
+
+If the budget expires, `Run` returns a shutdown error. Cleanup may be incomplete:
+Fx can return before a hook that ignores context cancellation has finished.
+Callers must handle the error and separately bound any cleanup they perform
+after `Run` returns. Consumers upgrading from an unbounded runner should size
+their total timeout to include the grace period and all stop hooks.
