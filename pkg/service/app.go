@@ -84,8 +84,13 @@ func (a *App) Run(cmd *cobra.Command) error {
 		a.logger.Infof("App stopped!")
 	}()
 
+	// App.Stop does not apply StopTimeout itself. Use a fresh context so
+	// cancellation of the command does not prevent graceful cleanup.
+	stopCtx, cancel := context.WithTimeout(context.Background(), app.StopTimeout())
+	defer cancel()
+
 	if err := app.Stop(logging.ContextWithLogger(contextWithLifecycle(
-		context.Background(), // Don't reuse original context as it can have been cancelled, and we really need to properly stop the app
+		stopCtx,
 		lifecycleFromContext(cmd.Context()),
 	), a.logger)); err != nil {
 		return err
