@@ -82,9 +82,21 @@ func (f *sharedJSONFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		return nil, err
 	}
 
+	// Copy first, rename second. Renaming while copying would make two keys --
+	// "msg" and a literal "fields.msg" -- land on the same destination, and Go's
+	// randomised map iteration would decide which value survived. Applying the
+	// renames afterwards gives the reserved field precedence every time, which
+	// is what logrus.prefixFieldClashes did.
 	fields := make(map[string]any, len(entry.Data))
 	for k, v := range entry.Data {
-		fields[emittedFieldName(k)] = v
+		fields[k] = v
+	}
+
+	for _, reserved := range [...]string{"level", "time", "msg"} {
+		if v, ok := fields[reserved]; ok {
+			fields[emittedFieldName(reserved)] = v
+			delete(fields, reserved)
+		}
 	}
 
 	// logrus holds the entry's fields in a map, so their insertion order is
