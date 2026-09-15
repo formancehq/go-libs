@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -138,5 +139,38 @@ func TestNewSlogDoesNotAttachStacktraces(t *testing.T) {
 
 	if _, ok := decodeRecord(t, &buf)["stacktrace"]; ok {
 		t.Fatalf("error records must not carry a stack trace: %s", buf.String())
+	}
+}
+
+// Regression for a review finding: zapcore.AddSync alone leaves the sink
+// unsynchronised, so concurrent logging corrupts records. Fails under -race
+// without zapcore.Lock.
+func TestNewZapLoggerSerialisesConcurrentWrites(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true))
+
+	const writers, perWriter = 8, 50
+	var wg sync.WaitGroup
+	wg.Add(writers)
+	for i := range writers {
+		go func() {
+			defer wg.Done()
+			for range perWriter {
+				logger.Info("batch applied", "writer", i)
+			}
+		}()
+	}
+	wg.Wait()
+
+	lines := 0
+	for _, line := range bytes.Split(bytes.TrimRight(buf.Bytes(), "\n"), []byte("\n")) {
+		var record map[string]any
+		if err := json.Unmarshal(line, &record); err != nil {
+			t.Fatalf("interleaved write produced an unparsable record: %q", line)
+		}
+		lines++
+	}
+	if lines != writers*perWriter {
+		t.Fatalf("got %d records, want %d", lines, writers*perWriter)
 	}
 }

@@ -2,7 +2,9 @@ package logging
 
 import (
 	"bytes"
+	"encoding/json"
 	"log/slog"
+	"sync"
 	"testing"
 
 	"go.uber.org/zap/zapcore"
@@ -163,5 +165,42 @@ func TestLineWriterSkipsBlankLines(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Fatalf("blank lines must not become records: %s", buf.String())
+	}
+}
+
+// Regression for a review finding: Writer() hands the same LineWriter to every
+// caller, so its buffer needs its own lock -- locking the sink underneath is
+// not enough. Fails under -race without the mutex.
+func TestLineWriterIsSafeForConcurrentUse(t *testing.T) {
+	var buf bytes.Buffer
+	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)), slog.LevelInfo)
+
+	const writers, perWriter = 8, 50
+	var wg sync.WaitGroup
+	wg.Add(writers)
+	for range writers {
+		go func() {
+			defer wg.Done()
+			for range perWriter {
+				if _, err := writer.Write([]byte("retrying request\n")); err != nil {
+					t.Error(err)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	lines := bytes.Split(bytes.TrimRight(buf.Bytes(), "\n"), []byte("\n"))
+	if len(lines) != writers*perWriter {
+		t.Fatalf("got %d records, want %d -- records were merged or lost", len(lines), writers*perWriter)
+	}
+	for _, line := range lines {
+		var record map[string]any
+		if err := json.Unmarshal(line, &record); err != nil {
+			t.Fatalf("unparsable record: %q", line)
+		}
+		if record["msg"] != "retrying request" {
+			t.Fatalf("record content merged: %v", record)
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -171,7 +172,14 @@ func (a *slogAdapter) Enabled(level Level) bool {
 type LineWriter struct {
 	logger *slog.Logger
 	level  slog.Level
-	buf    bytes.Buffer
+
+	// mu guards buf across the whole buffer-and-emit cycle. Writer() hands the
+	// same LineWriter to arbitrary callers, and a *log.Logger built on it can
+	// be shared by several goroutines, so locking only the underlying sink
+	// would still leave this buffer racing -- and a race here does not merely
+	// interleave output, it merges unrelated records or drops them.
+	mu  sync.Mutex
+	buf bytes.Buffer
 }
 
 // NewLineWriter builds a LineWriter emitting at level.
@@ -183,6 +191,9 @@ func NewLineWriter(logger *slog.Logger, level slog.Level) *LineWriter {
 // line is held until its newline arrives, so a library writing a record in
 // several calls still produces a single record.
 func (w *LineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	w.buf.Write(p)
 
 	for {
