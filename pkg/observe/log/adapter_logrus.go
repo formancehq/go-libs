@@ -155,8 +155,8 @@ func NewDefaultLoggerWithLevel(
 
 	var formatter logrus.Formatter
 	if formatJSON {
-		jsonFormatter := &logrus.JSONFormatter{}
-		formatter = jsonFormatter
+		// The shared shape, not logrus's: see sharedJSONFormatter.
+		formatter = &sharedJSONFormatter{}
 	} else {
 		textFormatter := new(logrus.TextFormatter)
 		textFormatter.FullTimestamp = true
