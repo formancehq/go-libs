@@ -204,3 +204,52 @@ func TestLineWriterIsSafeForConcurrentUse(t *testing.T) {
 		}
 	}
 }
+
+// Regression for a review finding: WithContext used to reuse the parent's
+// writer, so a library writing through Writer() during a traced request
+// produced unstamped records while direct calls on the same adapter were
+// stamped. Carrying the context is the whole reason this adapter exists over
+// NewZap, so it has to hold for the writer too.
+func TestSlogLoggerWriterInheritsTheAdapterContext(t *testing.T) {
+	var buf bytes.Buffer
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+
+	if _, err := adapter.WithContext(sampledContext()).Writer().Write([]byte("GET /.well-known\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" {
+		t.Fatalf("writer records must carry the adapter's trace id: %v", record)
+	}
+}
+
+// The context must survive the field-adding path too, not just WithContext.
+func TestSlogLoggerWriterKeepsContextAcrossWithField(t *testing.T) {
+	var buf bytes.Buffer
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+
+	writer := adapter.WithContext(sampledContext()).WithField("request_id", "abc").Writer()
+	if _, err := writer.Write([]byte("retrying\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" || record["request_id"] != "abc" {
+		t.Fatalf("context or field lost on the writer: %v", record)
+	}
+}
+
+// A writer with no context of its own still works and simply carries no ids.
+func TestLineWriterWithoutContextEmitsUnstamped(t *testing.T) {
+	var buf bytes.Buffer
+	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)), slog.LevelInfo)
+
+	if _, err := writer.Write([]byte("no span here\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if _, ok := decodeRecord(t, &buf)["trace_id"]; ok {
+		t.Fatal("a writer with no span must not invent a trace id")
+	}
+}
