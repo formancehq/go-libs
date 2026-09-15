@@ -204,3 +204,54 @@ func TestLogrusJSONLeavesOrdinaryFieldNamesAlone(t *testing.T) {
 		t.Fatalf("ordinary field renamed: %v", record)
 	}
 }
+
+// Regression for a review finding: values must keep encoding/json's semantics.
+// A fast path switching on fmt.Stringer would have turned a time.Time into
+// Time.String() and a json.Number into a quoted string -- regressions for
+// existing consumers well beyond the documented level and timestamp change.
+func TestLogrusJSONKeepsEncodingJSONSemantics(t *testing.T) {
+	at := time.Date(2026, 9, 15, 12, 40, 36, 917268302, time.UTC)
+
+	_, record := logrusJSONRecord(t, InfoLevel, func(l Logger) {
+		l.WithFields(map[string]any{
+			"at":     at,
+			"number": json.Number("1234567890123456789"),
+			"nested": map[string]any{"k": "v"},
+		}).Infof("x")
+	})
+
+	if record["at"] != "2026-09-15T12:40:36.917268302Z" {
+		t.Fatalf("a time.Time must keep its RFC 3339 encoding, got %v", record["at"])
+	}
+	if record["number"] != float64(1234567890123456789) {
+		t.Fatalf("a json.Number must stay a number, got %T %v", record["number"], record["number"])
+	}
+	if nested, ok := record["nested"].(map[string]any); !ok || nested["k"] != "v" {
+		t.Fatalf("a nested structure must survive, got %v", record["nested"])
+	}
+}
+
+// Regression for a review finding: encoding/json rejects a cycle, and
+// rendering the rejected value with fmt would traverse that same cycle without
+// detection and take the process down with a stack overflow. This test does
+// not merely fail without the fix -- it crashes the binary.
+func TestLogrusJSONDoesNotRecurseOnCyclicValues(t *testing.T) {
+	cyclic := map[string]any{}
+	cyclic["self"] = cyclic
+
+	_, record := logrusJSONRecord(t, InfoLevel, func(l Logger) {
+		l.WithField("payload", cyclic).Infof("still logged")
+	})
+
+	if record["msg"] != "still logged" {
+		t.Fatalf("the record must survive an unencodable field: %v", record)
+	}
+
+	payload, ok := record["payload"].(string)
+	if !ok {
+		t.Fatalf("a rejected value must degrade to a bounded diagnostic, got %T", record["payload"])
+	}
+	if !strings.HasPrefix(payload, "<unencodable ") {
+		t.Fatalf("diagnostic should name the failure, got %q", payload)
+	}
+}
