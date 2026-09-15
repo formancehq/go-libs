@@ -93,5 +93,11 @@ func NewZapLogger(w io.Writer, level zapcore.Level, jsonFormatting bool) *zap.Lo
 		encoder = zapcore.NewConsoleEncoder(cfg)
 	}
 
-	return zap.New(zapcore.NewCore(encoder, zapcore.AddSync(w), level))
+	// zapcore.Lock, not just AddSync: AddSync only supplies a no-op Sync when
+	// the writer has none, it serializes nothing, and NewCore requires a sink
+	// that is safe for concurrent use. zap's own documentation singles out
+	// *os.File as needing the lock, and this constructor additionally accepts
+	// any io.Writer -- a bytes.Buffer in tests, a bufio.Writer in a caller --
+	// none of which tolerate concurrent writes from several goroutines.
+	return zap.New(zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(w)), level))
 }
