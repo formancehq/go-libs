@@ -57,12 +57,22 @@ func (h *TraceHandler) WithGroup(name string) slog.Handler {
 // they share the encoder, the writer and the level of every other adapter over
 // the same logger.
 func NewSlog(z *zap.Logger) *slog.Logger {
-	// zapslog attaches a stack trace to every record at Error and above. slog
-	// never did, so turning it on here would add a Go stack to each error line
+	// The name has to be carried across explicitly: it belongs to the
+	// *zap.Logger, not to the core, so a logger built with Named would emit
+	// records without it here while the same logger's logr and zap records
+	// kept it. An unnamed logger passes an empty name, which the encoder
+	// omits.
+	//
+	// zapslog also attaches a stack trace to every record at Error and above.
+	// slog never did, so turning it on would add a Go stack to each error line
 	// a busy service emits, including this package's own. Pointing the
 	// threshold one level past Error disables it; a caller that wants stacks
 	// can build its own handler with zapslog.AddStacktraceAt.
-	return slog.New(NewTraceHandler(zapslog.NewHandler(z.Core(), zapslog.AddStacktraceAt(slog.LevelError+1))))
+	return slog.New(NewTraceHandler(zapslog.NewHandler(
+		z.Core(),
+		zapslog.WithName(z.Name()),
+		zapslog.AddStacktraceAt(slog.LevelError+1),
+	)))
 }
 
 // slogAdapter implements Logger on top of an *slog.Logger.
