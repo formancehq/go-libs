@@ -255,3 +255,32 @@ func TestLogrusJSONDoesNotRecurseOnCyclicValues(t *testing.T) {
 		t.Fatalf("diagnostic should name the failure, got %q", payload)
 	}
 }
+
+// Regression for a review finding: an entry carrying both "msg" and a literal
+// "fields.msg" mapped both keys onto the same destination, so Go's randomised
+// map iteration decided which value survived. The reserved field takes
+// precedence, deterministically, as logrus.prefixFieldClashes did.
+func TestLogrusJSONResolvesRenamedCollisionsDeterministically(t *testing.T) {
+	// Map iteration order is random per range, so one pass proves nothing.
+	for range 200 {
+		_, record := logrusJSONRecord(t, InfoLevel, func(l Logger) {
+			l.WithFields(map[string]any{
+				"msg":          "reserved",
+				"fields.msg":   "literal",
+				"level":        "reserved",
+				"fields.level": "literal",
+				"time":         "reserved",
+				"fields.time":  "literal",
+			}).Infof("the real message")
+		})
+
+		for _, key := range []string{"fields.msg", "fields.level", "fields.time"} {
+			if record[key] != "reserved" {
+				t.Fatalf("%s = %v, want the renamed reserved field to win every time", key, record[key])
+			}
+		}
+		if record["msg"] != "the real message" {
+			t.Fatalf("the record's own message must still win: %v", record)
+		}
+	}
+}
