@@ -20,8 +20,25 @@ import (
 // It is an slog.Handler rather than a zapcore.Core because a Core sees no
 // context: zap's API carries none, whereas every slog call site passes one.
 // Trace correlation therefore has to be stamped above the bridge to zap.
+//
+// It keeps the caller's groups and attributes itself rather than delegating
+// them to the wrapped handler, and replays them as one nested attribute at
+// Handle time. Delegating would put the trace ids inside whatever group was
+// open -- a logger built with WithGroup("request") emitted them under
+// "request", where nothing querying trace_id at the record root would find
+// them.
 type TraceHandler struct {
 	inner slog.Handler
+
+	// goas records WithGroup and WithAttrs calls in the order they were made,
+	// which is the only way to reproduce their nesting faithfully.
+	goas []groupOrAttrs
+}
+
+// groupOrAttrs holds either an open group or a set of attributes, never both.
+type groupOrAttrs struct {
+	group string
+	attrs []slog.Attr
 }
 
 // NewTraceHandler wraps inner with trace correlation.
@@ -34,22 +51,72 @@ func (h *TraceHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *TraceHandler) Handle(ctx context.Context, record slog.Record) error {
+	out := slog.NewRecord(record.Time, record.Level, record.Message, record.PC)
+
 	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
-		record.AddAttrs(
+		out.AddAttrs(
 			slog.String("trace_id", sc.TraceID().String()),
 			slog.String("span_id", sc.SpanID().String()),
 		)
 	}
 
-	return h.inner.Handle(ctx, record)
+	attrs := make([]slog.Attr, 0, record.NumAttrs())
+	record.Attrs(func(a slog.Attr) bool {
+		attrs = append(attrs, a)
+
+		return true
+	})
+
+	out.AddAttrs(nest(h.goas, attrs)...)
+
+	return h.inner.Handle(ctx, out)
+}
+
+// nest replays the recorded groups and attributes around the record's own
+// attributes, innermost first, so the result is what the wrapped handler would
+// have produced had it been given the groups directly.
+func nest(goas []groupOrAttrs, tail []slog.Attr) []slog.Attr {
+	for i := len(goas) - 1; i >= 0; i-- {
+		if goas[i].group == "" {
+			tail = append(append([]slog.Attr{}, goas[i].attrs...), tail...)
+
+			continue
+		}
+
+		// slog's contract: a group that would be empty is not emitted at all.
+		if len(tail) == 0 {
+			continue
+		}
+
+		tail = []slog.Attr{{Key: goas[i].group, Value: slog.GroupValue(tail...)}}
+	}
+
+	return tail
 }
 
 func (h *TraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &TraceHandler{inner: h.inner.WithAttrs(attrs)}
+	if len(attrs) == 0 {
+		return h
+	}
+
+	return h.with(groupOrAttrs{attrs: attrs})
 }
 
 func (h *TraceHandler) WithGroup(name string) slog.Handler {
-	return &TraceHandler{inner: h.inner.WithGroup(name)}
+	// slog's contract: an empty group name is a no-op.
+	if name == "" {
+		return h
+	}
+
+	return h.with(groupOrAttrs{group: name})
+}
+
+func (h *TraceHandler) with(goa groupOrAttrs) *TraceHandler {
+	goas := make([]groupOrAttrs, len(h.goas)+1)
+	copy(goas, h.goas)
+	goas[len(goas)-1] = goa
+
+	return &TraceHandler{inner: h.inner, goas: goas}
 }
 
 // NewSlog exposes z as an *slog.Logger with trace correlation, for application
