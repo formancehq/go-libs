@@ -253,3 +253,47 @@ func TestLineWriterWithoutContextEmitsUnstamped(t *testing.T) {
 		t.Fatal("a writer with no span must not invent a trace id")
 	}
 }
+
+// Regression for a review finding: the name belongs to the *zap.Logger, not to
+// the core zapslog receives, so a named logger used to lose it on the slog
+// path while keeping it on the zap and logr paths -- two façades of one logger
+// disagreeing about the shared record shape.
+func TestNewSlogPreservesTheLoggerName(t *testing.T) {
+	var buf bytes.Buffer
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true).Named("worker")).Info("batch applied")
+
+	if got := decodeRecord(t, &buf)["logger"]; got != "worker" {
+		t.Fatalf("logger name = %v, want worker", got)
+	}
+}
+
+// The three façades of one named logger must agree.
+func TestNamedLoggerRendersTheSameNameOnEveryFacade(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		emit func(*bytes.Buffer)
+	}{
+		{"slog", func(b *bytes.Buffer) { NewSlog(NewZapLogger(b, zapcore.InfoLevel, true).Named("worker")).Info("x") }},
+		{"logr", func(b *bytes.Buffer) { NewLogr(NewZapLogger(b, zapcore.InfoLevel, true).Named("worker")).Info("x") }},
+		{"Logger", func(b *bytes.Buffer) {
+			NewZap(NewZapLogger(b, zapcore.InfoLevel, true).Named("worker").Sugar()).Infof("x")
+		}},
+	} {
+		var buf bytes.Buffer
+		tc.emit(&buf)
+
+		if got := decodeRecord(t, &buf)["logger"]; got != "worker" {
+			t.Fatalf("%s façade: logger = %v, want worker", tc.name, got)
+		}
+	}
+}
+
+// An unnamed logger must not gain an empty field.
+func TestUnnamedLoggerEmitsNoLoggerField(t *testing.T) {
+	var buf bytes.Buffer
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("x")
+
+	if _, ok := decodeRecord(t, &buf)["logger"]; ok {
+		t.Fatalf("an unnamed logger must not emit a logger key: %s", buf.String())
+	}
+}
