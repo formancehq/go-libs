@@ -146,11 +146,23 @@ func (a *slogAdapter) WithField(key string, value any) Logger {
 }
 
 func (a *slogAdapter) WithContext(ctx context.Context) Logger {
-	return &slogAdapter{logger: a.logger, ctx: ctx, writer: a.writer}
+	return a.derive(a.logger, ctx)
 }
 
 func (a *slogAdapter) with(logger *slog.Logger) Logger {
-	return &slogAdapter{logger: logger, ctx: a.ctx, writer: NewLineWriter(logger, slog.LevelInfo)}
+	return a.derive(logger, a.ctx)
+}
+
+// derive rebuilds the writer rather than carrying the parent's. The writer
+// emits through a context of its own, so reusing it would leave records a
+// third-party library writes during a traced request unstamped while direct
+// calls on the same adapter carry trace_id and span_id.
+func (a *slogAdapter) derive(logger *slog.Logger, ctx context.Context) Logger {
+	return &slogAdapter{
+		logger: logger,
+		ctx:    ctx,
+		writer: newLineWriter(logger, slog.LevelInfo, ctx),
+	}
 }
 
 // Writer returns an io.Writer that turns each line written to it into a record,
@@ -172,6 +184,7 @@ func (a *slogAdapter) Enabled(level Level) bool {
 type LineWriter struct {
 	logger *slog.Logger
 	level  slog.Level
+	ctx    context.Context
 
 	// mu guards buf across the whole buffer-and-emit cycle. Writer() hands the
 	// same LineWriter to arbitrary callers, and a *log.Logger built on it can
@@ -184,7 +197,20 @@ type LineWriter struct {
 
 // NewLineWriter builds a LineWriter emitting at level.
 func NewLineWriter(logger *slog.Logger, level slog.Level) *LineWriter {
-	return &LineWriter{logger: logger, level: level}
+	return newLineWriter(logger, level, context.Background())
+}
+
+// WithContext returns a LineWriter emitting under ctx, so records written
+// through it are stamped with the active span like every other record.
+//
+// The returned writer starts with an empty buffer: a partial line already held
+// by the receiver belongs to whatever was writing it, not to this context.
+func (w *LineWriter) WithContext(ctx context.Context) *LineWriter {
+	return newLineWriter(w.logger, w.level, ctx)
+}
+
+func newLineWriter(logger *slog.Logger, level slog.Level, ctx context.Context) *LineWriter {
+	return &LineWriter{logger: logger, level: level, ctx: ctx}
 }
 
 // Write buffers p and emits one record per complete line. A trailing partial
@@ -207,7 +233,7 @@ func (w *LineWriter) Write(p []byte) (int, error) {
 		}
 
 		if trimmed := bytes.TrimRight([]byte(line), "\r\n"); len(trimmed) > 0 {
-			w.logger.Log(context.Background(), w.level, string(trimmed))
+			w.logger.Log(w.ctx, w.level, string(trimmed))
 		}
 	}
 
