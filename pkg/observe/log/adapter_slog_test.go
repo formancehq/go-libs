@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 	"testing"
+	"testing/slogtest"
 
 	"go.uber.org/zap/zapcore"
 )
@@ -296,4 +297,87 @@ func TestUnnamedLoggerEmitsNoLoggerField(t *testing.T) {
 	if _, ok := decodeRecord(t, &buf)["logger"]; ok {
 		t.Fatalf("an unnamed logger must not emit a logger key: %s", buf.String())
 	}
+}
+
+// Regression for a review finding: the wrapped handler nests everything added
+// after WithGroup, so delegating groups to it put the trace ids inside the
+// caller's group -- nothing querying trace_id at the record root would find
+// them.
+func TestNewSlogKeepsTraceIDsAtTheRootUnderAGroup(t *testing.T) {
+	var buf bytes.Buffer
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+		WithGroup("request").
+		InfoContext(sampledContext(), "done", "path", "/v1alpha1/connectors")
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" {
+		t.Fatalf("trace_id must stay at the record root: %v", record)
+	}
+	if record["span_id"] != "0200000000000000" {
+		t.Fatalf("span_id must stay at the record root: %v", record)
+	}
+
+	group, ok := record["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("the caller's group must still be emitted: %v", record)
+	}
+	if group["path"] != "/v1alpha1/connectors" {
+		t.Fatalf("the group must carry the record's attributes: %v", group)
+	}
+	if _, ok := group["trace_id"]; ok {
+		t.Fatalf("trace_id must not be duplicated inside the group: %v", group)
+	}
+}
+
+func TestNewSlogKeepsTraceIDsAtTheRootUnderNestedGroups(t *testing.T) {
+	var buf bytes.Buffer
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+		WithGroup("outer").With("a", 1).WithGroup("inner").
+		InfoContext(sampledContext(), "done", "b", 2)
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" {
+		t.Fatalf("trace_id must survive nested groups at the root: %v", record)
+	}
+
+	outer, ok := record["outer"].(map[string]any)
+	if !ok {
+		t.Fatalf("outer group missing: %v", record)
+	}
+	if outer["a"] != float64(1) {
+		t.Fatalf("attribute added between the groups is misplaced: %v", outer)
+	}
+	inner, ok := outer["inner"].(map[string]any)
+	if !ok {
+		t.Fatalf("inner group missing: %v", outer)
+	}
+	if inner["b"] != float64(2) {
+		t.Fatalf("record attribute is misplaced: %v", inner)
+	}
+}
+
+// Reimplementing group handling is exactly the kind of change that breaks
+// slog's contract in ways unit tests miss, so the standard library's own
+// conformance suite runs against it.
+func TestTraceHandlerSatisfiesSlogContract(t *testing.T) {
+	var buf bytes.Buffer
+
+	newHandler := func(*testing.T) slog.Handler {
+		buf.Reset()
+
+		return NewTraceHandler(slog.NewJSONHandler(&buf, nil))
+	}
+
+	result := func(t *testing.T) map[string]any {
+		t.Helper()
+
+		var record map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+			t.Fatalf("output is not valid JSON: %s (%v)", buf.String(), err)
+		}
+
+		return record
+	}
+
+	slogtest.Run(t, newHandler, result)
 }
