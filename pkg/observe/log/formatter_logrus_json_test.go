@@ -163,3 +163,44 @@ func TestLogrusJSONSurvivesUnmarshalableValues(t *testing.T) {
 		t.Fatalf("unmarshalable field should degrade to a string: %v", record)
 	}
 }
+
+// Regression for a review finding: a field named like one of the three keys
+// the formatter writes itself would otherwise produce a duplicate key, and a
+// consumer keeping the last value would lose the real message, level or
+// timestamp. logrus.JSONFormatter renamed them the same way.
+func TestLogrusJSONRenamesReservedFieldCollisions(t *testing.T) {
+	line, record := logrusJSONRecord(t, InfoLevel, func(l Logger) {
+		l.WithFields(map[string]any{
+			"msg":   "user supplied",
+			"level": "user level",
+			"time":  "user time",
+		}).Infof("the real message")
+	})
+
+	if record["msg"] != "the real message" {
+		t.Fatalf("the record's own message must win: %v", record)
+	}
+	if record["level"] != "INFO" {
+		t.Fatalf("the record's own level must win: %v", record)
+	}
+	if record["fields.msg"] != "user supplied" ||
+		record["fields.level"] != "user level" ||
+		record["fields.time"] != "user time" {
+		t.Fatalf("colliding fields must survive under fields.*: %v", record)
+	}
+
+	if got := keyOrder(t, line); got != "level,time,msg,fields.level,fields.msg,fields.time" {
+		t.Fatalf("key order = %q", got)
+	}
+}
+
+// A non-colliding field keeps its own name.
+func TestLogrusJSONLeavesOrdinaryFieldNamesAlone(t *testing.T) {
+	_, record := logrusJSONRecord(t, InfoLevel, func(l Logger) {
+		l.WithField("message", "not reserved").Infof("x")
+	})
+
+	if record["message"] != "not reserved" {
+		t.Fatalf("ordinary field renamed: %v", record)
+	}
+}

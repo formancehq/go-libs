@@ -3,6 +3,8 @@
 ## Before you start
 
 Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the project structure and rules.
+[LOGGING.md](./LOGGING.md) covers the logger stacks and the record shape every
+service emits.
 
 ## Dependency rules checklist
 
