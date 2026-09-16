@@ -44,18 +44,19 @@ correlation.
 ## Compatibility
 
 Nothing an existing consumer sees changes. `NewDefaultLogger` and
-`NewDefaultLoggerWithLevel` keep logrus's own JSON shape — lowercase levels,
-second-precision timestamps, alphabetically ordered keys — because changing it
-would rewrite records a deployment's queries and dashboards are already built
-on. A test pins that output against a bare `logrus.JSONFormatter`.
+`NewDefaultLoggerWithLevel` keep logrus's own formatters in **both** formats —
+JSON with lowercase levels, second-precision timestamps and alphabetically
+ordered keys, and text as `key="value"` pairs — because changing either would
+rewrite the output of every service that has not migrated. A test pins both
+against bare `logrus.JSONFormatter` and `logrus.TextFormatter`.
 
 The shared shape is therefore reached by **moving to the zap stack**, one
 service at a time. A service that has to stay on logrus for now can opt into
-the shape alone:
+the shape alone, in either format:
 
 ```go
 l := logrus.New()
-l.SetFormatter(logging.NewSharedJSONFormatter())
+l.SetFormatter(logging.NewSharedJSONFormatter()) // or NewSharedTextFormatter
 logger := logging.NewLogrus(l)
 ```
 
@@ -74,32 +75,32 @@ The two moves are not equivalent, and the difference matters for text logs.
 a lowercase level (`level="info"`) or on `level="warning"`. Parsers reading
 fields by name and ignoring order need no change.
 
-### Text — only the move to zap changes it
+### Text — unified too
 
-`NewSharedJSONFormatter` is a JSON formatter: a service opting into it keeps
-`logrus.TextFormatter` for its non-JSON output, unchanged.
-
-A service **migrating to the zap stack** changes both, because
-`NewZapLogger` renders text with `zapcore.NewConsoleEncoder` rather than
-`logrus.TextFormatter`:
+`NewSharedTextFormatter` is the console counterpart: a service opting into it
+renders text exactly as the zap stack does.
 
 ```
-logrus  time="2026-09-16T17:10:32+02:00" level=info msg=listening addr=":8080"
-zap     2026-09-16T17:10:32.41137+02:00	INFO	listening	{"addr": ":8080"}
+2026-09-16T17:16:01.187482+02:00	INFO	listening	{"addr": ":8080"}
 ```
 
 Tab-separated positional fields and a JSON object for the attributes, instead of
-`key="value"` pairs. Anything parsing the text output — a local `grep`, a log
-shipper reading the non-JSON format, a test asserting on a line — has to be
-revisited. In practice text is the development default and JSON is what a
-deployment runs, so this usually costs a few test assertions rather than a
-dashboard.
+logrus's `key="value"` pairs. Anything parsing the text output — a local `grep`,
+a log shipper reading the non-JSON format, a test asserting on a line — has to
+be revisited when a service adopts it. In practice text is the development
+default and JSON is what a deployment runs, so this usually costs a few test
+assertions rather than a dashboard.
 
-`NewSharedJSONFormatter` carries over two behaviours from
-`logrus.JSONFormatter` deliberately: a field holding an `error` renders as its
-message rather than as `{}`, and a field whose key collides with `level`,
-`time` or `msg` is emitted as `fields.<key>` so the record's own value is not
-shadowed.
+A service migrating to the zap stack gets both changes at once; one opting into
+a single shared formatter changes only that format.
+
+### Why this cannot drift
+
+Both shared formatters delegate to zap's own encoders rather than reproducing
+their layout, so the two stacks render through one encoder and cannot disagree.
+The tests assert on the rendered bytes of both stacks, in both formats, rather
+than on a decoded structure — a divergence in key order, level spelling or
+timestamp precision fails them.
 
 ## Levels
 
