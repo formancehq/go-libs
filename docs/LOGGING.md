@@ -59,8 +59,9 @@ l.SetFormatter(logging.NewSharedJSONFormatter())
 logger := logging.NewLogrus(l)
 ```
 
-Either move changes that service's records as follows, which is what to check
-before making it:
+The two moves are not equivalent, and the difference matters for text logs.
+
+### JSON — both moves change it the same way
 
 | | logrus default | shared shape |
 | --- | --- | --- |
@@ -69,10 +70,30 @@ before making it:
 | timestamp | second precision | RFC 3339 with nanoseconds |
 | key order | `level`, `msg`, `time` | `level`, `time`, `msg` |
 
-**What to update when you migrate a service**: any query, dashboard, alert or
-log-based metric filtering on a lowercase level (`level="info"`) or on
-`level="warning"`. Parsers reading fields by name and ignoring order need no
-change, and the text format is untouched either way.
+**What to update**: any query, dashboard, alert or log-based metric filtering on
+a lowercase level (`level="info"`) or on `level="warning"`. Parsers reading
+fields by name and ignoring order need no change.
+
+### Text — only the move to zap changes it
+
+`NewSharedJSONFormatter` is a JSON formatter: a service opting into it keeps
+`logrus.TextFormatter` for its non-JSON output, unchanged.
+
+A service **migrating to the zap stack** changes both, because
+`NewZapLogger` renders text with `zapcore.NewConsoleEncoder` rather than
+`logrus.TextFormatter`:
+
+```
+logrus  time="2026-09-16T17:10:32+02:00" level=info msg=listening addr=":8080"
+zap     2026-09-16T17:10:32.41137+02:00	INFO	listening	{"addr": ":8080"}
+```
+
+Tab-separated positional fields and a JSON object for the attributes, instead of
+`key="value"` pairs. Anything parsing the text output — a local `grep`, a log
+shipper reading the non-JSON format, a test asserting on a line — has to be
+revisited. In practice text is the development default and JSON is what a
+deployment runs, so this usually costs a few test assertions rather than a
+dashboard.
 
 `NewSharedJSONFormatter` carries over two behaviours from
 `logrus.JSONFormatter` deliberately: a field holding an `error` renders as its
