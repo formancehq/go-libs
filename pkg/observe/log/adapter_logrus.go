@@ -155,8 +155,11 @@ func NewDefaultLoggerWithLevel(
 
 	var formatter logrus.Formatter
 	if formatJSON {
-		// The shared shape, not logrus's: see sharedJSONFormatter.
-		formatter = &sharedJSONFormatter{}
+		// logrus's own shape, deliberately: changing it here would rewrite the
+		// records of every service that has not migrated. A service that wants
+		// the shared shape opts in with NewSharedJSONFormatter, or moves to the
+		// zap stack.
+		formatter = &logrus.JSONFormatter{}
 	} else {
 		textFormatter := new(logrus.TextFormatter)
 		textFormatter.FullTimestamp = true

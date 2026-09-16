@@ -1,8 +1,8 @@
 # Logging
 
-Every service builds one logger and exposes it through whichever interface each
-dependency expects. All of them render the same record, so a deployment running
-several services has one shape to parse rather than one per binary.
+A service builds one logger and exposes it through whichever interface each
+dependency expects. Every interface over one logger renders the same record, so
+a service emits one shape rather than one per dependency:
 
 ```json
 {"level":"INFO","time":"2026-09-15T12:40:36.917268302Z","msg":"batch applied","source":"bitcoin"}
@@ -11,6 +11,9 @@ several services has one shape to parse rather than one per binary.
 Field order is fixed: `level`, `time`, the logger name when there is one, `msg`,
 then the record's own fields.
 
+A deployment reaches **one shape across services** as each service moves onto
+this stack. Nothing changes for one that has not — see [Compatibility](#compatibility).
+
 ## The two stacks
 
 | Constructor | Backend | Use |
@@ -18,8 +21,9 @@ then the record's own fields.
 | `NewZapLogger(w, level, json)` | zap | the current stack — expose it with the adapters below |
 | `NewDefaultLogger(w, debug, json, otel)` | logrus | what `pkg/service` gives a service that has not migrated |
 
-Both emit the record above. The zap stack is the direction: it is what
-`pkg/observe/log` builds on, and only it offers the slog and logr interfaces.
+The zap stack emits the record above and is the direction: it is what this
+package builds on, and only it offers the slog and logr interfaces. The logrus
+stack keeps its own shape unless a caller opts in — see Compatibility below.
 
 ### Adapters over one `*zap.Logger`
 
@@ -37,27 +41,44 @@ cost is that `zapslog` clamps every slog level below Info to Debug, so `Trace`
 arrives at `Debug`; use `NewZap` where the custom trace level matters more than
 correlation.
 
-## Compatibility — the JSON output of `NewDefaultLogger` changed
+## Compatibility
 
-The logrus stack used to emit logrus's own shape. It now emits the shared one.
-A deployment querying those logs has to migrate:
+Nothing an existing consumer sees changes. `NewDefaultLogger` and
+`NewDefaultLoggerWithLevel` keep logrus's own JSON shape — lowercase levels,
+second-precision timestamps, alphabetically ordered keys — because changing it
+would rewrite records a deployment's queries and dashboards are already built
+on. A test pins that output against a bare `logrus.JSONFormatter`.
 
-| | before | after |
+The shared shape is therefore reached by **moving to the zap stack**, one
+service at a time. A service that has to stay on logrus for now can opt into
+the shape alone:
+
+```go
+l := logrus.New()
+l.SetFormatter(logging.NewSharedJSONFormatter())
+logger := logging.NewLogrus(l)
+```
+
+Either move changes that service's records as follows, which is what to check
+before making it:
+
+| | logrus default | shared shape |
 | --- | --- | --- |
 | level | `"info"` | `"INFO"` |
 | warning level | `"warning"` | `"WARN"` |
 | timestamp | second precision | RFC 3339 with nanoseconds |
-| key order | `level`, `msg`, `time` (alphabetical) | `level`, `time`, `msg` |
+| key order | `level`, `msg`, `time` | `level`, `time`, `msg` |
 
-**What to update**: any query, dashboard, alert or log-based metric filtering on
-a lowercase level (`level="info"`, `level="error"`) or on `level="warning"`.
-Parsers reading the fields by name and ignoring order need no change, and so do
-consumers of the text format, which is untouched.
+**What to update when you migrate a service**: any query, dashboard, alert or
+log-based metric filtering on a lowercase level (`level="info"`) or on
+`level="warning"`. Parsers reading fields by name and ignoring order need no
+change, and the text format is untouched either way.
 
-Two behaviours are carried over from `logrus.JSONFormatter` deliberately: a
-field holding an `error` renders as its message rather than as `{}`, and a
-field whose key collides with `level`, `time` or `msg` is emitted as
-`fields.<key>` so the record's own value is not shadowed.
+`NewSharedJSONFormatter` carries over two behaviours from
+`logrus.JSONFormatter` deliberately: a field holding an `error` renders as its
+message rather than as `{}`, and a field whose key collides with `level`,
+`time` or `msg` is emitted as `fields.<key>` so the record's own value is not
+shadowed.
 
 ## Levels
 

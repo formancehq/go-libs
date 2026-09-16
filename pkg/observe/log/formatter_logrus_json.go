@@ -10,6 +10,23 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// NewSharedJSONFormatter returns a logrus formatter rendering entries in the
+// same shape as ZapEncoderConfig, for a service that has to stay on logrus but
+// wants its records to line up with the zap stack's.
+//
+// It is opt-in: NewDefaultLogger keeps logrus's own shape, because changing
+// that would rewrite the records of every service that has not migrated. Use
+// it on a logger you build yourself:
+//
+//	l := logrus.New()
+//	l.SetFormatter(logging.NewSharedJSONFormatter())
+//	logger := logging.NewLogrus(l)
+//
+// The migration it implies is described in docs/LOGGING.md.
+func NewSharedJSONFormatter() logrus.Formatter {
+	return &sharedJSONFormatter{}
+}
+
 // sharedJSONFormatter renders a logrus entry in the same shape as
 // ZapEncoderConfig, so a deployment running services on both logger stacks
 // emits one record shape rather than two.
