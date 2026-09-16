@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -17,7 +18,12 @@ func logrusJSONRecord(t *testing.T, level Level, emit func(Logger)) (string, map
 	t.Helper()
 
 	var buf bytes.Buffer
-	emit(NewDefaultLoggerWithLevel(&buf, level, true, false))
+
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetLevel(toLogrusLevel(level))
+	l.SetFormatter(NewSharedJSONFormatter())
+	emit(NewLogrus(l))
 
 	line := strings.TrimRight(buf.String(), "\n")
 
@@ -282,5 +288,54 @@ func TestLogrusJSONResolvesRenamedCollisionsDeterministically(t *testing.T) {
 		if record["msg"] != "the real message" {
 			t.Fatalf("the record's own message must still win: %v", record)
 		}
+	}
+}
+
+// The guarantee this package makes to every service that has not migrated:
+// NewDefaultLogger's JSON output is byte-for-byte what logrus always produced.
+// Changing it would rewrite records a deployment's queries and dashboards are
+// already built on, so the shared shape stays opt-in.
+func TestNewDefaultLoggerKeepsLogrusShape(t *testing.T) {
+	var ours, theirs bytes.Buffer
+
+	NewDefaultLoggerWithLevel(&ours, InfoLevel, true, false).
+		WithField("addr", ":8080").Infof("listening")
+
+	reference := logrus.New()
+	reference.SetOutput(&theirs)
+	reference.SetLevel(logrus.InfoLevel)
+	reference.SetFormatter(&logrus.JSONFormatter{})
+	reference.WithField("addr", ":8080").Infof("listening")
+
+	oursRecord, theirsRecord := map[string]any{}, map[string]any{}
+	if err := json.Unmarshal(ours.Bytes(), &oursRecord); err != nil {
+		t.Fatalf("not JSON: %s", ours.String())
+	}
+	if err := json.Unmarshal(theirs.Bytes(), &theirsRecord); err != nil {
+		t.Fatalf("reference not JSON: %s", theirs.String())
+	}
+
+	// The timestamps differ by construction; everything else must not.
+	delete(oursRecord, "time")
+	delete(theirsRecord, "time")
+
+	if fmt.Sprint(oursRecord) != fmt.Sprint(theirsRecord) {
+		t.Fatalf("default logger diverged from logrus:\n ours: %v\n them: %v", oursRecord, theirsRecord)
+	}
+	if oursRecord["level"] != "info" {
+		t.Fatalf("existing consumers read a lowercase level: %v", oursRecord)
+	}
+
+	if got := keyOrder(t, strings.TrimRight(ours.String(), "\n")); got != keyOrder(t, strings.TrimRight(theirs.String(), "\n")) {
+		t.Fatalf("key order diverged: %q vs %q", ours.String(), theirs.String())
+	}
+}
+
+// And the opt-in formatter still gives the shared shape.
+func TestSharedFormatterIsOptIn(t *testing.T) {
+	_, record := logrusJSONRecord(t, InfoLevel, func(l Logger) { l.Infof("listening") })
+
+	if record["level"] != "INFO" {
+		t.Fatalf("the opt-in formatter must render the shared shape: %v", record)
 	}
 }
