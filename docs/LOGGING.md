@@ -34,15 +34,45 @@ stack keeps its own shape unless a caller opts in — see Compatibility below.
 | `*slog.Logger` | `NewSlog(z)` | standard-library call sites |
 | `logr.Logger` | `NewLogr(z)` | controller-runtime, klog |
 
-Both `Logger` constructors correlate: `WithContext` stamps `trace_id` and
-`span_id` when the context carries a valid span, and adds nothing when it does
-not. That is what makes `ContextWithLogger`, and the HTTP middleware built on
-it, produce correlated records.
-
 Prefer `NewZap` when starting from the `*zap.Logger`: it keeps the custom trace
 level, which the slog path cannot — `zapslog` clamps every slog level below Info
 to Debug, so a `Trace` record arrives at `Debug`. `NewSlogLogger` is for code
 that already holds an `*slog.Logger`.
+
+## Trace correlation
+
+Correlation is **attached deliberately**, not implied by holding a context.
+That is how the logrus stack has always worked: `WithContext` stores the
+context, and `SetHooks` attaches the hook that reads it — only when a traces
+exporter is configured, since stamping ids for a trace no backend will receive
+correlates a record with nothing.
+
+| Constructor | Correlates |
+| --- | --- |
+| `NewDefaultLogger(w, debug, json, otelTraces)` | when `otelTraces` is set |
+| `NewZap(sugar)` | no — `WithContext` returns the receiver |
+| `NewZapWithTraces(sugar)` | yes |
+| `NewSlog(z)` | yes, always — see below |
+
+`NewZapWithTraces` belongs at the same place in a service's wiring as the
+logrus hook: alongside a configured traces exporter, on the same condition.
+
+It is a constructor rather than a core because a `zapcore.Core` sees no
+context — which is what the original "attach an otelzap core" note meant,
+`otelzap` being the bridge that carries one. Taking the context through
+`Logger.WithContext` reaches the same result without the dependency.
+
+**`NewSlog` correlates unconditionally**, and that is a deliberate difference.
+Its handler exists to stamp the ids — a `TraceHandler` that does not is an
+empty wrapper — and it is new API, so no caller's records change. A service
+that does not want correlation on that path builds its own handler chain
+around `zapslog`.
+
+Both stamp on a **valid span context**, which includes one propagated from
+another service. The logrus hook stamps only for a **recording** span, so a
+context carrying a remote or sampled-out span is correlated on the new stack
+and not on the logrus one. Worth knowing when comparing records emitted by two
+services on different stacks.
 
 ## Compatibility
 

@@ -221,12 +221,23 @@ func TestScopedReservedFieldsAreEscaped(t *testing.T) {
 	}
 }
 
-// ZapLogger used to drop the context and defer correlation to a bridge this
-// module never attached, so a caller reaching it through ContextWithLogger --
-// the HTTP middleware included -- asked for correlation and got none.
+// NewZap's contract is unchanged: no correlation, whatever the context. That is
+// deliberate -- correlation is attached explicitly, as SetHooks does on the
+// logrus side.
+func TestNewZapDoesNotCorrelate(t *testing.T) {
+	var buf bytes.Buffer
+	NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).
+		WithContext(sampledContext()).Infof("listening")
+
+	if _, ok := decodeRecord(t, &buf)["trace_id"]; ok {
+		t.Fatalf("NewZap must not correlate: %s", buf.String())
+	}
+}
+
+// NewZapWithTraces is the opt-in counterpart.
 func TestZapLoggerCorrelatesFromItsContext(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar())
+	logger := NewZapWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar())
 
 	logger.WithContext(sampledContext()).Infof("listening")
 
@@ -250,7 +261,7 @@ func TestZapLoggerAddsNothingWithoutASpan(t *testing.T) {
 		{"a context with no span", func(l Logger) { l.WithContext(context.Background()).Infof("x") }},
 	} {
 		var buf bytes.Buffer
-		tc.emit(NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()))
+		tc.emit(NewZapWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()))
 
 		record := decodeRecord(t, &buf)
 		if _, ok := record["trace_id"]; ok {
@@ -263,7 +274,7 @@ func TestZapLoggerAddsNothingWithoutASpan(t *testing.T) {
 // composes a per-request logger.
 func TestZapLoggerKeepsItsContextAcrossWithField(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar())
+	logger := NewZapWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar())
 
 	logger.WithContext(sampledContext()).WithField("request_id", "abc").Infof("Request")
 
@@ -277,7 +288,7 @@ func TestZapLoggerKeepsItsContextAcrossWithField(t *testing.T) {
 // whose records are correlated.
 func TestContextWithLoggerCorrelatesAZapLogger(t *testing.T) {
 	var buf bytes.Buffer
-	ctx := ContextWithLogger(sampledContext(), NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()))
+	ctx := ContextWithLogger(sampledContext(), NewZapWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()))
 
 	FromContext(ctx).Infof("Request")
 
@@ -290,7 +301,7 @@ func TestContextWithLoggerCorrelatesAZapLogger(t *testing.T) {
 // the reason it is added on the Write path rather than through With.
 func TestStampedCorrelationIsNotEscaped(t *testing.T) {
 	var buf bytes.Buffer
-	NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).
+	NewZapWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).
 		WithContext(sampledContext()).Infof("x")
 
 	record := decodeRecord(t, &buf)

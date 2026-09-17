@@ -25,15 +25,40 @@ type ZapLogger struct {
 	sugar *zap.SugaredLogger
 
 	// ctx is the context WithContext was given, read at log time for the span
-	// to correlate against. Nothing else is taken from it.
+	// to correlate against. Nothing else is taken from it, and it is only
+	// consulted when correlate is set.
 	ctx context.Context
+
+	// correlate is what NewZapWithTraces turns on. It is off by default so
+	// NewZap keeps the behaviour it has always had.
+	correlate bool
 }
 
 var _ Logger = (*ZapLogger)(nil)
 
 // NewZap wraps a *zap.SugaredLogger as a Logger.
+//
+// Its records carry no trace correlation: WithContext returns the receiver, as
+// it always has. Correlation is attached deliberately, the way SetHooks
+// attaches it on the logrus side -- use NewZapWithTraces.
 func NewZap(sugar *zap.SugaredLogger) *ZapLogger {
 	return &ZapLogger{sugar: sugar}
+}
+
+// NewZapWithTraces wraps a *zap.SugaredLogger as a Logger whose records carry
+// the ids of the span the context holds, when it holds one.
+//
+// It is the zap counterpart of the correlation SetHooks attaches to a logrus
+// logger, and it belongs at the same place in a service's wiring: alongside a
+// configured traces exporter, on the same condition. Stamping ids for a trace
+// no backend will ever receive correlates a record with nothing.
+//
+// It is a constructor rather than a hook or a core because a zapcore.Core sees
+// no context -- which is what "an attached otelzap core" meant, otelzap being
+// the bridge that carries one. Taking the context through Logger.WithContext
+// achieves the same without the dependency.
+func NewZapWithTraces(sugar *zap.SugaredLogger) *ZapLogger {
+	return &ZapLogger{sugar: sugar, correlate: true}
 }
 
 // NopZap returns a Logger backed by zap.NewNop() — useful in tests and
@@ -85,7 +110,7 @@ func (z *ZapLogger) log(level zapcore.Level, msg string) {
 // nothing when there is no context or no valid span in it -- an unsampled or
 // untraced record gains no fields.
 func (z *ZapLogger) correlation() []zap.Field {
-	if z.ctx == nil {
+	if !z.correlate || z.ctx == nil {
 		return nil
 	}
 
@@ -110,23 +135,26 @@ func (z *ZapLogger) WithFields(fields map[string]any) Logger {
 		kvs = append(kvs, k, v)
 	}
 
-	return &ZapLogger{sugar: z.sugar.With(kvs...), ctx: z.ctx}
+	return &ZapLogger{sugar: z.sugar.With(kvs...), ctx: z.ctx, correlate: z.correlate}
 }
 
 func (z *ZapLogger) WithField(key string, value any) Logger {
-	return &ZapLogger{sugar: z.sugar.With(key, value), ctx: z.ctx}
+	return &ZapLogger{sugar: z.sugar.With(key, value), ctx: z.ctx, correlate: z.correlate}
 }
 
-// WithContext returns a logger whose records carry the trace and span ids of
-// the span ctx holds, if it holds one. A context with no span, or an invalid
-// one, adds nothing.
+// WithContext returns a logger carrying ctx, whose records are stamped with the
+// ids of the span it holds -- but only on a logger built by NewZapWithTraces.
 //
-// It used to return the receiver and defer correlation to "an attached otelzap
-// core", which no build of this module has ever attached -- so every caller
-// reaching this through ContextWithLogger, the HTTP middleware included, asked
-// for correlation and silently got none.
+// A logger from NewZap returns the receiver, unchanged, as it always has. That
+// is deliberate rather than an omission: correlation is attached explicitly on
+// the logrus side too, by SetHooks, and only when a traces exporter is
+// configured.
 func (z *ZapLogger) WithContext(ctx context.Context) Logger {
-	return &ZapLogger{sugar: z.sugar, ctx: ctx}
+	if !z.correlate {
+		return z
+	}
+
+	return &ZapLogger{sugar: z.sugar, ctx: ctx, correlate: true}
 }
 
 // Writer returns an io.Writer that logs each scanned line at InfoLevel.
