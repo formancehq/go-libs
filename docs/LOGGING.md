@@ -14,6 +14,40 @@ then the record's own fields.
 A deployment reaches **one shape across services** as each service moves onto
 this stack. Nothing changes for one that has not — see [Compatibility](#compatibility).
 
+## Wiring it
+
+Everything that shapes the output — where records go, at which level, in which
+format — is decided once, on the `*zap.Logger`. The adapters choose the
+interface a dependency expects, and whether records are correlated. Nothing
+else.
+
+```go
+level := logging.ZapLevelFromFlags(logLevel, debug)          // --log-level, --debug
+json  := jsonFormatting                                      // JSON_FORMATTING_LOGGER
+otel  := otelTracesExporter != ""                            // a traces exporter is configured
+
+z := logging.NewZapLogger(os.Stderr, level, json)            // the one logger
+
+slogLogger := logging.NewSlog(z, otel)                       // *slog.Logger
+appLogger  := logging.NewZapWithTraces(z.Sugar())            // Logger, correlated
+ctrlLogger := logging.NewLogr(z)                             // logr.Logger
+```
+
+| Knob | Where | Value |
+| --- | --- | --- |
+| destination | `NewZapLogger(w, …)` | usually `os.Stderr` |
+| level | `NewZapLogger(…, level, …)` | `ParseZapLevel("info")`, or `ZapLevelFromFlags(logLevel, debug)` which clamps to Debug when `--debug` is set |
+| JSON or text | `NewZapLogger(…, jsonFormatting)` | `JSON_FORMATTING_LOGGER` / `--json-formatting-logger` |
+| correlation | the adapter | see [Trace correlation](#trace-correlation) |
+
+Levels accept `trace`, `debug`, `info`, `warn` and `error`. `warn` is a real
+level here, which `Level` cannot express — a caller going through `Level` still
+has to round it.
+
+Changing the level or the format on the `*zap.Logger` changes it for every
+adapter over it, which is the point: a service has one knob per property, not
+one per interface.
+
 ## The two stacks
 
 | Constructor | Backend | Use |
