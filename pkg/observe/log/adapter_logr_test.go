@@ -21,7 +21,7 @@ func TestLogrVerboseLevelRendersAsTrace(t *testing.T) {
 func TestLogrRendersTheSameShapeAsSlog(t *testing.T) {
 	var logrBuf, slogBuf bytes.Buffer
 	NewLogr(NewZapLogger(&logrBuf, zapcore.InfoLevel, true)).Info("starting manager")
-	NewSlog(NewZapLogger(&slogBuf, zapcore.InfoLevel, true)).Info("starting manager")
+	NewSlog(NewZapLogger(&slogBuf, zapcore.InfoLevel, true), false).Info("starting manager")
 
 	fromLogr, fromSlog := decodeRecord(t, &logrBuf), decodeRecord(t, &slogBuf)
 	for _, key := range []string{"level", "msg"} {

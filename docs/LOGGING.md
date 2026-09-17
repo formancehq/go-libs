@@ -31,7 +31,7 @@ stack keeps its own shape unless a caller opts in — see Compatibility below.
 | --- | --- | --- |
 | `Logger` | `NewZap(z.Sugar())` | lifecycle, existing consumers |
 | `Logger` | `NewSlogLogger(NewSlog(z))` | same, but trace-correlated |
-| `*slog.Logger` | `NewSlog(z)` / `NewSlogWithTraces(z)` | standard-library call sites |
+| `*slog.Logger` | `NewSlog(z, otelTraces)` | standard-library call sites |
 | `logr.Logger` | `NewLogr(z)` | controller-runtime, klog |
 
 Prefer `NewZap` when starting from the `*zap.Logger`: it keeps the custom trace
@@ -52,8 +52,7 @@ correlates a record with nothing.
 | `NewDefaultLogger(w, debug, json, otelTraces)` | when `otelTraces` is set |
 | `NewZap(sugar)` | no — `WithContext` returns the receiver |
 | `NewZapWithTraces(sugar)` | yes |
-| `NewSlog(z)` | no |
-| `NewSlogWithTraces(z)` | yes |
+| `NewSlog(z, otelTraces)` | when `otelTraces` is set |
 
 `NewZapWithTraces` belongs at the same place in a service's wiring as the
 logrus hook: alongside a configured traces exporter, on the same condition.
@@ -63,9 +62,20 @@ context — which is what the original "attach an otelzap core" note meant,
 `otelzap` being the bridge that carries one. Taking the context through
 `Logger.WithContext` reaches the same result without the dependency.
 
-All three stacks follow the same rule: the context is carried, and the
-stamping is attached on purpose. `TraceHandler` stays exported for a caller
-composing its own handler chain.
+All three stacks take the condition from the same place — whether the service
+has a traces exporter configured, which `pkg/service` derives from
+`otlptraces.OtelTracesExporterFlag`:
+
+```go
+otelTraces, _ := cmd.Flags().GetString(otlptraces.OtelTracesExporterFlag)
+logger := logging.NewSlog(z, otelTraces != "")   // as NewDefaultLogger takes it
+```
+
+`NewSlog` takes it as a parameter rather than offering a correlated and an
+uncorrelated constructor, so a call site cannot pick the wrong one by accident.
+`NewZap` keeps its signature — it predates this — so `NewZapWithTraces` is its
+opt-in form. `TraceHandler` stays exported for a caller composing its own
+handler chain.
 
 Both stamp on a **valid span context**, which includes one propagated from
 another service. The logrus hook stamps only for a **recording** span, so a

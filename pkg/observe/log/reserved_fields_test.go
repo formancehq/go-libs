@@ -20,7 +20,7 @@ func TestEveryFacadeEscapesReservedFields(t *testing.T) {
 			emit   func(*bytes.Buffer, string)
 		}{
 			{"slog", func(b *bytes.Buffer, k string) {
-				NewSlog(NewZapLogger(b, zapcore.InfoLevel, true)).Info("actual message", k, "user value")
+				NewSlog(NewZapLogger(b, zapcore.InfoLevel, true), false).Info("actual message", k, "user value")
 			}},
 			{"logr", func(b *bytes.Buffer, k string) {
 				NewLogr(NewZapLogger(b, zapcore.InfoLevel, true)).WithValues(k, "user value").Info("actual message")
@@ -60,7 +60,7 @@ func TestEscapedReservedFieldTakesPrecedence(t *testing.T) {
 		{"fields.msg", "literal", "msg", "reserved"},
 	} {
 		var buf bytes.Buffer
-		NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("actual message", order...)
+		NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Info("actual message", order...)
 
 		if n := strings.Count(buf.String(), `"fields.msg":`); n != 1 {
 			t.Fatalf("fields.msg emitted %d times: %s", n, buf.String())
@@ -86,7 +86,7 @@ func TestEscapedReservedFieldTakesPrecedence(t *testing.T) {
 // trace id.
 func TestApplicationAttrsCannotShadowTraceCorrelation(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).
 		InfoContext(sampledContext(), "x", "trace_id", "user value", "span_id", "user span")
 
 	if n := strings.Count(buf.String(), `"trace_id":`); n != 1 {
@@ -106,7 +106,7 @@ func TestApplicationAttrsCannotShadowTraceCorrelation(t *testing.T) {
 // the same on a sampled and an unsampled record.
 func TestTraceKeyEscapingDoesNotDependOnSampling(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("x", "trace_id", "user value")
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).Info("x", "trace_id", "user value")
 
 	record := decodeRecord(t, &buf)
 	if record["fields.trace_id"] != "user value" {
@@ -117,7 +117,7 @@ func TestTraceKeyEscapingDoesNotDependOnSampling(t *testing.T) {
 // Grouped attributes are namespaced and must keep their own names.
 func TestGroupedReservedNamesAreLeftAlone(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).
 		WithGroup("request").Info("done", "msg", "inside", "trace_id", "inside")
 
 	group, ok := decodeRecord(t, &buf)["request"].(map[string]any)
@@ -136,7 +136,7 @@ func TestGroupedReservedNamesAreLeftAlone(t *testing.T) {
 // the documentation has to say rather than claim they can never disagree.
 func TestFieldOrderFollowsTheSource(t *testing.T) {
 	var fromZap bytes.Buffer
-	NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true)).Info("x", "b", 2, "a", 1)
+	NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true), false).Info("x", "b", 2, "a", 1)
 
 	if got := keyOrder(t, strings.TrimRight(fromZap.String(), "\n")); got != "level,time,msg,b,a" {
 		t.Fatalf("the zap stack must keep the call order, got %q", got)
@@ -194,7 +194,7 @@ func TestScopedTraceFieldsCannotShadowCorrelation(t *testing.T) {
 	z := NewZapLogger(&buf, zapcore.InfoLevel, true).
 		With(zap.String("trace_id", "user value"), zap.String("span_id", "user span"))
 
-	NewSlogWithTraces(z).InfoContext(sampledContext(), "x")
+	NewSlog(z, true).InfoContext(sampledContext(), "x")
 
 	if n := strings.Count(buf.String(), `"trace_id":`); n != 1 {
 		t.Fatalf("trace_id emitted %d times: %s", n, buf.String())
@@ -324,7 +324,7 @@ func TestZapLoggerKeepsTheTraceLevel(t *testing.T) {
 // SetHooks attaches it on the logrus side.
 func TestNewSlogDoesNotCorrelate(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).
 		InfoContext(sampledContext(), "x")
 
 	if _, ok := decodeRecord(t, &buf)["trace_id"]; ok {
@@ -342,7 +342,7 @@ func TestNamespacedFieldsAreNotEscaped(t *testing.T) {
 		emit   func(*bytes.Buffer)
 	}{
 		{"slog", func(b *bytes.Buffer) {
-			NewSlog(NewZapLogger(b, zapcore.InfoLevel, true)).
+			NewSlog(NewZapLogger(b, zapcore.InfoLevel, true), false).
 				WithGroup("request").Info("done", "msg", "inside")
 		}},
 		{"zap", func(b *bytes.Buffer) {

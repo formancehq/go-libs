@@ -74,7 +74,7 @@ func TestZapLevelFromFlags(t *testing.T) {
 // put it under "ts" while every slog-based service writes "time".
 func TestZapEncoderConfigRecordShape(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("batch applied", "source", "aws")
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Info("batch applied", "source", "aws")
 
 	record := decodeRecord(t, &buf)
 	if record["msg"] != "batch applied" {
@@ -102,7 +102,7 @@ func TestZapEncoderConfigRecordShape(t *testing.T) {
 // would emit float seconds and silently change every latency field.
 func TestDurationsStayIntegerNanoseconds(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("applied", "latency", 250*time.Millisecond)
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Info("applied", "latency", 250*time.Millisecond)
 
 	if got := decodeRecord(t, &buf)["latency"]; got != float64(250000000) {
 		t.Fatalf("latency = %v, want 250000000", got)
@@ -111,7 +111,7 @@ func TestDurationsStayIntegerNanoseconds(t *testing.T) {
 
 func TestNewSlogStampsTraceIDFromContext(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).InfoContext(sampledContext(), "source added")
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).InfoContext(sampledContext(), "source added")
 
 	record := decodeRecord(t, &buf)
 	if record["trace_id"] != "01000000000000000000000000000000" {
@@ -124,7 +124,7 @@ func TestNewSlogStampsTraceIDFromContext(t *testing.T) {
 
 func TestNewSlogLeavesUntracedRecordsUnstamped(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("provisioning")
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).Info("provisioning")
 
 	if _, ok := decodeRecord(t, &buf)["trace_id"]; ok {
 		t.Fatal("a record emitted outside a span must not carry a trace id")
@@ -135,7 +135,7 @@ func TestNewSlogLeavesUntracedRecordsUnstamped(t *testing.T) {
 // which multiplies the size of the error lines a busy service emits.
 func TestNewSlogDoesNotAttachStacktraces(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Error("apply batch failed")
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Error("apply batch failed")
 
 	if _, ok := decodeRecord(t, &buf)["stacktrace"]; ok {
 		t.Fatalf("error records must not carry a stack trace: %s", buf.String())
@@ -147,7 +147,7 @@ func TestNewSlogDoesNotAttachStacktraces(t *testing.T) {
 // without zapcore.Lock.
 func TestNewZapLoggerSerialisesConcurrentWrites(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true))
+	logger := NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false)
 
 	const writers, perWriter = 8, 50
 	var wg sync.WaitGroup
