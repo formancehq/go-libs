@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -217,5 +218,93 @@ func TestScopedReservedFieldsAreEscaped(t *testing.T) {
 	record := decodeRecord(t, &buf)
 	if record["msg"] != "actual message" || record["fields.msg"] != "user value" {
 		t.Fatalf("scoped reserved key not escaped: %v", record)
+	}
+}
+
+// ZapLogger used to drop the context and defer correlation to a bridge this
+// module never attached, so a caller reaching it through ContextWithLogger --
+// the HTTP middleware included -- asked for correlation and got none.
+func TestZapLoggerCorrelatesFromItsContext(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar())
+
+	logger.WithContext(sampledContext()).Infof("listening")
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" {
+		t.Fatalf("trace_id missing: %v", record)
+	}
+	if record["span_id"] != "0200000000000000" {
+		t.Fatalf("span_id missing: %v", record)
+	}
+}
+
+// A context with no span adds nothing: an untraced record must not gain empty
+// or invented correlation fields.
+func TestZapLoggerAddsNothingWithoutASpan(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		emit func(Logger)
+	}{
+		{"no context at all", func(l Logger) { l.Infof("x") }},
+		{"a context with no span", func(l Logger) { l.WithContext(context.Background()).Infof("x") }},
+	} {
+		var buf bytes.Buffer
+		tc.emit(NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()))
+
+		record := decodeRecord(t, &buf)
+		if _, ok := record["trace_id"]; ok {
+			t.Fatalf("%s: must not carry a trace id: %v", tc.name, record)
+		}
+	}
+}
+
+// The context survives the field-adding path, which is how the HTTP middleware
+// composes a per-request logger.
+func TestZapLoggerKeepsItsContextAcrossWithField(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar())
+
+	logger.WithContext(sampledContext()).WithField("request_id", "abc").Infof("Request")
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" || record["request_id"] != "abc" {
+		t.Fatalf("context or field lost: %v", record)
+	}
+}
+
+// ContextWithLogger is the path the middleware takes; it must produce a logger
+// whose records are correlated.
+func TestContextWithLoggerCorrelatesAZapLogger(t *testing.T) {
+	var buf bytes.Buffer
+	ctx := ContextWithLogger(sampledContext(), NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()))
+
+	FromContext(ctx).Infof("Request")
+
+	if got := decodeRecord(t, &buf)["trace_id"]; got != "01000000000000000000000000000000" {
+		t.Fatalf("trace_id = %v", got)
+	}
+}
+
+// The stamped pair must not be escaped as if it were an application field --
+// the reason it is added on the Write path rather than through With.
+func TestStampedCorrelationIsNotEscaped(t *testing.T) {
+	var buf bytes.Buffer
+	NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).
+		WithContext(sampledContext()).Infof("x")
+
+	record := decodeRecord(t, &buf)
+	if _, escaped := record["fields.trace_id"]; escaped {
+		t.Fatalf("the stamped pair must not be escaped: %v", record)
+	}
+}
+
+// And Trace survives, which is what this path offers over the slog bridge.
+func TestZapLoggerKeepsTheTraceLevel(t *testing.T) {
+	var buf bytes.Buffer
+	NewZap(NewZapLogger(&buf, ToZapLevel(TraceLevel), true).Sugar()).Tracef("per-event detail")
+
+	if got := decodeRecord(t, &buf)["level"]; got != "TRACE" {
+		t.Fatalf("level = %v, want TRACE", got)
 	}
 }

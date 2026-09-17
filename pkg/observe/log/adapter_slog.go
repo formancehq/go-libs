@@ -176,18 +176,15 @@ type slogAdapter struct {
 
 var _ Logger = (*slogAdapter)(nil)
 
-// NewSlogLogger wraps an *slog.Logger (as built by NewSlog) as a Logger, ready
-// to be handed to service.NewWithLogger.
+// NewSlogLogger wraps an *slog.Logger as a Logger, for code that already has
+// one -- a package built on the standard library, or a caller composing its own
+// slog handlers -- and needs to hand it to something taking a Logger, such as
+// service.NewWithLogger.
 //
-// Prefer it over NewZap when the records must stay trace-correlated: ZapLogger
-// carries no context -- its WithContext returns itself and defers correlation
-// to an attached otelzap core -- whereas this adapter keeps the context, so
-// ContextWithLogger and the HTTP middleware built on it produce records
-// stamped with the active span.
-//
-// The trade-off is Trace: zapslog clamps every slog level below Info to Debug,
-// so trace records emitted through this adapter arrive at Debug. Use NewZap
-// where the custom trace level matters more than correlation.
+// Reach for NewZap instead when starting from the *zap.Logger: both correlate
+// from the context now, and NewZap keeps the custom trace level, which this
+// path cannot -- zapslog clamps every slog level below Info to Debug, so a
+// Trace record arrives at Debug.
 func NewSlogLogger(logger *slog.Logger) Logger {
 	return &slogAdapter{
 		logger: logger,
