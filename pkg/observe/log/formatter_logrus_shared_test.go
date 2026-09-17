@@ -199,3 +199,59 @@ func TestNewDefaultLoggerKeepsLogrusFormats(t *testing.T) {
 		}
 	}
 }
+
+// Regression for a review finding, and a deliberate pin rather than a fix:
+// zap's Any prefers fmt.Stringer over reflection, so a json.Number renders as
+// a string where encoding/json renders a number. Both shared paths inherit
+// that from the encoder they delegate to, which is what keeps them identical
+// -- and what docs/LOGGING.md has to state rather than promise away.
+func TestSharedFormatterValueConversionsMatchTheZapStack(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value any
+		want  any
+	}{
+		{"json.Number becomes a string", json.Number("42"), "42"},
+		{"a plain int stays a number", 42, float64(42)},
+		{"a float stays a number", 3.5, 3.5},
+		{"a bool stays a bool", true, true},
+		{"a duration stays integer nanoseconds", 250 * time.Millisecond, float64(250000000)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var fromLogrus, fromZap bytes.Buffer
+
+			sharedLogrus(&fromLogrus, InfoLevel, NewSharedJSONFormatter()).
+				WithField("v", tc.value).Infof("x")
+			NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true)).Info("x", "v", tc.value)
+
+			if normalise(fromLogrus.String()) != normalise(fromZap.String()) {
+				t.Fatalf("the stacks render this value differently:\n logrus: %s\n    zap: %s",
+					fromLogrus.String(), fromZap.String())
+			}
+
+			var record map[string]any
+			if err := json.Unmarshal(fromLogrus.Bytes(), &record); err != nil {
+				t.Fatalf("not JSON: %s", fromLogrus.String())
+			}
+			if record["v"] != tc.want {
+				t.Fatalf("v = %#v (%T), want %#v", record["v"], record["v"], tc.want)
+			}
+		})
+	}
+}
+
+// And the default logger, which nobody opted into, keeps encoding/json's
+// rendering of the same value.
+func TestDefaultLoggerStillRendersJSONNumberAsANumber(t *testing.T) {
+	var buf bytes.Buffer
+	NewDefaultLoggerWithLevel(&buf, InfoLevel, true, false).
+		WithField("amount", json.Number("42")).Infof("x")
+
+	var record map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+		t.Fatalf("not JSON: %s", buf.String())
+	}
+	if record["amount"] != float64(42) {
+		t.Fatalf("amount = %#v, want the number 42 -- the default logger must not change", record["amount"])
+	}
+}

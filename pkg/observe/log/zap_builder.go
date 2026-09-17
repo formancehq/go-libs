@@ -101,3 +101,21 @@ func NewZapLogger(w io.Writer, level zapcore.Level, jsonFormatting bool) *zap.Lo
 	// none of which tolerate concurrent writes from several goroutines.
 	return zap.New(zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(w)), level))
 }
+
+// emittedFieldName renames a field that would collide with a key
+// ZapEncoderConfig writes itself. Without it a caller attaching a field named
+// "msg" produces a record carrying two "msg" keys, and a consumer keeping the
+// last value loses the actual message -- or the severity, the timestamp, or
+// the logger name.
+//
+// logrus.JSONFormatter made the same substitution for level, time and msg, so
+// a record that used to read "fields.msg" still does. "logger" is added
+// because ZapEncoderConfig emits it and logrus never did.
+func emittedFieldName(key string) string {
+	switch key {
+	case "level", "time", "msg", "logger":
+		return "fields." + key
+	default:
+		return key
+	}
+}

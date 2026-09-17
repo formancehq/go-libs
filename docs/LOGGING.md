@@ -72,8 +72,34 @@ The two moves are not equivalent, and the difference matters for text logs.
 | key order | `level`, `msg`, `time` | `level`, `time`, `msg` |
 
 **What to update**: any query, dashboard, alert or log-based metric filtering on
-a lowercase level (`level="info"`) or on `level="warning"`. Parsers reading
-fields by name and ignoring order need no change.
+a lowercase level (`level="info"`) or on `level="warning"`. Field *names* are
+unchanged, so a parser reading by name and ignoring order keeps working — but
+see the two subsections below before assuming a typed parser does.
+
+### Values — some types render differently
+
+The shared shape encodes values through zap, whose `Any` prefers `fmt.Stringer`
+over reflection. A type implementing both `Stringer` and JSON marshalling is
+rendered by its `String()`:
+
+| value | logrus default | shared shape |
+| --- | --- | --- |
+| `json.Number("42")` | `42` | `"42"` |
+| any `Stringer` that also marshals | its JSON form | its `String()` |
+| `int`, `float64`, `bool` | unchanged | unchanged |
+| `time.Duration` | nanoseconds | nanoseconds |
+| `error` | its message | its message |
+
+A **typed** parser or a numeric query over such a field has to be checked. Both
+shared paths and the zap stack agree on this, by construction — it is the
+encoder's behaviour, not an adaptation — and a test pins it.
+
+### Fields colliding with a reserved key
+
+A field named `level`, `time`, `msg` or `logger` is emitted as `fields.<key>`,
+so the record's own value is not shadowed. Both stacks do this; `logrus`'s
+default did it for `level`, `time` and `msg` only, so a record that used to read
+`fields.msg` still does, and a field named `logger` gains the same protection.
 
 ### Text — unified too
 
