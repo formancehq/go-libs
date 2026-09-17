@@ -49,7 +49,7 @@ func TestSharedFormattersMatchTheZapStackByteForByte(t *testing.T) {
 			sharedLogrus(&fromLogrus, InfoLevel, tc.formatter).
 				WithFields(map[string]any{"addr": ":8080", "auth": true}).Infof("listening")
 
-			NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, tc.json)).
+			NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, tc.json), false).
 				Info("listening", "addr", ":8080", "auth", true)
 
 			if normalise(fromLogrus.String()) != normalise(fromZap.String()) {
@@ -67,13 +67,13 @@ func TestSharedFormattersMatchTheZapStackAtEveryLevel(t *testing.T) {
 		zap   func(*bytes.Buffer)
 	}{
 		{DebugLevel, func(l Logger) { l.Debugf("x") }, func(b *bytes.Buffer) {
-			NewSlog(NewZapLogger(b, zapcore.DebugLevel, true)).Debug("x")
+			NewSlog(NewZapLogger(b, zapcore.DebugLevel, true), false).Debug("x")
 		}},
 		{InfoLevel, func(l Logger) { l.Infof("x") }, func(b *bytes.Buffer) {
-			NewSlog(NewZapLogger(b, zapcore.InfoLevel, true)).Info("x")
+			NewSlog(NewZapLogger(b, zapcore.InfoLevel, true), false).Info("x")
 		}},
 		{ErrorLevel, func(l Logger) { l.Errorf("x") }, func(b *bytes.Buffer) {
-			NewSlog(NewZapLogger(b, zapcore.ErrorLevel, true)).Error("x")
+			NewSlog(NewZapLogger(b, zapcore.ErrorLevel, true), false).Error("x")
 		}},
 	} {
 		var fromLogrus, fromZap bytes.Buffer
@@ -222,7 +222,7 @@ func TestSharedFormatterValueConversionsMatchTheZapStack(t *testing.T) {
 
 			sharedLogrus(&fromLogrus, InfoLevel, NewSharedJSONFormatter()).
 				WithField("v", tc.value).Infof("x")
-			NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true)).Info("x", "v", tc.value)
+			NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true), false).Info("x", "v", tc.value)
 
 			if normalise(fromLogrus.String()) != normalise(fromZap.String()) {
 				t.Fatalf("the stacks render this value differently:\n logrus: %s\n    zap: %s",

@@ -149,21 +149,23 @@ func (h *TraceHandler) with(goa groupOrAttrs) *TraceHandler {
 // encoder, the writer and the level of every other adapter over the same
 // logger.
 //
-// Its records carry no trace correlation. Correlation is attached
-// deliberately, as SetHooks attaches it on the logrus side and
-// NewZapWithTraces on the zap one -- use NewSlogWithTraces.
-func NewSlog(z *zap.Logger) *slog.Logger {
-	return slog.New(baseSlogHandler(z))
-}
-
-// NewSlogWithTraces is the counterpart whose records carry the ids of the span
-// the logging context holds, when it holds one.
+// otelTraces attaches trace correlation, and is the same condition
+// NewDefaultLogger takes for the logrus hook: whether the service has a traces
+// exporter configured. pkg/service derives it from
+// otlptraces.OtelTracesExporterFlag. Stamping ids for a trace no backend will
+// receive correlates a record with nothing, which is why it is a condition
+// rather than a default.
 //
-// It belongs at the same place in a service's wiring as the logrus hook:
-// alongside a configured traces exporter, on the same condition. Stamping ids
-// for a trace no backend will receive correlates a record with nothing.
-func NewSlogWithTraces(z *zap.Logger) *slog.Logger {
-	return slog.New(NewTraceHandler(baseSlogHandler(z)))
+// It is a parameter rather than a separate constructor so a caller cannot pick
+// the uncorrelated one by accident: the choice has to be made, and it is made
+// from the same value that governs the other two stacks.
+func NewSlog(z *zap.Logger, otelTraces bool) *slog.Logger {
+	handler := baseSlogHandler(z)
+	if otelTraces {
+		handler = NewTraceHandler(handler)
+	}
+
+	return slog.New(handler)
 }
 
 // baseSlogHandler bridges to zap, carrying across what the core cannot know:

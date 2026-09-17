@@ -16,7 +16,7 @@ import (
 // application record written through slog must be indistinguishable.
 func TestSlogLoggerRendersLikeSlogRecords(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true))
+	logger := NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false)
 
 	NewSlogLogger(logger).Infof("Starting application")
 	lifecycle := decodeRecord(t, &buf)
@@ -38,7 +38,7 @@ func TestSlogLoggerRendersLikeSlogRecords(t *testing.T) {
 
 func TestSlogLoggerWithFieldPropagates(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false))
 
 	adapter.WithField("source", "aws").Infof("batch applied")
 
@@ -49,7 +49,7 @@ func TestSlogLoggerWithFieldPropagates(t *testing.T) {
 
 func TestSlogLoggerWithFieldsPropagates(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false))
 
 	adapter.WithFields(map[string]any{"addr": ":8080", "auth": true}).Info("listening")
 
@@ -63,7 +63,7 @@ func TestSlogLoggerWithFieldsPropagates(t *testing.T) {
 // calls WithContext, so the record carries the span the request runs under.
 func TestSlogLoggerWithContextStampsTraceID(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true))
 
 	adapter.WithContext(sampledContext()).Info("Request")
 
@@ -74,7 +74,7 @@ func TestSlogLoggerWithContextStampsTraceID(t *testing.T) {
 
 func TestSlogLoggerContextSurvivesWithField(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true))
 
 	adapter.WithContext(sampledContext()).WithField("request_id", "abc").Info("Request")
 
@@ -88,7 +88,7 @@ func TestSlogLoggerContextSurvivesWithField(t *testing.T) {
 // logger whose records are stamped.
 func TestContextWithLoggerKeepsTraceCorrelation(t *testing.T) {
 	var buf bytes.Buffer
-	ctx := ContextWithLogger(sampledContext(), NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true))))
+	ctx := ContextWithLogger(sampledContext(), NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true)))
 
 	FromContext(ctx).Info("Request")
 
@@ -99,7 +99,7 @@ func TestContextWithLoggerKeepsTraceCorrelation(t *testing.T) {
 
 func TestSlogLoggerEnabledRespectsLevel(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false))
 
 	if !adapter.Enabled(InfoLevel) {
 		t.Fatal("info must be enabled at info level")
@@ -113,7 +113,7 @@ func TestSlogLoggerEnabledRespectsLevel(t *testing.T) {
 // a trace record through this adapter arrives at Debug rather than TRACE.
 func TestSlogLoggerCollapsesTraceOntoDebug(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.DebugLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.DebugLevel, true), false))
 
 	adapter.Trace("per-event detail")
 
@@ -124,7 +124,7 @@ func TestSlogLoggerCollapsesTraceOntoDebug(t *testing.T) {
 
 func TestSlogLoggerWriterEmitsOneRecordPerLine(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false))
 
 	if _, err := adapter.Writer().Write([]byte("[DEBUG] GET https://example.test/.well-known/openid-configuration\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -141,7 +141,7 @@ func TestSlogLoggerWriterEmitsOneRecordPerLine(t *testing.T) {
 
 func TestLineWriterHoldsPartialLines(t *testing.T) {
 	var buf bytes.Buffer
-	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)), slog.LevelInfo)
+	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false), slog.LevelInfo)
 
 	if _, err := writer.Write([]byte("retrying request")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -160,7 +160,7 @@ func TestLineWriterHoldsPartialLines(t *testing.T) {
 
 func TestLineWriterSkipsBlankLines(t *testing.T) {
 	var buf bytes.Buffer
-	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)), slog.LevelInfo)
+	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false), slog.LevelInfo)
 
 	if _, err := writer.Write([]byte("\n\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -175,7 +175,7 @@ func TestLineWriterSkipsBlankLines(t *testing.T) {
 // not enough. Fails under -race without the mutex.
 func TestLineWriterIsSafeForConcurrentUse(t *testing.T) {
 	var buf bytes.Buffer
-	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)), slog.LevelInfo)
+	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false), slog.LevelInfo)
 
 	const writers, perWriter = 8, 50
 	var wg sync.WaitGroup
@@ -214,7 +214,7 @@ func TestLineWriterIsSafeForConcurrentUse(t *testing.T) {
 // NewZap, so it has to hold for the writer too.
 func TestSlogLoggerWriterInheritsTheAdapterContext(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true))
 
 	if _, err := adapter.WithContext(sampledContext()).Writer().Write([]byte("GET /.well-known\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -229,7 +229,7 @@ func TestSlogLoggerWriterInheritsTheAdapterContext(t *testing.T) {
 // The context must survive the field-adding path too, not just WithContext.
 func TestSlogLoggerWriterKeepsContextAcrossWithField(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true))
 
 	writer := adapter.WithContext(sampledContext()).WithField("request_id", "abc").Writer()
 	if _, err := writer.Write([]byte("retrying\n")); err != nil {
@@ -245,7 +245,7 @@ func TestSlogLoggerWriterKeepsContextAcrossWithField(t *testing.T) {
 // A writer with no context of its own still works and simply carries no ids.
 func TestLineWriterWithoutContextEmitsUnstamped(t *testing.T) {
 	var buf bytes.Buffer
-	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)), slog.LevelInfo)
+	writer := NewLineWriter(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false), slog.LevelInfo)
 
 	if _, err := writer.Write([]byte("no span here\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -262,7 +262,7 @@ func TestLineWriterWithoutContextEmitsUnstamped(t *testing.T) {
 // disagreeing about the shared record shape.
 func TestNewSlogPreservesTheLoggerName(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true).Named("worker")).Info("batch applied")
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true).Named("worker"), false).Info("batch applied")
 
 	if got := decodeRecord(t, &buf)["logger"]; got != "worker" {
 		t.Fatalf("logger name = %v, want worker", got)
@@ -275,7 +275,9 @@ func TestNamedLoggerRendersTheSameNameOnEveryFacade(t *testing.T) {
 		name string
 		emit func(*bytes.Buffer)
 	}{
-		{"slog", func(b *bytes.Buffer) { NewSlog(NewZapLogger(b, zapcore.InfoLevel, true).Named("worker")).Info("x") }},
+		{"slog", func(b *bytes.Buffer) {
+			NewSlog(NewZapLogger(b, zapcore.InfoLevel, true).Named("worker"), false).Info("x")
+		}},
 		{"logr", func(b *bytes.Buffer) { NewLogr(NewZapLogger(b, zapcore.InfoLevel, true).Named("worker")).Info("x") }},
 		{"Logger", func(b *bytes.Buffer) {
 			NewZap(NewZapLogger(b, zapcore.InfoLevel, true).Named("worker").Sugar()).Infof("x")
@@ -293,7 +295,7 @@ func TestNamedLoggerRendersTheSameNameOnEveryFacade(t *testing.T) {
 // An unnamed logger must not gain an empty field.
 func TestUnnamedLoggerEmitsNoLoggerField(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("x")
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Info("x")
 
 	if _, ok := decodeRecord(t, &buf)["logger"]; ok {
 		t.Fatalf("an unnamed logger must not emit a logger key: %s", buf.String())
@@ -306,7 +308,7 @@ func TestUnnamedLoggerEmitsNoLoggerField(t *testing.T) {
 // them.
 func TestNewSlogKeepsTraceIDsAtTheRootUnderAGroup(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).
 		WithGroup("request").
 		InfoContext(sampledContext(), "done", "path", "/v1alpha1/connectors")
 
@@ -332,7 +334,7 @@ func TestNewSlogKeepsTraceIDsAtTheRootUnderAGroup(t *testing.T) {
 
 func TestNewSlogKeepsTraceIDsAtTheRootUnderNestedGroups(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).
 		WithGroup("outer").With("a", 1).WithGroup("inner").
 		InfoContext(sampledContext(), "done", "b", 2)
 
@@ -390,7 +392,7 @@ func TestTraceHandlerSatisfiesSlogContract(t *testing.T) {
 func TestNewSlogRenamesReservedFieldCollisions(t *testing.T) {
 	for _, key := range []string{"msg", "level", "time", "logger"} {
 		var buf bytes.Buffer
-		NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+		NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).
 			Info("actual message", key, "user value")
 
 		// The encoder writes its own key at most once; "logger" is absent
@@ -409,7 +411,7 @@ func TestNewSlogRenamesReservedFieldCollisions(t *testing.T) {
 
 func TestNewSlogLeavesGroupedAttributesAlone(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).
 		WithGroup("request").Info("done", "msg", "inside a group")
 
 	group, ok := decodeRecord(t, &buf)["request"].(map[string]any)
@@ -425,7 +427,7 @@ func TestNewSlogLeavesGroupedAttributesAlone(t *testing.T) {
 func TestBothStacksRenameCollisionsIdentically(t *testing.T) {
 	var fromZap, fromLogrus bytes.Buffer
 
-	NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true)).Info("actual message", "msg", "user value")
+	NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true), false).Info("actual message", "msg", "user value")
 	sharedLogrus(&fromLogrus, InfoLevel, NewSharedJSONFormatter()).
 		WithField("msg", "user value").Infof("actual message")
 
@@ -438,7 +440,7 @@ func TestBothStacksRenameCollisionsIdentically(t *testing.T) {
 // encoder does write the key.
 func TestNewSlogRenamesTheLoggerCollisionOnANamedLogger(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true).Named("worker")).
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true).Named("worker"), false).
 		Info("actual message", "logger", "user value")
 
 	record := decodeRecord(t, &buf)
