@@ -34,12 +34,15 @@ stack keeps its own shape unless a caller opts in — see Compatibility below.
 | `*slog.Logger` | `NewSlog(z)` | standard-library call sites |
 | `logr.Logger` | `NewLogr(z)` | controller-runtime, klog |
 
-`NewSlogLogger` carries a context, which is what `ZapLogger` gives up — its
-`WithContext` returns itself. That is what makes `ContextWithLogger`, and the
-HTTP middleware built on it, produce records stamped with the active span. The
-cost is that `zapslog` clamps every slog level below Info to Debug, so `Trace`
-arrives at `Debug`; use `NewZap` where the custom trace level matters more than
-correlation.
+Both `Logger` constructors correlate: `WithContext` stamps `trace_id` and
+`span_id` when the context carries a valid span, and adds nothing when it does
+not. That is what makes `ContextWithLogger`, and the HTTP middleware built on
+it, produce correlated records.
+
+Prefer `NewZap` when starting from the `*zap.Logger`: it keeps the custom trace
+level, which the slog path cannot — `zapslog` clamps every slog level below Info
+to Debug, so a `Trace` record arrives at `Debug`. `NewSlogLogger` is for code
+that already holds an `*slog.Logger`.
 
 ## Compatibility
 
