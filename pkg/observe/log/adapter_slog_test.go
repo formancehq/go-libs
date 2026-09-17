@@ -63,7 +63,7 @@ func TestSlogLoggerWithFieldsPropagates(t *testing.T) {
 // calls WithContext, so the record carries the span the request runs under.
 func TestSlogLoggerWithContextStampsTraceID(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
 
 	adapter.WithContext(sampledContext()).Info("Request")
 
@@ -74,7 +74,7 @@ func TestSlogLoggerWithContextStampsTraceID(t *testing.T) {
 
 func TestSlogLoggerContextSurvivesWithField(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
 
 	adapter.WithContext(sampledContext()).WithField("request_id", "abc").Info("Request")
 
@@ -88,7 +88,7 @@ func TestSlogLoggerContextSurvivesWithField(t *testing.T) {
 // logger whose records are stamped.
 func TestContextWithLoggerKeepsTraceCorrelation(t *testing.T) {
 	var buf bytes.Buffer
-	ctx := ContextWithLogger(sampledContext(), NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true))))
+	ctx := ContextWithLogger(sampledContext(), NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true))))
 
 	FromContext(ctx).Info("Request")
 
@@ -214,7 +214,7 @@ func TestLineWriterIsSafeForConcurrentUse(t *testing.T) {
 // NewZap, so it has to hold for the writer too.
 func TestSlogLoggerWriterInheritsTheAdapterContext(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
 
 	if _, err := adapter.WithContext(sampledContext()).Writer().Write([]byte("GET /.well-known\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -229,7 +229,7 @@ func TestSlogLoggerWriterInheritsTheAdapterContext(t *testing.T) {
 // The context must survive the field-adding path too, not just WithContext.
 func TestSlogLoggerWriterKeepsContextAcrossWithField(t *testing.T) {
 	var buf bytes.Buffer
-	adapter := NewSlogLogger(NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)))
+	adapter := NewSlogLogger(NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)))
 
 	writer := adapter.WithContext(sampledContext()).WithField("request_id", "abc").Writer()
 	if _, err := writer.Write([]byte("retrying\n")); err != nil {
@@ -306,7 +306,7 @@ func TestUnnamedLoggerEmitsNoLoggerField(t *testing.T) {
 // them.
 func TestNewSlogKeepsTraceIDsAtTheRootUnderAGroup(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
 		WithGroup("request").
 		InfoContext(sampledContext(), "done", "path", "/v1alpha1/connectors")
 
@@ -332,7 +332,7 @@ func TestNewSlogKeepsTraceIDsAtTheRootUnderAGroup(t *testing.T) {
 
 func TestNewSlogKeepsTraceIDsAtTheRootUnderNestedGroups(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
 		WithGroup("outer").With("a", 1).WithGroup("inner").
 		InfoContext(sampledContext(), "done", "b", 2)
 

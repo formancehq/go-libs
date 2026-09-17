@@ -111,7 +111,7 @@ func TestDurationsStayIntegerNanoseconds(t *testing.T) {
 
 func TestNewSlogStampsTraceIDFromContext(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).InfoContext(sampledContext(), "source added")
+	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).InfoContext(sampledContext(), "source added")
 
 	record := decodeRecord(t, &buf)
 	if record["trace_id"] != "01000000000000000000000000000000" {
@@ -124,7 +124,7 @@ func TestNewSlogStampsTraceIDFromContext(t *testing.T) {
 
 func TestNewSlogLeavesUntracedRecordsUnstamped(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("provisioning")
+	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("provisioning")
 
 	if _, ok := decodeRecord(t, &buf)["trace_id"]; ok {
 		t.Fatal("a record emitted outside a span must not carry a trace id")

@@ -31,7 +31,7 @@ stack keeps its own shape unless a caller opts in — see Compatibility below.
 | --- | --- | --- |
 | `Logger` | `NewZap(z.Sugar())` | lifecycle, existing consumers |
 | `Logger` | `NewSlogLogger(NewSlog(z))` | same, but trace-correlated |
-| `*slog.Logger` | `NewSlog(z)` | standard-library call sites |
+| `*slog.Logger` | `NewSlog(z)` / `NewSlogWithTraces(z)` | standard-library call sites |
 | `logr.Logger` | `NewLogr(z)` | controller-runtime, klog |
 
 Prefer `NewZap` when starting from the `*zap.Logger`: it keeps the custom trace
@@ -52,7 +52,8 @@ correlates a record with nothing.
 | `NewDefaultLogger(w, debug, json, otelTraces)` | when `otelTraces` is set |
 | `NewZap(sugar)` | no — `WithContext` returns the receiver |
 | `NewZapWithTraces(sugar)` | yes |
-| `NewSlog(z)` | yes, always — see below |
+| `NewSlog(z)` | no |
+| `NewSlogWithTraces(z)` | yes |
 
 `NewZapWithTraces` belongs at the same place in a service's wiring as the
 logrus hook: alongside a configured traces exporter, on the same condition.
@@ -62,11 +63,9 @@ context — which is what the original "attach an otelzap core" note meant,
 `otelzap` being the bridge that carries one. Taking the context through
 `Logger.WithContext` reaches the same result without the dependency.
 
-**`NewSlog` correlates unconditionally**, and that is a deliberate difference.
-Its handler exists to stamp the ids — a `TraceHandler` that does not is an
-empty wrapper — and it is new API, so no caller's records change. A service
-that does not want correlation on that path builds its own handler chain
-around `zapslog`.
+All three stacks follow the same rule: the context is carried, and the
+stamping is attached on purpose. `TraceHandler` stays exported for a caller
+composing its own handler chain.
 
 Both stamp on a **valid span context**, which includes one propagated from
 another service. The logrus hook stamps only for a **recording** span, so a
