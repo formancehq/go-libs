@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"testing/slogtest"
@@ -380,4 +381,71 @@ func TestTraceHandlerSatisfiesSlogContract(t *testing.T) {
 	}
 
 	slogtest.Run(t, newHandler, result)
+}
+
+// Regression for a review finding: the zap path passed a colliding attribute
+// through unchanged, so the record carried two "msg" keys and a consumer
+// keeping the last value lost the actual message. Both stacks rename now, so
+// the shape holds whichever one a service logs through.
+func TestNewSlogRenamesReservedFieldCollisions(t *testing.T) {
+	for _, key := range []string{"msg", "level", "time", "logger"} {
+		var buf bytes.Buffer
+		NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+			Info("actual message", key, "user value")
+
+		// The encoder writes its own key at most once; "logger" is absent
+		// entirely on an unnamed logger, which is why this is not an equality.
+		line := buf.String()
+		if strings.Count(line, `"`+key+`":`) > 1 {
+			t.Fatalf("%q is duplicated: %s", key, line)
+		}
+
+		record := decodeRecord(t, &buf)
+		if record["fields."+key] != "user value" {
+			t.Fatalf("the colliding attribute must survive under fields.%s: %v", key, record)
+		}
+	}
+}
+
+func TestNewSlogLeavesGroupedAttributesAlone(t *testing.T) {
+	var buf bytes.Buffer
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+		WithGroup("request").Info("done", "msg", "inside a group")
+
+	group, ok := decodeRecord(t, &buf)["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("group missing: %s", buf.String())
+	}
+	if group["msg"] != "inside a group" {
+		t.Fatalf("an attribute inside a group is namespaced and must keep its name: %v", group)
+	}
+}
+
+// The two stacks must agree on this case, not merely each be sane.
+func TestBothStacksRenameCollisionsIdentically(t *testing.T) {
+	var fromZap, fromLogrus bytes.Buffer
+
+	NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true)).Info("actual message", "msg", "user value")
+	sharedLogrus(&fromLogrus, InfoLevel, NewSharedJSONFormatter()).
+		WithField("msg", "user value").Infof("actual message")
+
+	if normalise(fromZap.String()) != normalise(fromLogrus.String()) {
+		t.Fatalf("the stacks diverge on a colliding field:\n   zap: %s\nlogrus: %s", fromZap.String(), fromLogrus.String())
+	}
+}
+
+// The "logger" collision is only reachable on a named logger, where the
+// encoder does write the key.
+func TestNewSlogRenamesTheLoggerCollisionOnANamedLogger(t *testing.T) {
+	var buf bytes.Buffer
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true).Named("worker")).
+		Info("actual message", "logger", "user value")
+
+	record := decodeRecord(t, &buf)
+	if record["logger"] != "worker" {
+		t.Fatalf("the logger's own name must win: %v", record)
+	}
+	if record["fields.logger"] != "user value" {
+		t.Fatalf("the colliding attribute must survive under fields.logger: %v", record)
+	}
 }

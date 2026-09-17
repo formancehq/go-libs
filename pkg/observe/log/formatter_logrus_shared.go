@@ -108,20 +108,6 @@ func entryFields(entry *logrus.Entry) []zapcore.Field {
 	return fields
 }
 
-// emittedFieldName renames a field that would collide with one of the keys the
-// encoder writes itself. Without it a caller attaching a field named "msg"
-// produces a record with two "msg" keys, and a consumer keeping the last value
-// loses the actual message. logrus.JSONFormatter made the same substitution,
-// so a record that used to read "fields.msg" still does.
-func emittedFieldName(key string) string {
-	switch key {
-	case "level", "time", "msg":
-		return "fields." + key
-	default:
-		return key
-	}
-}
-
 // logrusToZapLevel maps a logrus level onto the zapcore level whose rendering
 // ZapEncoderConfig defines. logrus spells its warning level "warning"; zap
 // spells it "warn", and the shared shape follows zap.

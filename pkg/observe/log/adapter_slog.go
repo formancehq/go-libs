@@ -67,7 +67,14 @@ func (h *TraceHandler) Handle(ctx context.Context, record slog.Record) error {
 		return true
 	})
 
-	out.AddAttrs(nest(h.goas, attrs)...)
+	// Renaming happens at the root only: an attribute inside a group is
+	// namespaced by it and cannot collide with a key the encoder writes.
+	rooted := nest(h.goas, attrs)
+	for i := range rooted {
+		rooted[i].Key = emittedFieldName(rooted[i].Key)
+	}
+
+	out.AddAttrs(rooted...)
 
 	return h.inner.Handle(ctx, out)
 }
