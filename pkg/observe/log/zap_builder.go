@@ -136,10 +136,33 @@ func emittedFieldName(key string) string {
 // renaming protects one façade and silently misses the others.
 type reservedFieldCore struct {
 	zapcore.Core
+
+	// escaped records the keys already held by the inner core as a result of
+	// escaping. A field scoped with With is encoded by that core, so a later
+	// Write cannot see it -- without this, z.With(zap.String("msg", …)) and a
+	// later literal "fields.msg" both encode under the same key and the
+	// precedence rule silently stops holding across the two calls.
+	escaped map[string]struct{}
 }
 
 func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
-	return &reservedFieldCore{Core: c.Core.With(renameReserved(fields))}
+	// Fields reaching With are always application fields: the correlation ids
+	// TraceHandler stamps arrive on the record, through Write. So this is the
+	// one place where trace_id and span_id can be escaped without risking the
+	// stamped pair.
+	renamed := renameReserved(fields, escapeScoped)
+
+	escaped := make(map[string]struct{}, len(c.escaped)+len(renamed))
+	for k := range c.escaped {
+		escaped[k] = struct{}{}
+	}
+	for i, f := range fields {
+		if renamed[i].Key != f.Key {
+			escaped[renamed[i].Key] = struct{}{}
+		}
+	}
+
+	return &reservedFieldCore{Core: c.Core.With(renamed), escaped: escaped}
 }
 
 // Check must add this core rather than the embedded one, or the entry is
@@ -153,7 +176,35 @@ func (c *reservedFieldCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *
 }
 
 func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
-	return c.Core.Write(ent, renameReserved(fields))
+	// Only the encoder's own keys here: the record may carry the correlation
+	// ids TraceHandler just stamped, and nothing at this level distinguishes
+	// them from an application field of the same name.
+	out := renameReserved(fields, emittedFieldName)
+
+	// A literal key the inner core already holds as an escaped field would
+	// encode twice.
+	if len(c.escaped) > 0 {
+		kept := out[:0]
+		for _, f := range out {
+			if _, taken := c.escaped[f.Key]; taken && emittedFieldName(f.Key) == f.Key {
+				continue
+			}
+			kept = append(kept, f)
+		}
+		out = kept
+	}
+
+	return c.Core.Write(ent, out)
+}
+
+// escapeScoped escapes both the encoder's keys and the correlation ids, for
+// fields scoped ahead of the record.
+func escapeScoped(key string) string {
+	if name := emittedFieldName(key); name != key {
+		return name
+	}
+
+	return escapeTraceKey(key)
 }
 
 // renameReserved escapes reserved keys, giving the escaped reserved field
@@ -161,30 +212,30 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 // record carrying both "msg" and "fields.msg" would emit "fields.msg" twice and
 // let the argument order decide the winner, which is the ambiguity the renaming
 // exists to remove.
-func renameReserved(fields []zapcore.Field) []zapcore.Field {
-	escaped := false
+func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcore.Field {
+	any := false
 	for i := range fields {
-		if emittedFieldName(fields[i].Key) != fields[i].Key {
-			escaped = true
+		if escape(fields[i].Key) != fields[i].Key {
+			any = true
 
 			break
 		}
 	}
 
-	if !escaped {
+	if !any {
 		return fields
 	}
 
-	renamed := make(map[string]struct{}, len(reservedKeys))
+	renamed := make(map[string]struct{}, len(fields))
 	for _, f := range fields {
-		if name := emittedFieldName(f.Key); name != f.Key {
+		if name := escape(f.Key); name != f.Key {
 			renamed[name] = struct{}{}
 		}
 	}
 
 	out := make([]zapcore.Field, 0, len(fields))
 	for _, f := range fields {
-		name := emittedFieldName(f.Key)
+		name := escape(f.Key)
 		if name == f.Key {
 			// A literal "fields.msg" yields to the escaped reserved field.
 			if _, taken := renamed[f.Key]; taken {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -160,4 +161,61 @@ func keyOrder(t *testing.T, line string) string {
 	}
 
 	return strings.Join(keys, ",")
+}
+
+// Regression: a field scoped with With is encoded by the inner core, so a
+// later Write never sees it. Without carrying the escaped keys forward, this
+// emitted "fields.msg" twice.
+func TestEscapedPrecedenceHoldsAcrossChainedWith(t *testing.T) {
+	var buf bytes.Buffer
+	z := NewZapLogger(&buf, zapcore.InfoLevel, true).With(zap.String("msg", "reserved"))
+	z.Info("actual message", zap.String("fields.msg", "literal"))
+
+	if n := strings.Count(buf.String(), `"fields.msg":`); n != 1 {
+		t.Fatalf("fields.msg emitted %d times: %s", n, buf.String())
+	}
+
+	record := decodeRecord(t, &buf)
+	if record["fields.msg"] != "reserved" {
+		t.Fatalf("the escaped reserved field must win across With, got %v", record["fields.msg"])
+	}
+	if record["msg"] != "actual message" {
+		t.Fatalf("the record's own message must win: %v", record)
+	}
+}
+
+// Regression: a correlation id attached to the logger before NewSlog wraps it
+// is retained by the core, so TraceHandler's escaping never sees it and the
+// record carried the key twice -- a decoder keeping the first occurrence read
+// the application's string as the trace id.
+func TestScopedTraceFieldsCannotShadowCorrelation(t *testing.T) {
+	var buf bytes.Buffer
+	z := NewZapLogger(&buf, zapcore.InfoLevel, true).
+		With(zap.String("trace_id", "user value"), zap.String("span_id", "user span"))
+
+	NewSlog(z).InfoContext(sampledContext(), "x")
+
+	if n := strings.Count(buf.String(), `"trace_id":`); n != 1 {
+		t.Fatalf("trace_id emitted %d times: %s", n, buf.String())
+	}
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" {
+		t.Fatalf("the active span must win: %v", record)
+	}
+	if record["fields.trace_id"] != "user value" || record["fields.span_id"] != "user span" {
+		t.Fatalf("the scoped values must survive under fields.*: %v", record)
+	}
+}
+
+// Scoped reserved keys are escaped on every façade, not only under NewSlog.
+func TestScopedReservedFieldsAreEscaped(t *testing.T) {
+	var buf bytes.Buffer
+	NewZapLogger(&buf, zapcore.InfoLevel, true).
+		With(zap.String("msg", "user value")).Info("actual message")
+
+	record := decodeRecord(t, &buf)
+	if record["msg"] != "actual message" || record["fields.msg"] != "user value" {
+		t.Fatalf("scoped reserved key not escaped: %v", record)
+	}
 }
