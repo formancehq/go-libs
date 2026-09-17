@@ -97,9 +97,20 @@ encoder's behaviour, not an adaptation — and a test pins it.
 ### Fields colliding with a reserved key
 
 A field named `level`, `time`, `msg` or `logger` is emitted as `fields.<key>`,
-so the record's own value is not shadowed. Both stacks do this; `logrus`'s
-default did it for `level`, `time` and `msg` only, so a record that used to read
-`fields.msg` still does, and a field named `logger` gains the same protection.
+so the record's own value is not shadowed. `logrus`'s default did it for
+`level`, `time` and `msg` only, so a record that used to read `fields.msg` still
+does, and a field named `logger` gains the same protection.
+
+The escaping lives in a `zapcore.Core`, so it applies to **every** façade over a
+logger — `NewSlog`, `NewLogr`, `NewZap` and any direct zap use — rather than to
+whichever adapter implemented it. `NewSlog` additionally escapes `trace_id` and
+`span_id`, since it is what injects them; it does so whether or not a span is
+active, so a field's path does not depend on whether the request was traced.
+
+A field carrying both a reserved key and its escaped form (`msg` and
+`fields.msg`) resolves in favour of the reserved one, deterministically, on
+every path. Attributes inside a `WithGroup` are namespaced and keep their own
+names.
 
 ### Text — unified too
 
@@ -120,13 +131,22 @@ assertions rather than a dashboard.
 A service migrating to the zap stack gets both changes at once; one opting into
 a single shared formatter changes only that format.
 
-### Why this cannot drift
+### What is guaranteed, and what is not
 
 Both shared formatters delegate to zap's own encoders rather than reproducing
-their layout, so the two stacks render through one encoder and cannot disagree.
-The tests assert on the rendered bytes of both stacks, in both formats, rather
-than on a decoded structure — a divergence in key order, level spelling or
-timestamp precision fails them.
+their layout, so the two stacks *encode* through one encoder: level spelling,
+timestamp precision, field escaping and value conversion cannot drift apart.
+The tests assert on the rendered bytes of both stacks, in both formats.
+
+**Field order is not guaranteed between the two.** It follows the source. slog
+and zap carry a call order and keep it, so `Info("x", "b", 2, "a", 1)` renders
+`b` before `a`. logrus holds its fields in a map and has no order to preserve,
+so the shared formatter sorts them to stay deterministic across runs. The two
+therefore agree only when the call order happens to be the sorted one.
+
+Nothing should depend on field order in JSON, and nothing in this package emits
+records where it carries meaning — but the guarantee is "the same encoding",
+not "the same bytes for any input".
 
 ## Levels
 

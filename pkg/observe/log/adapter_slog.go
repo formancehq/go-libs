@@ -67,16 +67,34 @@ func (h *TraceHandler) Handle(ctx context.Context, record slog.Record) error {
 		return true
 	})
 
-	// Renaming happens at the root only: an attribute inside a group is
-	// namespaced by it and cannot collide with a key the encoder writes.
+	// The encoder's own keys are escaped by reservedFieldCore, which sees every
+	// façade. trace_id and span_id are escaped here instead, because this
+	// handler is what injects them -- the core cannot tell an application
+	// attribute named trace_id from the one stamped just above.
+	//
+	// Root only: an attribute inside a group is namespaced by it and cannot
+	// collide with anything written at the record root.
 	rooted := nest(h.goas, attrs)
 	for i := range rooted {
-		rooted[i].Key = emittedFieldName(rooted[i].Key)
+		rooted[i].Key = escapeTraceKey(rooted[i].Key)
 	}
 
 	out.AddAttrs(rooted...)
 
 	return h.inner.Handle(ctx, out)
+}
+
+// escapeTraceKey renames an application attribute that would collide with the
+// correlation fields this handler stamps. It renames whether or not a span is
+// active, so a field's path does not depend on whether the request happened to
+// be traced.
+func escapeTraceKey(key string) string {
+	switch key {
+	case "trace_id", "span_id":
+		return "fields." + key
+	default:
+		return key
+	}
 }
 
 // nest replays the recorded groups and attributes around the record's own
