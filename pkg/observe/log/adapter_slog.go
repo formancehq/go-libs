@@ -152,7 +152,7 @@ func (h *TraceHandler) with(goa groupOrAttrs) *TraceHandler {
 // otelTraces attaches trace correlation, and is the same condition
 // NewDefaultLogger takes for the logrus hook: whether the service has a traces
 // exporter configured. pkg/service derives it from
-// otlptraces.OtelTracesExporterFlag. Stamping ids for a trace no backend will
+// traces.OtelTracesExporterFlag. Stamping ids for a trace no backend will
 // receive correlates a record with nothing, which is why it is a condition
 // rather than a default.
 //
