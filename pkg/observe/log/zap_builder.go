@@ -143,9 +143,19 @@ type reservedFieldCore struct {
 	// later literal "fields.msg" both encode under the same key and the
 	// precedence rule silently stops holding across the two calls.
 	escaped map[string]struct{}
+
+	// namespaced is set once a namespace has been opened. Everything after it
+	// is nested under that name and cannot collide with a key written at the
+	// record root, so escaping it would rename a field for no reason -- and
+	// rename it differently depending on which façade opened the group.
+	namespaced bool
 }
 
 func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
+	if c.namespaced {
+		return &reservedFieldCore{Core: c.Core.With(fields), escaped: c.escaped, namespaced: true}
+	}
+
 	// Fields reaching With are always application fields: the correlation ids
 	// TraceHandler stamps arrive on the record, through Write. So this is the
 	// one place where trace_id and span_id can be escaped without risking the
@@ -162,7 +172,23 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 		}
 	}
 
-	return &reservedFieldCore{Core: c.Core.With(renamed), escaped: escaped}
+	return &reservedFieldCore{
+		Core:       c.Core.With(renamed),
+		escaped:    escaped,
+		namespaced: opensNamespace(fields),
+	}
+}
+
+// opensNamespace reports whether these fields leave a namespace open, in which
+// case everything that follows is nested under it.
+func opensNamespace(fields []zapcore.Field) bool {
+	for _, f := range fields {
+		if f.Type == zapcore.NamespaceType {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Check must add this core rather than the embedded one, or the entry is
@@ -176,6 +202,10 @@ func (c *reservedFieldCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *
 }
 
 func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
+	if c.namespaced {
+		return c.Core.Write(ent, fields)
+	}
+
 	// Only the encoder's own keys here: the record may carry the correlation
 	// ids TraceHandler just stamped, and nothing at this level distinguishes
 	// them from an application field of the same name.
@@ -213,6 +243,20 @@ func escapeScoped(key string) string {
 // let the argument order decide the winner, which is the ambiguity the renaming
 // exists to remove.
 func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcore.Field {
+	// Everything from the first namespace on is nested under it and out of
+	// reach of the record's own keys.
+	root := len(fields)
+	for i, f := range fields {
+		if f.Type == zapcore.NamespaceType {
+			root = i
+
+			break
+		}
+	}
+
+	nested := fields[root:]
+	fields = fields[:root]
+
 	any := false
 	for i := range fields {
 		if escape(fields[i].Key) != fields[i].Key {
@@ -223,7 +267,7 @@ func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcor
 	}
 
 	if !any {
-		return fields
+		return append(fields, nested...)
 	}
 
 	renamed := make(map[string]struct{}, len(fields))
@@ -247,5 +291,5 @@ func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcor
 		out = append(out, f)
 	}
 
-	return out
+	return append(out, nested...)
 }

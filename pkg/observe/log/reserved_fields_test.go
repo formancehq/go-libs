@@ -86,7 +86,7 @@ func TestEscapedReservedFieldTakesPrecedence(t *testing.T) {
 // trace id.
 func TestApplicationAttrsCannotShadowTraceCorrelation(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
 		InfoContext(sampledContext(), "x", "trace_id", "user value", "span_id", "user span")
 
 	if n := strings.Count(buf.String(), `"trace_id":`); n != 1 {
@@ -106,7 +106,7 @@ func TestApplicationAttrsCannotShadowTraceCorrelation(t *testing.T) {
 // the same on a sampled and an unsampled record.
 func TestTraceKeyEscapingDoesNotDependOnSampling(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("x", "trace_id", "user value")
+	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).Info("x", "trace_id", "user value")
 
 	record := decodeRecord(t, &buf)
 	if record["fields.trace_id"] != "user value" {
@@ -117,7 +117,7 @@ func TestTraceKeyEscapingDoesNotDependOnSampling(t *testing.T) {
 // Grouped attributes are namespaced and must keep their own names.
 func TestGroupedReservedNamesAreLeftAlone(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+	NewSlogWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true)).
 		WithGroup("request").Info("done", "msg", "inside", "trace_id", "inside")
 
 	group, ok := decodeRecord(t, &buf)["request"].(map[string]any)
@@ -194,7 +194,7 @@ func TestScopedTraceFieldsCannotShadowCorrelation(t *testing.T) {
 	z := NewZapLogger(&buf, zapcore.InfoLevel, true).
 		With(zap.String("trace_id", "user value"), zap.String("span_id", "user span"))
 
-	NewSlog(z).InfoContext(sampledContext(), "x")
+	NewSlogWithTraces(z).InfoContext(sampledContext(), "x")
 
 	if n := strings.Count(buf.String(), `"trace_id":`); n != 1 {
 		t.Fatalf("trace_id emitted %d times: %s", n, buf.String())
@@ -317,5 +317,53 @@ func TestZapLoggerKeepsTheTraceLevel(t *testing.T) {
 
 	if got := decodeRecord(t, &buf)["level"]; got != "TRACE" {
 		t.Fatalf("level = %v, want TRACE", got)
+	}
+}
+
+// NewSlog carries no correlation: it is attached deliberately, the way
+// SetHooks attaches it on the logrus side.
+func TestNewSlogDoesNotCorrelate(t *testing.T) {
+	var buf bytes.Buffer
+	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true)).
+		InfoContext(sampledContext(), "x")
+
+	if _, ok := decodeRecord(t, &buf)["trace_id"]; ok {
+		t.Fatalf("NewSlog must not correlate: %s", buf.String())
+	}
+}
+
+// Regression: the escaping runs in a core, which sees fields after a namespace
+// has been opened. Those are nested under it and cannot collide with a key
+// written at the record root, so escaping them renamed a field for no reason
+// -- and did it only on the façades that open a zap namespace.
+func TestNamespacedFieldsAreNotEscaped(t *testing.T) {
+	for _, tc := range []struct {
+		facade string
+		emit   func(*bytes.Buffer)
+	}{
+		{"slog", func(b *bytes.Buffer) {
+			NewSlog(NewZapLogger(b, zapcore.InfoLevel, true)).
+				WithGroup("request").Info("done", "msg", "inside")
+		}},
+		{"zap", func(b *bytes.Buffer) {
+			NewZapLogger(b, zapcore.InfoLevel, true).
+				With(zap.Namespace("request"), zap.String("msg", "inside")).Info("done")
+		}},
+	} {
+		var buf bytes.Buffer
+		tc.emit(&buf)
+
+		record := decodeRecord(t, &buf)
+		if record["msg"] != "done" {
+			t.Fatalf("%s: the record's own message must win: %v", tc.facade, record)
+		}
+
+		group, ok := record["request"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: the group must survive: %v", tc.facade, record)
+		}
+		if group["msg"] != "inside" {
+			t.Fatalf("%s: a namespaced field must keep its name: %v", tc.facade, group)
+		}
 	}
 }

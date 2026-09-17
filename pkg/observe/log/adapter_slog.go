@@ -144,27 +144,41 @@ func (h *TraceHandler) with(goa groupOrAttrs) *TraceHandler {
 	return &TraceHandler{inner: h.inner, goas: goas}
 }
 
-// NewSlog exposes z as an *slog.Logger with trace correlation, for application
-// code written against the standard library. Records go through z's core, so
-// they share the encoder, the writer and the level of every other adapter over
-// the same logger.
+// NewSlog exposes z as an *slog.Logger, for application code written against
+// the standard library. Records go through z's core, so they share the
+// encoder, the writer and the level of every other adapter over the same
+// logger.
+//
+// Its records carry no trace correlation. Correlation is attached
+// deliberately, as SetHooks attaches it on the logrus side and
+// NewZapWithTraces on the zap one -- use NewSlogWithTraces.
 func NewSlog(z *zap.Logger) *slog.Logger {
-	// The name has to be carried across explicitly: it belongs to the
-	// *zap.Logger, not to the core, so a logger built with Named would emit
-	// records without it here while the same logger's logr and zap records
-	// kept it. An unnamed logger passes an empty name, which the encoder
-	// omits.
-	//
-	// zapslog also attaches a stack trace to every record at Error and above.
-	// slog never did, so turning it on would add a Go stack to each error line
-	// a busy service emits, including this package's own. Pointing the
-	// threshold one level past Error disables it; a caller that wants stacks
-	// can build its own handler with zapslog.AddStacktraceAt.
-	return slog.New(NewTraceHandler(zapslog.NewHandler(
+	return slog.New(baseSlogHandler(z))
+}
+
+// NewSlogWithTraces is the counterpart whose records carry the ids of the span
+// the logging context holds, when it holds one.
+//
+// It belongs at the same place in a service's wiring as the logrus hook:
+// alongside a configured traces exporter, on the same condition. Stamping ids
+// for a trace no backend will receive correlates a record with nothing.
+func NewSlogWithTraces(z *zap.Logger) *slog.Logger {
+	return slog.New(NewTraceHandler(baseSlogHandler(z)))
+}
+
+// baseSlogHandler bridges to zap, carrying across what the core cannot know:
+// the logger name, which belongs to the *zap.Logger rather than to its core.
+//
+// It also disables zapslog's stack trace at Error and above. slog never
+// attached one, and turning it on would add a Go stack to each error line a
+// busy service emits, including this package's own. A caller that wants them
+// builds its own handler with zapslog.AddStacktraceAt.
+func baseSlogHandler(z *zap.Logger) slog.Handler {
+	return zapslog.NewHandler(
 		z.Core(),
 		zapslog.WithName(z.Name()),
 		zapslog.AddStacktraceAt(slog.LevelError+1),
-	)))
+	)
 }
 
 // slogAdapter implements Logger on top of an *slog.Logger.
@@ -181,10 +195,9 @@ var _ Logger = (*slogAdapter)(nil)
 // slog handlers -- and needs to hand it to something taking a Logger, such as
 // service.NewWithLogger.
 //
-// Reach for NewZap instead when starting from the *zap.Logger: both correlate
-// from the context now, and NewZap keeps the custom trace level, which this
-// path cannot -- zapslog clamps every slog level below Info to Debug, so a
-// Trace record arrives at Debug.
+// Reach for NewZap instead when starting from the *zap.Logger: it keeps the
+// custom trace level, which this path cannot -- zapslog clamps every slog level
+// below Info to Debug, so a Trace record arrives at Debug.
 func NewSlogLogger(logger *slog.Logger) Logger {
 	return &slogAdapter{
 		logger: logger,
