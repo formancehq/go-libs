@@ -99,23 +99,102 @@ func NewZapLogger(w io.Writer, level zapcore.Level, jsonFormatting bool) *zap.Lo
 	// *os.File as needing the lock, and this constructor additionally accepts
 	// any io.Writer -- a bytes.Buffer in tests, a bufio.Writer in a caller --
 	// none of which tolerate concurrent writes from several goroutines.
-	return zap.New(zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(w)), level))
+	// The renaming lives in a core rather than in one adapter, so it covers
+	// every façade over this logger -- NewSlog, NewLogr, NewZap and any direct
+	// zap use -- instead of whichever one remembered to apply it.
+	core := zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(w)), level)
+
+	return zap.New(&reservedFieldCore{Core: core})
 }
 
-// emittedFieldName renames a field that would collide with a key
-// ZapEncoderConfig writes itself. Without it a caller attaching a field named
-// "msg" produces a record carrying two "msg" keys, and a consumer keeping the
-// last value loses the actual message -- or the severity, the timestamp, or
-// the logger name.
+// reservedKeys are the keys ZapEncoderConfig writes itself. An application
+// field using one would make the record carry it twice, and a consumer keeping
+// the last value would lose the actual message -- or the severity, the
+// timestamp, or the logger name.
+var reservedKeys = [...]string{"level", "time", "msg", "logger"}
+
+// emittedFieldName renames a field that would collide with one of those.
 //
 // logrus.JSONFormatter made the same substitution for level, time and msg, so
 // a record that used to read "fields.msg" still does. "logger" is added
 // because ZapEncoderConfig emits it and logrus never did.
 func emittedFieldName(key string) string {
-	switch key {
-	case "level", "time", "msg", "logger":
-		return "fields." + key
-	default:
-		return key
+	for _, reserved := range reservedKeys {
+		if key == reserved {
+			return "fields." + key
+		}
 	}
+
+	return key
+}
+
+// reservedFieldCore renames colliding field keys on their way to the encoder.
+//
+// Putting it here rather than in an adapter is what makes the guarantee hold
+// across the whole stack: zapr forwards WithValues keys straight through, and
+// NewZap hands SugaredLogger keys over untouched, so any adapter-level
+// renaming protects one façade and silently misses the others.
+type reservedFieldCore struct {
+	zapcore.Core
+}
+
+func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
+	return &reservedFieldCore{Core: c.Core.With(renameReserved(fields))}
+}
+
+// Check must add this core rather than the embedded one, or the entry is
+// written straight to the inner core and the renaming never runs.
+func (c *reservedFieldCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if c.Enabled(ent.Level) {
+		return ce.AddCore(ent, c)
+	}
+
+	return ce
+}
+
+func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
+	return c.Core.Write(ent, renameReserved(fields))
+}
+
+// renameReserved escapes reserved keys, giving the escaped reserved field
+// precedence over a field already named "fields.<key>". Without that rule a
+// record carrying both "msg" and "fields.msg" would emit "fields.msg" twice and
+// let the argument order decide the winner, which is the ambiguity the renaming
+// exists to remove.
+func renameReserved(fields []zapcore.Field) []zapcore.Field {
+	escaped := false
+	for i := range fields {
+		if emittedFieldName(fields[i].Key) != fields[i].Key {
+			escaped = true
+
+			break
+		}
+	}
+
+	if !escaped {
+		return fields
+	}
+
+	renamed := make(map[string]struct{}, len(reservedKeys))
+	for _, f := range fields {
+		if name := emittedFieldName(f.Key); name != f.Key {
+			renamed[name] = struct{}{}
+		}
+	}
+
+	out := make([]zapcore.Field, 0, len(fields))
+	for _, f := range fields {
+		name := emittedFieldName(f.Key)
+		if name == f.Key {
+			// A literal "fields.msg" yields to the escaped reserved field.
+			if _, taken := renamed[f.Key]; taken {
+				continue
+			}
+		}
+
+		f.Key = name
+		out = append(out, f)
+	}
+
+	return out
 }

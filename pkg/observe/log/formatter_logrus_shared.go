@@ -82,7 +82,10 @@ func entryFields(entry *logrus.Entry) []zapcore.Field {
 		data[k] = v
 	}
 
-	for _, reserved := range [...]string{"level", "time", "msg"} {
+	// reservedKeys, not a list of its own: the formatter and the zap stack have
+	// to escape the same set, or a field's path changes when a service moves
+	// from one to the other.
+	for _, reserved := range reservedKeys {
 		if v, ok := data[reserved]; ok {
 			data[emittedFieldName(reserved)] = v
 			delete(data, reserved)
