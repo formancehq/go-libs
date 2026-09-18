@@ -180,27 +180,7 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 	// stamped pair.
 	renamed := renameReserved(fields, scopedName)
 
-	escaped := make(map[string]struct{}, len(c.escaped)+len(renamed))
-	for k := range c.escaped {
-		escaped[k] = struct{}{}
-	}
-
-	// Derived from the keys rather than by pairing fields with renamed by
-	// index: renameReserved drops a literal "fields.msg" that yields to an
-	// escaped "msg", so its result can be shorter than its input. Pairing by
-	// index read past the end and panicked -- in a logging core, on a field
-	// name an application chooses.
-	for _, f := range fields {
-		// Everything from the first namespace on is nested under it, out of
-		// reach of the record's own keys, and renameReserved leaves it alone.
-		if f.Type == zapcore.NamespaceType {
-			break
-		}
-
-		if name := escapeScoped(f.Key); name != f.Key {
-			escaped[name] = struct{}{}
-		}
-	}
+	escaped := escapedKeys(c.escaped, fields)
 
 	// A literal key the inner core already holds as an escaped field would be
 	// encoded twice, the same collision Write resolves -- and here the literal
@@ -213,6 +193,58 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 		escaped:    escaped,
 		namespaced: opensNamespace(fields),
 	}
+}
+
+// escapedKeys returns the escaped names the inner core will hold once these
+// fields are scoped onto it.
+//
+// The set is derived from the keys rather than by pairing fields with the
+// renamed slice by index: renameReserved drops a literal "fields.msg" that
+// yields to an escaped "msg", so its result can be shorter than its input.
+// Pairing by index read past the end and panicked -- in a logging core, on a
+// field name an application chooses.
+//
+// A call that escapes nothing -- every ordinary WithField, so every
+// per-request logger a middleware builds -- carries the parent's set forward
+// rather than copying it. That is safe because the set is never written after
+// it is built: adding a key allocates a new map here, and everywhere else it
+// is only read.
+func escapedKeys(parent map[string]struct{}, fields []zapcore.Field) map[string]struct{} {
+	escapes := false
+	for _, f := range fields {
+		// Everything from the first namespace on is nested under it, out of
+		// reach of the record's own keys, and renameReserved leaves it alone.
+		if f.Type == zapcore.NamespaceType {
+			break
+		}
+
+		if escapeScoped(f.Key) != f.Key {
+			escapes = true
+
+			break
+		}
+	}
+
+	if !escapes {
+		return parent
+	}
+
+	escaped := make(map[string]struct{}, len(parent)+len(fields))
+	for k := range parent {
+		escaped[k] = struct{}{}
+	}
+
+	for _, f := range fields {
+		if f.Type == zapcore.NamespaceType {
+			break
+		}
+
+		if name := escapeScoped(f.Key); name != f.Key {
+			escaped[name] = struct{}{}
+		}
+	}
+
+	return escaped
 }
 
 // dropShadowedLiterals removes a literal "fields.<key>" whose slot the inner
