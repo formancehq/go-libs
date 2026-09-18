@@ -24,7 +24,7 @@ go-libs/
     ├── query/                       # Query expression builder
     │
     ├── observe/                     # Observability
-    │   ├── log/                     #   Logger interface + adapters (zap, logrus, hclog)
+    │   ├── log/                     #   Logger interface + adapters (zap, logr, logrus) -- see docs/LOGGING.md
     │   ├── traces/                  #   Tracer provider (OTLP gRPC/HTTP, stdout)
     │   ├── metrics/                 #   Meter provider (OTLP, in-memory)
     │   ├── resource.go              #   Shared OTLP resource builder

@@ -20,10 +20,6 @@ type logger struct {
 	logger logging.Logger
 }
 
-type warnLogger interface {
-	Warnf(format string, args ...any)
-}
-
 func (l logger) Debug(msg string, keyvals ...interface{}) {
 	l.logger.WithFields(keyvalsToMap(keyvals...)).Debugf("%s", msg)
 }
@@ -33,12 +29,7 @@ func (l logger) Info(msg string, keyvals ...interface{}) {
 }
 
 func (l logger) Warn(msg string, keyvals ...interface{}) {
-	logger := l.logger.WithFields(keyvalsToMap(keyvals...))
-	if warnLogger, ok := logger.(warnLogger); ok {
-		warnLogger.Warnf("%s", msg)
-		return
-	}
-	logger.Infof("%s", msg)
+	l.logger.WithFields(keyvalsToMap(keyvals...)).Warnf("%s", msg)
 }
 
 func (l logger) Error(msg string, keyvals ...interface{}) {

@@ -54,10 +54,15 @@ type Logger interface {
 	Tracef(fmt string, args ...any)
 	Debugf(fmt string, args ...any)
 	Infof(fmt string, args ...any)
+	// Warnf and Warn sit between Info and Error. Level has no Warn of its own
+	// -- it is trace|debug|info|error -- so a caller filtering by Level still
+	// rounds it, but both backends render the level faithfully.
+	Warnf(fmt string, args ...any)
 	Errorf(fmt string, args ...any)
 	Trace(args ...any)
 	Debug(args ...any)
 	Info(args ...any)
+	Warn(args ...any)
 	Error(args ...any)
 	WithFields(map[string]any) Logger
 	WithField(key string, value any) Logger
@@ -81,6 +86,9 @@ func Debugf(format string, args ...any) {
 func Infof(format string, args ...any) {
 	FromContext(context.TODO()).Infof(format, args...)
 }
+func Warnf(format string, args ...any) {
+	FromContext(context.TODO()).Warnf(format, args...)
+}
 func Errorf(format string, args ...any) {
 	FromContext(context.TODO()).Errorf(format, args...)
 }
@@ -92,6 +100,9 @@ func Debug(args ...any) {
 }
 func Info(args ...any) {
 	FromContext(context.TODO()).Info(args...)
+}
+func Warn(args ...any) {
+	FromContext(context.TODO()).Warn(args...)
 }
 func Error(args ...any) {
 	FromContext(context.TODO()).Error(args...)
