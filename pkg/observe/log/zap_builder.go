@@ -137,8 +137,15 @@ var traceKeys = [...]string{"trace_id", "span_id"}
 // a record that used to read "fields.msg" still does. "logger" is added
 // because ZapEncoderConfig emits it and logrus never did.
 func emittedFieldName(key string) string {
-	for _, reserved := range reservedKeys {
-		if key == reserved {
+	return escapeWith(reservedKeys[:], key)
+}
+
+// escapeWith renames key to "fields."+key when it is one of keys, leaving it
+// alone otherwise. One rename rule, so the reserved keys and the correlation
+// ids cannot drift into being escaped two different ways.
+func escapeWith(keys []string, key string) string {
+	for _, escapable := range keys {
+		if key == escapable {
 			return "fields." + key
 		}
 	}
@@ -350,13 +357,7 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 // path depend on whether the service configured a traces exporter, and on
 // whether the request happened to be sampled.
 func escapeTraceKey(key string) string {
-	for _, id := range traceKeys {
-		if key == id {
-			return "fields." + key
-		}
-	}
-
-	return key
+	return escapeWith(traceKeys[:], key)
 }
 
 // scopedName is the escaping applied to a field scoped with With. Everything
