@@ -82,12 +82,13 @@ func entryFields(entry *logrus.Entry) []zapcore.Field {
 		data[k] = v
 	}
 
-	// reservedKeys, not a list of its own: the formatter and the zap stack have
-	// to escape the same set, or a field's path changes when a service moves
-	// from one to the other.
-	for _, reserved := range reservedKeys {
+	// The same set the zap stack escapes -- the reserved keys and the
+	// correlation ids -- or a field's path changes when a service moves from
+	// one stack to the other, which is the whole property these formatters
+	// exist to provide.
+	for _, reserved := range append(append([]string{}, reservedKeys[:]...), "trace_id", "span_id") {
 		if v, ok := data[reserved]; ok {
-			data[emittedFieldName(reserved)] = v
+			data[escapeScoped(reserved)] = v
 			delete(data, reserved)
 		}
 	}

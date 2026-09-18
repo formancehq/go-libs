@@ -422,3 +422,60 @@ func TestSuppressedRecordsAreNotFormatted(t *testing.T) {
 		})
 	}
 }
+
+// Regression: the correlation ids were escaped only on the With path, so a
+// call site writing them on the record -- sugar.Infow, zapr's Info(msg, k, v)
+// -- reached the encoder unescaped. On a correlating logger under an active
+// span the record then carried trace_id twice, and a decoder keeping the first
+// value read the application's string as the trace id.
+func TestRecordLevelTraceKeysAreEscaped(t *testing.T) {
+	var buf bytes.Buffer
+	NewZapLogger(&buf, zapcore.InfoLevel, true).
+		Info("x", zap.String("trace_id", "user value"), zap.String("span_id", "user span"))
+
+	record := decodeRecord(t, &buf)
+	if record["fields.trace_id"] != "user value" || record["fields.span_id"] != "user span" {
+		t.Fatalf("record-level trace keys must be escaped like any application field: %v", record)
+	}
+	if _, unescaped := record["trace_id"]; unescaped {
+		t.Fatalf("an application field must not sit at the correlation's key: %v", record)
+	}
+}
+
+// And the pair the logger stamps must still reach the root, which is the whole
+// reason the record path could not simply escape both.
+func TestStampedPairSurvivesRecordLevelEscaping(t *testing.T) {
+	var buf bytes.Buffer
+	NewZapWithTraces(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).
+		WithContext(sampledContext()).Infof("x")
+
+	record := decodeRecord(t, &buf)
+	if record["trace_id"] != "01000000000000000000000000000000" {
+		t.Fatalf("the stamped pair must not be escaped: %v", record)
+	}
+	if _, escaped := record["fields.trace_id"]; escaped {
+		t.Fatalf("the stamped pair must not be escaped: %v", record)
+	}
+}
+
+// The shared logrus formatter escapes the same set as the zap stack, or a
+// field's path changes when a service moves between them -- which is the
+// property these formatters exist to provide.
+func TestSharedFormatterEscapesTraceKeysLikeTheZapStack(t *testing.T) {
+	for _, key := range []string{"trace_id", "span_id"} {
+		var fromLogrus, fromZap bytes.Buffer
+
+		sharedLogrus(&fromLogrus, InfoLevel, NewSharedJSONFormatter()).
+			WithField(key, "user value").Infof("x")
+		NewZap(NewZapLogger(&fromZap, zapcore.InfoLevel, true).Sugar()).
+			WithField(key, "user value").Infof("x")
+
+		if normalise(fromLogrus.String()) != normalise(fromZap.String()) {
+			t.Fatalf("the stacks disagree on %q:\n logrus: %s\n    zap: %s",
+				key, fromLogrus.String(), fromZap.String())
+		}
+		if decodeRecord(t, &fromLogrus)["fields."+key] != "user value" {
+			t.Fatalf("logrus must escape %q like the zap stack", key)
+		}
+	}
+}

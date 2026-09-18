@@ -164,7 +164,7 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 	// a correlating ZapLogger stamps arrive on the record, through Write. So this is the
 	// one place where trace_id and span_id can be escaped without risking the
 	// stamped pair.
-	renamed := renameReserved(fields, escapeScoped)
+	renamed := renameReserved(fields, scopedName)
 
 	escaped := make(map[string]struct{}, len(c.escaped)+len(renamed))
 	for k := range c.escaped {
@@ -225,14 +225,14 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 	// Only the encoder's own keys here: the record may carry the correlation
 	// ids a correlating logger just stamped, and nothing at this level distinguishes
 	// them from an application field of the same name.
-	out := renameReserved(fields, emittedFieldName)
+	out := renameReserved(fields, recordName)
 
 	// A literal key the inner core already holds as an escaped field would
 	// encode twice.
 	if len(c.escaped) > 0 {
 		kept := out[:0]
 		for _, f := range out {
-			if _, taken := c.escaped[f.Key]; taken && emittedFieldName(f.Key) == f.Key {
+			if _, taken := c.escaped[f.Key]; taken && escapeScoped(f.Key) == f.Key {
 				continue
 			}
 			kept = append(kept, f)
@@ -261,6 +261,24 @@ func escapeTraceKey(key string) string {
 
 // escapeScoped escapes both the encoder's keys and the correlation ids, for
 // fields scoped ahead of the record.
+// scopedName is the escaping applied to a field scoped with With. Everything
+// reaching that path is an application field: the pair a correlating logger
+// stamps arrives on the record instead.
+func scopedName(f zapcore.Field) string { return escapeScoped(f.Key) }
+
+// recordName is the escaping applied to a field on the record. It escapes the
+// correlation ids like any other application field -- a call site can write
+// them through Infow or zapr's WithValues just as easily as through With -- but
+// leaves the pair the logger itself stamped alone, which is the one case where
+// those keys are not an application field.
+func recordName(f zapcore.Field) string {
+	if stampedCorrelation(f) {
+		return f.Key
+	}
+
+	return escapeScoped(f.Key)
+}
+
 func escapeScoped(key string) string {
 	if name := emittedFieldName(key); name != key {
 		return name
@@ -274,7 +292,7 @@ func escapeScoped(key string) string {
 // record carrying both "msg" and "fields.msg" would emit "fields.msg" twice and
 // let the argument order decide the winner, which is the ambiguity the renaming
 // exists to remove.
-func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcore.Field {
+func renameReserved(fields []zapcore.Field, escape func(zapcore.Field) string) []zapcore.Field {
 	// Everything from the first namespace on is nested under it and out of
 	// reach of the record's own keys.
 	root := len(fields)
@@ -291,7 +309,7 @@ func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcor
 
 	found := false
 	for i := range fields {
-		if escape(fields[i].Key) != fields[i].Key {
+		if escape(fields[i]) != fields[i].Key {
 			found = true
 
 			break
@@ -304,14 +322,14 @@ func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcor
 
 	renamed := make(map[string]struct{}, len(fields))
 	for _, f := range fields {
-		if name := escape(f.Key); name != f.Key {
+		if name := escape(f); name != f.Key {
 			renamed[name] = struct{}{}
 		}
 	}
 
 	out := make([]zapcore.Field, 0, len(fields))
 	for _, f := range fields {
-		name := escape(f.Key)
+		name := escape(f)
 		if name == f.Key {
 			// A literal "fields.msg" yields to the escaped reserved field.
 			if _, taken := renamed[f.Key]; taken {

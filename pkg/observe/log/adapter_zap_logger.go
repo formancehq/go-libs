@@ -145,9 +145,32 @@ func (z *ZapLogger) correlation() []zap.Field {
 	}
 
 	return []zap.Field{
-		zap.String("trace_id", sc.TraceID().String()),
-		zap.String("span_id", sc.SpanID().String()),
+		zap.Stringer("trace_id", correlationID(sc.TraceID().String())),
+		zap.Stringer("span_id", correlationID(sc.SpanID().String())),
 	}
+}
+
+// correlationID marks a value as one this logger stamped from the active span.
+//
+// Both the stamped pair and an application field named trace_id reach the core
+// as a zapcore.Field on the record, and nothing about the key distinguishes
+// them -- so without a marker the core must either escape both (losing the
+// correlation) or neither (letting an application field shadow the span). It
+// renders exactly as zap.String would.
+type correlationID string
+
+func (c correlationID) String() string { return string(c) }
+
+// stampedCorrelation reports whether a field is the pair correlation() built,
+// rather than an application field that happens to use one of those keys.
+func stampedCorrelation(f zapcore.Field) bool {
+	if f.Type != zapcore.StringerType {
+		return false
+	}
+
+	_, ok := f.Interface.(correlationID)
+
+	return ok
 }
 
 func (z *ZapLogger) Enabled(level Level) bool {
