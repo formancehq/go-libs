@@ -163,7 +163,7 @@ func (z *ZapLogger) logf(level zapcore.Level, format string, args ...any) {
 		return
 	}
 
-	z.emit(level, fmt.Sprintf(format, args...))
+	z.emit(level, renderf(format, args...))
 }
 
 func (z *ZapLogger) log(level zapcore.Level, args ...any) {
@@ -178,6 +178,21 @@ func (z *ZapLogger) log(level zapcore.Level, args ...any) {
 	}
 
 	z.emit(level, fmt.Sprint(args...))
+}
+
+// renderf renders a printf-style call the way zap's SugaredLogger does.
+//
+// Not fmt.Sprintf: zap returns the template untouched when there are no
+// arguments, so Infof("progress 100%") logs "progress 100%". Formatting it
+// anyway produced "progress 100%!(NOVERB)" -- and only on a correlating
+// logger, which made a record's own message depend on whether a traces
+// exporter was configured.
+func renderf(format string, args ...any) string {
+	if len(args) == 0 {
+		return format
+	}
+
+	return fmt.Sprintf(format, args...)
 }
 
 // emit writes an already rendered message with the correlation attached.

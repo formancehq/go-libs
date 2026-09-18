@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -101,10 +102,13 @@ func entryFields(entry *logrus.Entry) []zapcore.Field {
 	// one stack to the other, which is the whole property these formatters
 	// exist to provide.
 	for _, reserved := range sharedEscapableKeys {
-		if v, ok := data[reserved]; ok {
-			data[escapeScoped(reserved)] = v
-			delete(data, reserved)
+		v, ok := data[reserved]
+		if !ok || hookStamped(entry, reserved) {
+			continue
 		}
+
+		data[escapeScoped(reserved)] = v
+		delete(data, reserved)
 	}
 
 	keys := make([]string, 0, len(data))
@@ -124,6 +128,38 @@ func entryFields(entry *logrus.Entry) []zapcore.Field {
 	}
 
 	return fields
+}
+
+// hookStamped reports whether a correlation id in the entry is the one
+// NewTraceHook wrote, rather than an application field using that key.
+//
+// It is the logrus counterpart of the correlationID marker on the zap side:
+// both stacks escape an application trace_id and leave the stamped one at the
+// record root, or a service adopting the shared formatter while keeping
+// SetHooks would emit its correlation under a different key from every zap
+// service -- the identity these formatters exist to provide.
+//
+// logrus carries no marker, but the hook's own condition is reproducible: it
+// stamps from the recording span on entry.Context, so an id equal to that
+// span's is the hook's.
+func hookStamped(entry *logrus.Entry, key string) bool {
+	if entry.Context == nil {
+		return false
+	}
+
+	span := trace.SpanFromContext(entry.Context)
+	if !span.IsRecording() {
+		return false
+	}
+
+	switch key {
+	case "trace_id":
+		return entry.Data[key] == span.SpanContext().TraceID().String()
+	case "span_id":
+		return entry.Data[key] == span.SpanContext().SpanID().String()
+	default:
+		return false
+	}
 }
 
 // logrusToZapLevel maps a logrus level onto the zapcore level whose rendering

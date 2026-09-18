@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -315,5 +317,42 @@ func TestSharedFormatterIsSafeToShareAcrossGoroutines(t *testing.T) {
 
 	if count != writers*perWriter {
 		t.Fatalf("got %d records, want %d", count, writers*perWriter)
+	}
+}
+
+// A service on the shared formatter that keeps SetHooks must emit its
+// correlation ids where every zap service emits them -- at the record root.
+// Escaping them there would have put a logrus service's trace ids under
+// fields.trace_id while the zap stack kept them at the root, which is the
+// divergence these formatters exist to remove.
+func TestSharedFormatterLeavesHookStampedIdsAtTheRoot(t *testing.T) {
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(NewSharedJSONFormatter())
+	l.AddHook(NewTraceHook())
+
+	// The hook stamps only for a recording span, so a real tracer is needed.
+	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "op")
+	defer span.End()
+
+	l.WithContext(ctx).Info("x")
+
+	record := decodeRecord(t, &buf)
+	if _, escaped := record["fields.trace_id"]; escaped {
+		t.Fatalf("a hook-stamped id must stay at the record root: %v", record)
+	}
+	if record["trace_id"] != span.SpanContext().TraceID().String() {
+		t.Fatalf("the hook's id must reach the record: %v", record)
+	}
+
+	// An application field using the same key is still escaped, as on the zap
+	// stack: only the stamped pair is exempt.
+	var app bytes.Buffer
+	sharedLogrus(&app, InfoLevel, NewSharedJSONFormatter()).
+		WithField("trace_id", "user value").Infof("x")
+
+	if decodeRecord(t, &app)["fields.trace_id"] != "user value" {
+		t.Fatalf("an application trace_id must still be escaped: %s", app.String())
 	}
 }
