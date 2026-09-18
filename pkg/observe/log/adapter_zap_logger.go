@@ -67,43 +67,68 @@ func NopZap() *ZapLogger {
 	return &ZapLogger{sugar: zap.NewNop().Sugar()}
 }
 
-func (z *ZapLogger) Tracef(format string, args ...any) {
-	z.log(zapTraceLevel, fmt.Sprintf(format, args...))
-}
+func (z *ZapLogger) Tracef(format string, args ...any) { z.logf(zapTraceLevel, format, args...) }
 func (z *ZapLogger) Debugf(format string, args ...any) {
-	z.log(zapcore.DebugLevel, fmt.Sprintf(format, args...))
+	z.logf(zapcore.DebugLevel, format, args...)
 }
-func (z *ZapLogger) Infof(format string, args ...any) {
-	z.log(zapcore.InfoLevel, fmt.Sprintf(format, args...))
-}
-func (z *ZapLogger) Warnf(format string, args ...any) {
-	z.log(zapcore.WarnLevel, fmt.Sprintf(format, args...))
-}
+func (z *ZapLogger) Infof(format string, args ...any) { z.logf(zapcore.InfoLevel, format, args...) }
+func (z *ZapLogger) Warnf(format string, args ...any) { z.logf(zapcore.WarnLevel, format, args...) }
 func (z *ZapLogger) Errorf(format string, args ...any) {
-	z.log(zapcore.ErrorLevel, fmt.Sprintf(format, args...))
+	z.logf(zapcore.ErrorLevel, format, args...)
 }
 
-func (z *ZapLogger) Trace(args ...any) { z.log(zapTraceLevel, fmt.Sprint(args...)) }
-func (z *ZapLogger) Debug(args ...any) { z.log(zapcore.DebugLevel, fmt.Sprint(args...)) }
-func (z *ZapLogger) Info(args ...any)  { z.log(zapcore.InfoLevel, fmt.Sprint(args...)) }
-func (z *ZapLogger) Warn(args ...any)  { z.log(zapcore.WarnLevel, fmt.Sprint(args...)) }
-func (z *ZapLogger) Error(args ...any) { z.log(zapcore.ErrorLevel, fmt.Sprint(args...)) }
+func (z *ZapLogger) Trace(args ...any) { z.log(zapTraceLevel, args...) }
+func (z *ZapLogger) Debug(args ...any) { z.log(zapcore.DebugLevel, args...) }
+func (z *ZapLogger) Info(args ...any)  { z.log(zapcore.InfoLevel, args...) }
+func (z *ZapLogger) Warn(args ...any)  { z.log(zapcore.WarnLevel, args...) }
+func (z *ZapLogger) Error(args ...any) { z.log(zapcore.ErrorLevel, args...) }
 
-// log emits the record, stamped with the active span's ids when the context
-// this logger carries has one.
+// logf and log emit the record, stamped with the active span's ids when the
+// context this logger carries has one.
+//
+// A logger that does not correlate -- which is every NewZap logger, and the
+// hot path -- hands the arguments to zap unformatted, exactly as this adapter
+// did before correlation existed. zap checks the level first and never formats
+// a suppressed record, which is what makes the documented
+//
+//	if logger.Enabled(logging.DebugLevel) { ... }
+//
+// guard an optimisation rather than a necessity. Formatting eagerly here would
+// have charged every suppressed Debugf in a hot loop for a string nobody reads.
+//
+// The correlating path cannot use that call: it has fields to attach, so it
+// checks the level itself before formatting.
 //
 // The stamping happens here rather than in WithContext so the fields reach the
 // core through Write rather than With. That distinction is load-bearing:
 // reservedFieldCore escapes an application field named trace_id on the With
 // path, and must not escape the pair stamped here.
-func (z *ZapLogger) log(level zapcore.Level, msg string) {
-	if fields := z.correlation(); len(fields) > 0 {
-		z.sugar.Desugar().Log(level, msg, fields...)
+func (z *ZapLogger) logf(level zapcore.Level, format string, args ...any) {
+	if !z.correlate {
+		z.sugar.Logf(level, format, args...)
 
 		return
 	}
 
-	z.sugar.Log(level, msg)
+	if !z.sugar.Desugar().Core().Enabled(level) {
+		return
+	}
+
+	z.sugar.Desugar().Log(level, fmt.Sprintf(format, args...), z.correlation()...)
+}
+
+func (z *ZapLogger) log(level zapcore.Level, args ...any) {
+	if !z.correlate {
+		z.sugar.Log(level, args...)
+
+		return
+	}
+
+	if !z.sugar.Desugar().Core().Enabled(level) {
+		return
+	}
+
+	z.sugar.Desugar().Log(level, fmt.Sprint(args...), z.correlation()...)
 }
 
 // correlation returns the ids of the span carried by this logger's context, or
