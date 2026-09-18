@@ -185,15 +185,12 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 	// a correlating ZapLogger stamps arrive on the record, through Write. So this is the
 	// one place where trace_id and span_id can be escaped without risking the
 	// stamped pair.
-	renamed := renameReserved(fields, scopedName)
+	// Dropped before renaming, not after: once a reserved key has become
+	// "fields.msg" it is indistinguishable from a literal the caller wrote,
+	// and the filter deleted the field we had just escaped.
+	renamed := renameReserved(dropShadowedLiterals(fields, c.escaped), scopedName)
 
 	escaped := escapedKeys(c.escaped, fields)
-
-	// A literal key the inner core already holds as an escaped field would be
-	// encoded twice, the same collision Write resolves -- and here the literal
-	// arrives second, so a last-value decoder would read it rather than the
-	// reserved field the escaping exists to protect.
-	renamed = dropShadowedLiterals(renamed, c.escaped)
 
 	return &reservedFieldCore{
 		Core:       c.Core.With(renamed),
@@ -249,6 +246,11 @@ func escapedKeys(parent map[string]struct{}, fields []zapcore.Field) map[string]
 // dropShadowedLiterals removes a literal "fields.<key>" whose slot the inner
 // core already holds as an escaped reserved field, which would otherwise encode
 // the key twice.
+//
+// It runs on the original keys, before any renaming. Afterwards a reserved key
+// escaped to "fields.msg" is indistinguishable from a literal the caller wrote
+// under that name, and this filter deleted it -- the value appeared neither at
+// the root nor under fields.*, on three separate orderings.
 //
 // It never compacts in place. renameReserved can return a slice aliasing the
 // one it was given -- when nothing needed escaping it appends the namespaced
@@ -340,11 +342,9 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 	// Only the encoder's own keys here: the record may carry the correlation
 	// ids a correlating logger just stamped, and nothing at this level distinguishes
 	// them from an application field of the same name.
-	out := renameReserved(fields, recordName)
-
-	// A literal key the inner core already holds as an escaped field would
-	// encode twice.
-	out = dropShadowedLiterals(out, c.escaped)
+	// Before renaming, for the reason given in With: afterwards an escaped
+	// reserved key looks exactly like a caller's literal.
+	out := renameReserved(dropShadowedLiterals(fields, c.escaped), recordName)
 
 	return c.Core.Write(ent, out)
 }
