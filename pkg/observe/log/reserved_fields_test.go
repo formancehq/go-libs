@@ -569,3 +569,21 @@ func TestCorrelationNestsUnderAnOpenNamespace(t *testing.T) {
 		t.Fatalf("the pair must at least still be stamped: %v", group)
 	}
 }
+
+// NewZapStack must land on the same logger as composing the pieces by hand, or
+// a service using it would emit a different record from one that does not.
+func TestNewZapStackMatchesTheComposition(t *testing.T) {
+	for _, correlate := range []bool{false, true} {
+		var fromStack, fromPieces bytes.Buffer
+
+		NewZapStack(&fromStack, zapcore.InfoLevel, true, correlate).
+			WithContext(sampledContext()).WithField("k", "v").Infof("x")
+		NewZapCorrelatedIf(NewZapLogger(&fromPieces, zapcore.InfoLevel, true).Sugar(), correlate).
+			WithContext(sampledContext()).WithField("k", "v").Infof("x")
+
+		if normalise(fromStack.String()) != normalise(fromPieces.String()) {
+			t.Fatalf("correlate=%v diverges:\n stack: %s\npieces: %s",
+				correlate, fromStack.String(), fromPieces.String())
+		}
+	}
+}
