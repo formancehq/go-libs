@@ -180,12 +180,26 @@ The escaping lives in a `zapcore.Core`, so it applies to **every** façade over 
 logger — `NewLogr`, `NewZap` and any direct zap use — rather than to whichever
 adapter implemented it.
 
-`trace_id` and `span_id` are escaped the same way, and on **every** zap-stack
-path — not only under `NewZapWithTraces`, which is what injects them. That is
-deliberate: escaping only where correlation is on would make a field's path
-depend on whether the service configured a traces exporter, and on whether the
-individual request happened to be sampled. A field is addressed the same way in
-every record or the guarantee is worth little.
+`trace_id` and `span_id` are escaped the same way, on **every** zap-stack path
+and on the shared logrus formatters — whether the field is scoped with `With`
+or written on the record (`Infow`, zapr's `WithValues`), and whether or not the
+logger correlates. Escaping only where correlation is on would make a field's
+path depend on whether the service configured a traces exporter, and on whether
+the request happened to be sampled.
+
+The one exception is the pair a correlating logger stamps itself, which reaches
+the record root. It is marked as it is stamped, so the core can tell it from an
+application field using the same key — without that marker the core would have
+to escape both, losing the correlation, or neither, letting an application
+field shadow the span.
+
+**One ordering emits a duplicate.** A literal `fields.msg` scoped with `With`,
+followed by a record-level `msg`, produces `fields.msg` twice: the scoped field
+is already encoded by the inner core by the time the record is renamed, and
+nothing can retract it. The order is deterministic rather than arbitrary — the
+escaped reserved value is always written last, so a decoder keeping the last
+value (the JSON norm, and what `encoding/json` does) reads the intended one.
+The reverse order, and both keys in the same call, resolve to a single field.
 
 A field carrying both a reserved key and its escaped form (`msg` and
 `fields.msg`) resolves in favour of the reserved one, deterministically, on
