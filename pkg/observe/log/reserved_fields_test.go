@@ -612,3 +612,31 @@ func TestNamespacedLiteralSurvivesAScopedEscape(t *testing.T) {
 		t.Fatalf("a namespaced field must not be dropped: %v", group)
 	}
 }
+
+// Regression: the correlating path formatted with fmt.Sprintf where zap's
+// sugar returns the template untouched for a no-argument call, so
+// Infof("progress 100%") logged "progress 100%!(NOVERB)" -- but only on a
+// correlating logger. A record's own message must not depend on whether the
+// service configured a traces exporter.
+func TestRenderingDoesNotDependOnCorrelation(t *testing.T) {
+	msg := "progress 100" + "%"
+
+	for _, tc := range []struct {
+		name  string
+		build func(*bytes.Buffer) Logger
+	}{
+		{"not correlating", func(b *bytes.Buffer) Logger {
+			return NewZap(NewZapLogger(b, zapcore.InfoLevel, true).Sugar())
+		}},
+		{"correlating", func(b *bytes.Buffer) Logger {
+			return NewZapWithTraces(NewZapLogger(b, zapcore.InfoLevel, true).Sugar())
+		}},
+	} {
+		var buf bytes.Buffer
+		tc.build(&buf).Infof(msg) //nolint:govet // the point is a format string carrying no verb
+
+		if got := decodeRecord(t, &buf)["msg"]; got != msg {
+			t.Fatalf("%s: msg = %q, want %q", tc.name, got, msg)
+		}
+	}
+}
