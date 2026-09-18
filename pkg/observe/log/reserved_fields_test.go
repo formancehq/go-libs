@@ -497,3 +497,47 @@ func TestNewZapCorrelatedIfMatchesTheConstructors(t *testing.T) {
 		}
 	}
 }
+
+// Regression: a literal "fields.msg" scoped after the reserved key whose slot
+// it takes was kept by the inner core, so the record carried the key twice --
+// with the literal last, which is the value a last-value decoder reads. That
+// inverts the documented precedence exactly where it matters.
+func TestChainedWithDoesNotDuplicateAnEscapedKey(t *testing.T) {
+	var buf bytes.Buffer
+	NewZapLogger(&buf, zapcore.InfoLevel, true).
+		With(zap.String("msg", "reserved")).
+		With(zap.String("fields.msg", "literal")).
+		Info("actual message")
+
+	if n := strings.Count(buf.String(), `"fields.msg":`); n != 1 {
+		t.Fatalf("fields.msg emitted %d times: %s", n, buf.String())
+	}
+
+	record := decodeRecord(t, &buf)
+	if record["fields.msg"] != "reserved" {
+		t.Fatalf("the escaped reserved field must win, got %v", record["fields.msg"])
+	}
+	if record["msg"] != "actual message" {
+		t.Fatalf("the record's own message must win: %v", record)
+	}
+}
+
+// Regression: dropping a shadowed literal compacted the slice in place, and
+// renameReserved can return one aliasing the caller's own array -- so a
+// caller's fields came back with an element overwritten. On the Write path
+// those fields are the record's.
+func TestDroppingAShadowedLiteralLeavesTheCallerSliceIntact(t *testing.T) {
+	var buf bytes.Buffer
+	scoped := NewZapLogger(&buf, zapcore.InfoLevel, true).With(zap.String("msg", "reserved"))
+
+	mine := []zap.Field{zap.String("fields.msg", "literal"), zap.String("keep", "me")}
+	scoped.With(mine...).Info("actual message")
+
+	if mine[0].Key != "fields.msg" || mine[1].Key != "keep" {
+		t.Fatalf("the caller's slice was mutated: %v", mine)
+	}
+
+	if got := decodeRecord(t, &buf)["keep"]; got != "me" {
+		t.Fatalf("the surviving field must still be emitted, got %v", got)
+	}
+}

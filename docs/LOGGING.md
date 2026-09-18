@@ -124,12 +124,19 @@ services on different stacks.
 
 ## Compatibility
 
-Nothing an existing consumer sees changes. `NewDefaultLogger` and
+**No record changes shape.** `NewDefaultLogger` and
 `NewDefaultLoggerWithLevel` keep logrus's own formatters in **both** formats —
 JSON with lowercase levels, second-precision timestamps and alphabetically
 ordered keys, and text as `key="value"` pairs — because changing either would
 rewrite the output of every service that has not migrated. A test pins both
 against bare `logrus.JSONFormatter` and `logrus.TextFormatter`.
+
+**One source-level change, for implementors only.** `Logger` gains `Warn` and
+`Warnf`, so an external type implementing the interface stops satisfying it
+until it grows them; callers are unaffected. The implementations are not new --
+`ZapLogger` and the logrus adapter already had both methods -- this exposes
+them on the interface. [#608](https://github.com/formancehq/go-libs/pull/608)
+did the same for `Trace`, in a minor release.
 
 The shared shape is therefore reached by **moving to the zap stack**, one
 service at a time. A service that has to stay on logrus for now can opt into
