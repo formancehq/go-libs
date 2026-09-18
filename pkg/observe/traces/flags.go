@@ -30,6 +30,18 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.Bool(OtelTracesExporterOTLPInsecureFlag, false, "OpenTelemetry traces grpc insecure")
 }
 
+// Enabled reports whether a traces exporter is configured.
+//
+// It is the condition the logging stacks take for trace correlation: stamping
+// trace_id/span_id for a trace no backend will receive correlates a record with
+// nothing. It lives here, beside the flag it reads, so every service asks the
+// question the same way instead of each copying the two lines.
+func Enabled(flags *flag.FlagSet) bool {
+	exporter, _ := flags.GetString(OtelTracesExporterFlag)
+
+	return exporter != ""
+}
+
 func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
 	batch, _ := flags.GetBool(OtelTracesBatchFlag)
 	exporter, _ := flags.GetString(OtelTracesExporterFlag)

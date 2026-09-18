@@ -33,3 +33,13 @@ func TestConfigFromFlags(t *testing.T) {
 	require.Equal(t, "otlp", cfg.Exporter)
 	require.True(t, cfg.Batch)
 }
+
+func TestEnabledFollowsTheExporterFlag(t *testing.T) {
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	traces.AddFlags(flags)
+
+	require.False(t, traces.Enabled(flags), "no exporter configured means no correlation")
+
+	require.NoError(t, flags.Set(traces.OtelTracesExporterFlag, "otlp"))
+	require.True(t, traces.Enabled(flags))
+}
