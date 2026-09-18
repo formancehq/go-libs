@@ -114,7 +114,7 @@ func (z *ZapLogger) logf(level zapcore.Level, format string, args ...any) {
 		return
 	}
 
-	z.sugar.Desugar().Log(level, fmt.Sprintf(format, args...), z.correlation()...)
+	z.emit(level, fmt.Sprintf(format, args...))
 }
 
 func (z *ZapLogger) log(level zapcore.Level, args ...any) {
@@ -128,7 +128,17 @@ func (z *ZapLogger) log(level zapcore.Level, args ...any) {
 		return
 	}
 
-	z.sugar.Desugar().Log(level, fmt.Sprint(args...), z.correlation()...)
+	z.emit(level, fmt.Sprint(args...))
+}
+
+// emit writes an already rendered message with the correlation attached.
+//
+// Only the tail is shared: the level guard stays in each caller so the message
+// is built after it, not before. Hoisting the guard too would mean passing the
+// message -- or a closure over it -- into the helper, which is the eager
+// formatting this path exists to avoid.
+func (z *ZapLogger) emit(level zapcore.Level, msg string) {
+	z.sugar.Desugar().Log(level, msg, z.correlation()...)
 }
 
 // correlation returns the ids of the span carried by this logger's context, or
