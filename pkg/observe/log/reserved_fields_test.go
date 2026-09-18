@@ -541,3 +541,31 @@ func TestDroppingAShadowedLiteralLeavesTheCallerSliceIntact(t *testing.T) {
 		t.Fatalf("the surviving field must still be emitted, got %v", got)
 	}
 }
+
+// A namespace opened on the underlying logger nests everything written after
+// it, the stamped correlation pair included -- so a query keying on a root
+// trace_id misses those records.
+//
+// It is not fixable from this core: the namespace is opened by the encoder
+// while it writes the inner core's scoped fields, and a core layered above has
+// no way to reach back out to the record root. Pinned so the behaviour is a
+// documented limitation rather than a surprise, and so changing it is
+// deliberate.
+func TestCorrelationNestsUnderAnOpenNamespace(t *testing.T) {
+	var buf bytes.Buffer
+	z := NewZapLogger(&buf, zapcore.InfoLevel, true).With(zap.Namespace("request"))
+	NewZapWithTraces(z.Sugar()).WithContext(sampledContext()).Infof("done")
+
+	record := decodeRecord(t, &buf)
+	if _, atRoot := record["trace_id"]; atRoot {
+		t.Fatalf("documented limitation no longer holds -- update docs/LOGGING.md: %v", record)
+	}
+
+	group, ok := record["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("group missing: %v", record)
+	}
+	if group["trace_id"] != "01000000000000000000000000000000" {
+		t.Fatalf("the pair must at least still be stamped: %v", group)
+	}
+}
