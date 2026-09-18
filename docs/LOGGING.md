@@ -206,6 +206,15 @@ application field using the same key — without that marker the core would have
 to escape both, losing the correlation, or neither, letting an application
 field shadow the span.
 
+**A namespace swallows the correlation.** If a caller opens a `zap.Namespace`
+on the underlying logger, everything written afterwards nests under it — the
+stamped pair included, so the record carries `request.trace_id` rather than a
+root `trace_id`, and a query keying on the root misses it. The namespace is
+opened by the encoder while it writes the scoped fields, and a core layered
+above cannot reach back out to the record root, so this is a limitation rather
+than an oversight. `Logger.WithField`/`WithFields` never open one; only direct
+`zap.Namespace` use does.
+
 **One ordering emits a duplicate.** A literal `fields.msg` scoped with `With`,
 followed by a record-level `msg`, produces `fields.msg` twice: the scoped field
 is already encoded by the inner core by the time the record is renamed, and
