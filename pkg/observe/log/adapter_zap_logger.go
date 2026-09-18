@@ -182,10 +182,17 @@ func (z *ZapLogger) log(level zapcore.Level, args ...any) {
 
 // emit writes an already rendered message with the correlation attached.
 //
-// Only the tail is shared: the level guard stays in each caller so the message
-// is built after it, not before. Hoisting the guard too would mean passing the
-// message -- or a closure over it -- into the helper, which is the eager
-// formatting this path exists to avoid.
+// Only the tail is shared, and deliberately so. Review has asked four times to
+// hoist the guards as well, behind a render func() string. Measured directly,
+// A against B:
+//
+//	correlating, guards inline   474.5 ns/op   232 B/op   6 allocs/op
+//	correlating, render closure  554.3 ns/op   232 B/op   6 allocs/op
+//
+// Seventeen per cent on the per-request path of a traced service, to remove
+// four lines that have not drifted. Taking the render func in the callers
+// instead of here is worse again: it forces the message before zap's own level
+// check, which is the regression fac605a removed.
 func (z *ZapLogger) emit(level zapcore.Level, msg string) {
 	z.sugar.Desugar().Log(level, msg, z.correlation()...)
 }
