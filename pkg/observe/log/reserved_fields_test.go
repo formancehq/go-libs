@@ -633,7 +633,13 @@ func TestRenderingDoesNotDependOnCorrelation(t *testing.T) {
 		}},
 	} {
 		var buf bytes.Buffer
-		tc.build(&buf).Infof(msg) //nolint:govet // the point is a format string carrying no verb
+
+		// Through a func value: the format string has to be non-constant to
+		// exercise this at all, and vet rightly rejects that at a direct call
+		// site. Production reaches it the same way -- every
+		// WithField(...).Infof(msg) passes a message built at runtime.
+		infof := tc.build(&buf).Infof
+		infof(msg)
 
 		if got := decodeRecord(t, &buf)["msg"]; got != msg {
 			t.Fatalf("%s: msg = %q, want %q", tc.name, got, msg)
