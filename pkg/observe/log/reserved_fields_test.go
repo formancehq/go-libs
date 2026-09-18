@@ -587,3 +587,28 @@ func TestNewZapStackMatchesTheComposition(t *testing.T) {
 		}
 	}
 }
+
+// Regression: dropShadowedLiterals scanned past the namespace, so a nested
+// "fields.msg" matched the root-level escaped set and was deleted -- the field
+// did not survive under another name, it vanished, and the namespace rendered
+// empty. Only the root can collide with what the inner core holds.
+func TestNamespacedLiteralSurvivesAScopedEscape(t *testing.T) {
+	var buf bytes.Buffer
+	NewZapLogger(&buf, zapcore.InfoLevel, true).
+		With(zap.String("msg", "reserved")).
+		With(zap.Namespace("request"), zap.String("fields.msg", "inside")).
+		Info("actual message")
+
+	record := decodeRecord(t, &buf)
+	if record["fields.msg"] != "reserved" {
+		t.Fatalf("the escaped reserved field must survive at the root: %v", record)
+	}
+
+	group, ok := record["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("the namespace must survive: %v", record)
+	}
+	if group["fields.msg"] != "inside" {
+		t.Fatalf("a namespaced field must not be dropped: %v", group)
+	}
+}

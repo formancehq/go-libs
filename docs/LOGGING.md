@@ -39,7 +39,7 @@ ctrlLogger := logging.NewLogr(z)                             // logr.Logger
 | JSON or text | `NewZapLogger(…, jsonFormatting)` | `JSON_FORMATTING_LOGGER` / `--json-formatting-logger` |
 | correlation | the adapter | see [Trace correlation](#trace-correlation) |
 
-Levels accept `trace`, `debug`, `info`, `warn` and `error`. `warn` is a real
+Levels accept `trace`, `debug`, `info`, `warn` (or `warning`) and `error`. `warn` is a real
 level here, which `Level` cannot express — a caller going through `Level` still
 has to round it.
 
@@ -283,7 +283,9 @@ not "the same bytes for any input".
 
 `Level` is `trace|debug|info|error` — it has no warn. `ParseZapLevel` does
 accept `warn`, since zap has a real warn level; a caller going through `Level`
-still has to round it.
+still has to round it. It also accepts `warning`, logrus's spelling, so a
+deployment already setting `LOG_LEVEL=warning` keeps the level it asked for
+rather than falling back to Info.
 
 `ZapLevelFromFlags(logLevel, debug)` clamps the level to at least Debug when
 `--debug` is set, matching what the default logger does with that flag.
