@@ -122,8 +122,7 @@ condition once rather than repeating the branch:
 logger := logging.NewZapCorrelatedIf(z.Sugar(), traces.Enabled(cmd.Flags()))
 ```
 
-`NewZapStack(w, level, jsonFormatting, correlate)` is the whole wiring in one
-call, for a service with several entrypoints that would otherwise repeat the
+`NewZapStack(w, level, ZapStackOptions{…})` is the whole wiring in one call, for a service with several entrypoints that would otherwise repeat the
 composition per entrypoint:
 
 ```go
