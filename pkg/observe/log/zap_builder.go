@@ -188,11 +188,64 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 		}
 	}
 
+	// A literal key the inner core already holds as an escaped field would be
+	// encoded twice, the same collision Write resolves -- and here the literal
+	// arrives second, so a last-value decoder would read it rather than the
+	// reserved field the escaping exists to protect.
+	renamed = dropShadowedLiterals(renamed, c.escaped)
+
 	return &reservedFieldCore{
 		Core:       c.Core.With(renamed),
 		escaped:    escaped,
 		namespaced: opensNamespace(fields),
 	}
+}
+
+// dropShadowedLiterals removes a literal "fields.<key>" whose slot the inner
+// core already holds as an escaped reserved field, which would otherwise encode
+// the key twice.
+//
+// It never compacts in place. renameReserved can return a slice aliasing the
+// one it was given -- when nothing needed escaping it appends the namespaced
+// tail onto the caller's own array -- so writing through it corrupted the
+// caller's fields, which for Write are the record's. A probe caught that: a
+// caller's slice came back with its first element overwritten by its second.
+func dropShadowedLiterals(fields []zapcore.Field, escaped map[string]struct{}) []zapcore.Field {
+	if len(escaped) == 0 {
+		return fields
+	}
+
+	shadowed := func(f zapcore.Field) bool {
+		_, taken := escaped[f.Key]
+
+		return taken && escapeScoped(f.Key) == f.Key
+	}
+
+	// Scanning first keeps the ordinary record allocation-free: nothing is
+	// dropped unless a literal actually collides.
+	drop := false
+	for _, f := range fields {
+		if shadowed(f) {
+			drop = true
+
+			break
+		}
+	}
+
+	if !drop {
+		return fields
+	}
+
+	kept := make([]zapcore.Field, 0, len(fields))
+	for _, f := range fields {
+		if shadowed(f) {
+			continue
+		}
+
+		kept = append(kept, f)
+	}
+
+	return kept
 }
 
 // opensNamespace reports whether these fields leave a namespace open, in which
@@ -229,16 +282,7 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 
 	// A literal key the inner core already holds as an escaped field would
 	// encode twice.
-	if len(c.escaped) > 0 {
-		kept := out[:0]
-		for _, f := range out {
-			if _, taken := c.escaped[f.Key]; taken && escapeScoped(f.Key) == f.Key {
-				continue
-			}
-			kept = append(kept, f)
-		}
-		out = kept
-	}
+	out = dropShadowedLiterals(out, c.escaped)
 
 	return c.Core.Write(ent, out)
 }
