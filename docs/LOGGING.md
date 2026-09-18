@@ -122,6 +122,14 @@ condition once rather than repeating the branch:
 logger := logging.NewZapCorrelatedIf(z.Sugar(), traces.Enabled(cmd.Flags()))
 ```
 
+`NewZapStack(w, level, jsonFormatting, correlate)` is the whole wiring in one
+call, for a service with several entrypoints that would otherwise repeat the
+composition per entrypoint:
+
+```go
+logger := logging.NewZapStack(os.Stderr, level, jsonFormatting, traces.Enabled(cmd.Flags()))
+```
+
 Both stamp on a **valid span context**, which includes one propagated from
 another service. The logrus hook stamps only for a **recording** span, so a
 context carrying a remote or sampled-out span is correlated on the new stack

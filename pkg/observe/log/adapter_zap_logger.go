@@ -74,6 +74,24 @@ func NewZapCorrelatedIf(sugar *zap.SugaredLogger, correlate bool) *ZapLogger {
 	return &ZapLogger{sugar: sugar, correlate: correlate}
 }
 
+// NewZapStack builds the whole stack in one call: the shared encoder writing to
+// w at level, in JSON or console format, behind the Logger façade, correlated
+// only when correlate is set.
+//
+// It exists so a service wires logging once rather than composing the pieces
+// itself. Composing them is two calls, which is little -- but a deployment with
+// several entrypoints repeated those two calls per entrypoint, and a repeated
+// rule drifts: picking the wrong façade loses correlation without failing a
+// build, and passing a different level or format changes the record shape for
+// one pod in a namespace.
+//
+//	logger := logging.NewZapStack(os.Stderr, level, jsonFormatting, traces.Enabled(cmd.Flags()))
+//
+// The pieces stay exported for a caller that needs one of them alone.
+func NewZapStack(w io.Writer, level zapcore.Level, jsonFormatting, correlate bool) *ZapLogger {
+	return NewZapCorrelatedIf(NewZapLogger(w, level, jsonFormatting).Sugar(), correlate)
+}
+
 // NopZap returns a Logger backed by zap.NewNop() — useful in tests and
 // short-lived CLI commands that need a Logger but discard everything.
 func NopZap() *ZapLogger {
