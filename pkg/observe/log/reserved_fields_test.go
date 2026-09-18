@@ -375,3 +375,50 @@ func TestMixedReservedKeysThroughWithFieldsDoNotPanic(t *testing.T) {
 		t.Fatalf("fields.msg = %v, want the escaped reserved field", got)
 	}
 }
+
+// countingStringer records whether rendering it was ever attempted.
+type countingStringer struct{ n *int }
+
+func (c countingStringer) String() string { *c.n++; return "rendered" }
+
+// Regression: a suppressed call must not pay for formatting. An earlier
+// revision applied fmt.Sprintf before handing the record to zap, which charged
+// every suppressed Debugf in a hot loop for a string nobody reads -- and made
+// the Enabled guard documented on the interface a necessity rather than an
+// optimisation.
+func TestSuppressedRecordsAreNotFormatted(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		build func(*bytes.Buffer) Logger
+	}{
+		{"not correlating", func(b *bytes.Buffer) Logger {
+			return NewZap(NewZapLogger(b, zapcore.InfoLevel, true).Sugar())
+		}},
+		{"correlating", func(b *bytes.Buffer) Logger {
+			return NewZapWithTraces(NewZapLogger(b, zapcore.InfoLevel, true).Sugar())
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := tc.build(&buf)
+
+			renders := 0
+			arg := countingStringer{n: &renders}
+
+			logger.Debugf("%v", arg) // below the level
+			logger.Debug(arg)        // below the level
+
+			if renders != 0 {
+				t.Fatalf("a suppressed record must not format its arguments, rendered %d time(s)", renders)
+			}
+
+			logger.Infof("%v", arg) // at the level
+			if renders != 1 {
+				t.Fatalf("an emitted record must format, rendered %d time(s)", renders)
+			}
+			if !strings.Contains(buf.String(), "rendered") {
+				t.Fatalf("the formatted value must reach the record: %s", buf.String())
+			}
+		})
+	}
+}
