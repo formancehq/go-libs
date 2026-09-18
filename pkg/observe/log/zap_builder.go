@@ -261,6 +261,19 @@ func dropShadowedLiterals(fields []zapcore.Field, escaped map[string]struct{}) [
 		return fields
 	}
 
+	// Only the root can collide. escaped names keys the inner core holds at the
+	// record root; a field nested under a namespace cannot reach them, and
+	// dropping it deleted an application's field outright -- the namespace came
+	// out empty. renameReserved and escapedKeys both stop here too.
+	root := len(fields)
+	for i, f := range fields {
+		if f.Type == zapcore.NamespaceType {
+			root = i
+
+			break
+		}
+	}
+
 	shadowed := func(f zapcore.Field) bool {
 		_, taken := escaped[f.Key]
 
@@ -270,7 +283,7 @@ func dropShadowedLiterals(fields []zapcore.Field, escaped map[string]struct{}) [
 	// Scanning first keeps the ordinary record allocation-free: nothing is
 	// dropped unless a literal actually collides.
 	drop := false
-	for _, f := range fields {
+	for _, f := range fields[:root] {
 		if shadowed(f) {
 			drop = true
 
@@ -283,7 +296,7 @@ func dropShadowedLiterals(fields []zapcore.Field, escaped map[string]struct{}) [
 	}
 
 	kept := make([]zapcore.Field, 0, len(fields))
-	for _, f := range fields {
+	for _, f := range fields[:root] {
 		if shadowed(f) {
 			continue
 		}
@@ -291,7 +304,7 @@ func dropShadowedLiterals(fields []zapcore.Field, escaped map[string]struct{}) [
 		kept = append(kept, f)
 	}
 
-	return kept
+	return append(kept, fields[root:]...)
 }
 
 // opensNamespace reports whether these fields leave a namespace open, in which
