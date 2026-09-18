@@ -159,7 +159,7 @@ func (z *ZapLogger) logf(level zapcore.Level, format string, args ...any) {
 		return
 	}
 
-	if !z.sugar.Desugar().Core().Enabled(level) {
+	if !z.enabled(level) {
 		return
 	}
 
@@ -173,7 +173,7 @@ func (z *ZapLogger) log(level zapcore.Level, args ...any) {
 		return
 	}
 
-	if !z.sugar.Desugar().Core().Enabled(level) {
+	if !z.enabled(level) {
 		return
 	}
 
@@ -259,7 +259,13 @@ func stampedCorrelation(f zapcore.Field) bool {
 }
 
 func (z *ZapLogger) Enabled(level Level) bool {
-	return z.sugar.Desugar().Core().Enabled(ToZapLevel(level))
+	return z.enabled(ToZapLevel(level))
+}
+
+// enabled names the walk down to the core, which logf, log and Enabled all
+// need.
+func (z *ZapLogger) enabled(level zapcore.Level) bool {
+	return z.sugar.Desugar().Core().Enabled(level)
 }
 
 func (z *ZapLogger) WithFields(fields map[string]any) Logger {

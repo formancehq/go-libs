@@ -646,3 +646,59 @@ func TestRenderingDoesNotDependOnCorrelation(t *testing.T) {
 		}
 	}
 }
+
+// Regression: dropShadowedLiterals ran after renameReserved, where a reserved
+// key escaped to "fields.msg" is indistinguishable from a literal the caller
+// wrote under that name. The filter deleted the field it had just escaped, so
+// the value appeared neither at the root nor under fields.* -- on three
+// separate orderings, all of them ordinary.
+func TestAnEscapedFieldIsNeverDroppedAsALiteral(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		emit func(*bytes.Buffer)
+		want []string // values that must survive under fields.<key>
+	}{
+		{
+			"scoped then record-level",
+			func(b *bytes.Buffer) {
+				NewZapLogger(b, zapcore.InfoLevel, true).
+					With(zap.String("msg", "scoped")).
+					Info("actual message", zap.String("msg", "record"))
+			},
+			[]string{"scoped", "record"},
+		},
+		{
+			"scoped twice",
+			func(b *bytes.Buffer) {
+				NewZapLogger(b, zapcore.InfoLevel, true).
+					With(zap.String("msg", "first")).
+					With(zap.String("msg", "second")).Info("actual message")
+			},
+			[]string{"first", "second"},
+		},
+		{
+			"a trace key, scoped then record-level",
+			func(b *bytes.Buffer) {
+				NewZapLogger(b, zapcore.InfoLevel, true).
+					With(zap.String("trace_id", "scoped")).
+					Info("actual message", zap.String("trace_id", "record"))
+			},
+			[]string{"scoped", "record"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			tc.emit(&buf)
+
+			for _, want := range tc.want {
+				if !strings.Contains(buf.String(), want) {
+					t.Fatalf("%q was dropped rather than escaped: %s", want, buf.String())
+				}
+			}
+
+			if decodeRecord(t, &buf)["msg"] != "actual message" {
+				t.Fatalf("the record's own message must win: %s", buf.String())
+			}
+		})
+	}
+}
