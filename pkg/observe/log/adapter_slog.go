@@ -222,7 +222,11 @@ func levelToSlog(level Level) slog.Level {
 }
 
 func (a *slogAdapter) log(level Level, msg string) {
-	a.logger.Log(a.ctx, levelToSlog(level), msg)
+	a.logAt(levelToSlog(level), msg)
+}
+
+func (a *slogAdapter) logAt(level slog.Level, msg string) {
+	a.logger.Log(a.ctx, level, msg)
 }
 
 func (a *slogAdapter) Tracef(format string, args ...any) {
@@ -237,6 +241,13 @@ func (a *slogAdapter) Infof(format string, args ...any) {
 	a.log(InfoLevel, fmt.Sprintf(format, args...))
 }
 
+// Warnf and Warn map onto slog's own Warn level. Level cannot express it, so
+// levelToSlog never produces it; these two are the only path to a warn record
+// through this adapter.
+func (a *slogAdapter) Warnf(format string, args ...any) {
+	a.logAt(slog.LevelWarn, fmt.Sprintf(format, args...))
+}
+
 func (a *slogAdapter) Errorf(format string, args ...any) {
 	a.log(ErrorLevel, fmt.Sprintf(format, args...))
 }
@@ -244,6 +255,7 @@ func (a *slogAdapter) Errorf(format string, args ...any) {
 func (a *slogAdapter) Trace(args ...any) { a.log(TraceLevel, fmt.Sprint(args...)) }
 func (a *slogAdapter) Debug(args ...any) { a.log(DebugLevel, fmt.Sprint(args...)) }
 func (a *slogAdapter) Info(args ...any)  { a.log(InfoLevel, fmt.Sprint(args...)) }
+func (a *slogAdapter) Warn(args ...any)  { a.logAt(slog.LevelWarn, fmt.Sprint(args...)) }
 func (a *slogAdapter) Error(args ...any) { a.log(ErrorLevel, fmt.Sprint(args...)) }
 
 func (a *slogAdapter) WithFields(fields map[string]any) Logger {
