@@ -11,6 +11,10 @@ import (
 // ParseZapLevel parses a textual level into a zapcore.Level, defaulting to Info
 // for anything unrecognised or empty rather than refusing to start.
 //
+// The fallback is silent, which is a trade: a mistyped --log-level ("erro")
+// changes verbosity without saying so, but a pod does not crash-loop over a
+// typo in a log knob. Use ParseLevel when a caller wants the error instead.
+//
 // It accepts "warn", which Level does not have: zap has a real Warn level, so a
 // service asking for it gets it instead of the nearest rounding.
 func ParseZapLevel(s string) zapcore.Level {
@@ -166,9 +170,21 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 	for k := range c.escaped {
 		escaped[k] = struct{}{}
 	}
-	for i, f := range fields {
-		if renamed[i].Key != f.Key {
-			escaped[renamed[i].Key] = struct{}{}
+
+	// Derived from the keys rather than by pairing fields with renamed by
+	// index: renameReserved drops a literal "fields.msg" that yields to an
+	// escaped "msg", so its result can be shorter than its input. Pairing by
+	// index read past the end and panicked -- in a logging core, on a field
+	// name an application chooses.
+	for _, f := range fields {
+		// Everything from the first namespace on is nested under it, out of
+		// reach of the record's own keys, and renameReserved leaves it alone.
+		if f.Type == zapcore.NamespaceType {
+			break
+		}
+
+		if name := escapeScoped(f.Key); name != f.Key {
+			escaped[name] = struct{}{}
 		}
 	}
 
@@ -228,9 +244,12 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 }
 
 // escapeTraceKey renames an application field that would collide with the
-// correlation ids a trace-correlating logger stamps. It renames whether or not
-// a span is active, so a field's path does not depend on whether the request
-// happened to be traced.
+// correlation ids a trace-correlating logger stamps.
+//
+// It renames on every zap-stack path, not only the correlating one, and whether
+// or not a span is active: scoping it to NewZapWithTraces would make a field's
+// path depend on whether the service configured a traces exporter, and on
+// whether the request happened to be sampled.
 func escapeTraceKey(key string) string {
 	switch key {
 	case "trace_id", "span_id":
@@ -270,16 +289,16 @@ func renameReserved(fields []zapcore.Field, escape func(string) string) []zapcor
 	nested := fields[root:]
 	fields = fields[:root]
 
-	any := false
+	found := false
 	for i := range fields {
 		if escape(fields[i].Key) != fields[i].Key {
-			any = true
+			found = true
 
 			break
 		}
 	}
 
-	if !any {
+	if !found {
 		return append(fields, nested...)
 	}
 

@@ -178,9 +178,14 @@ does, and a field named `logger` gains the same protection.
 
 The escaping lives in a `zapcore.Core`, so it applies to **every** façade over a
 logger — `NewLogr`, `NewZap` and any direct zap use — rather than to whichever
-adapter implemented it. `NewZapWithTraces` additionally escapes `trace_id` and
-`span_id`, since it is what injects them; it does so whether or not a span is
-active, so a field's path does not depend on whether the request was traced.
+adapter implemented it.
+
+`trace_id` and `span_id` are escaped the same way, and on **every** zap-stack
+path — not only under `NewZapWithTraces`, which is what injects them. That is
+deliberate: escaping only where correlation is on would make a field's path
+depend on whether the service configured a traces exporter, and on whether the
+individual request happened to be sampled. A field is addressed the same way in
+every record or the guarantee is worth little.
 
 A field carrying both a reserved key and its escaped form (`msg` and
 `fields.msg`) resolves in favour of the reserved one, deterministically, on

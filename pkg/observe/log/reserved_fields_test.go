@@ -330,3 +330,48 @@ func TestNamespacedFieldsAreNotEscaped(t *testing.T) {
 		t.Fatalf("namespaced fields must keep their names: %v", group)
 	}
 }
+
+// Regression: renameReserved drops a literal "fields.msg" that yields to an
+// escaped "msg", so it can return fewer fields than it was given. With paired
+// the two by index and read past the end -- a panic in a logging core, on a
+// field name an application chooses, reachable from WithFields, zap's With and
+// logr's WithValues.
+func TestMixedReservedKeysInOneWithDoNotPanic(t *testing.T) {
+	for _, order := range [][]any{
+		{"msg", "reserved", "fields.msg", "literal"},
+		{"fields.msg", "literal", "msg", "reserved"},
+	} {
+		var buf bytes.Buffer
+
+		// A panic here fails the test on its own; the assertions below are what
+		// pin the behaviour once it does not.
+		NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar().
+			With(order...).Info("actual message")
+
+		if n := strings.Count(buf.String(), `"fields.msg":`); n != 1 {
+			t.Fatalf("fields.msg emitted %d times: %s", n, buf.String())
+		}
+
+		record := decodeRecord(t, &buf)
+		if record["fields.msg"] != "reserved" {
+			t.Fatalf("the escaped reserved field must win whatever the order, got %v", record["fields.msg"])
+		}
+		if record["msg"] != "actual message" {
+			t.Fatalf("the record's own message must win: %v", record)
+		}
+	}
+}
+
+// The same collision, scoped through the Logger façade rather than zap's own
+// sugar, since that is the path application code takes.
+func TestMixedReservedKeysThroughWithFieldsDoNotPanic(t *testing.T) {
+	var buf bytes.Buffer
+
+	NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).
+		WithFields(map[string]any{"msg": "reserved", "fields.msg": "literal"}).
+		Infof("actual message")
+
+	if got := decodeRecord(t, &buf)["fields.msg"]; got != "reserved" {
+		t.Fatalf("fields.msg = %v, want the escaped reserved field", got)
+	}
+}
