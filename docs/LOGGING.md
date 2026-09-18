@@ -108,7 +108,13 @@ if otelTraces != "" {
 
 `NewZap` keeps its signature — it predates this — so `NewZapWithTraces` is the
 opt-in form rather than a parameter on `NewZap`, which would have been a
-breaking change for every existing caller.
+breaking change for every existing caller. `NewZapCorrelatedIf(sugar, correlate)`
+selects between the two, so a service with several entrypoints decides the
+condition once rather than repeating the branch:
+
+```go
+logger := logging.NewZapCorrelatedIf(z.Sugar(), traces.Enabled(cmd.Flags()))
+```
 
 Both stamp on a **valid span context**, which includes one propagated from
 another service. The logrus hook stamps only for a **recording** span, so a

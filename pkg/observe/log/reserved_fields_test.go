@@ -479,3 +479,21 @@ func TestSharedFormatterEscapesTraceKeysLikeTheZapStack(t *testing.T) {
 		}
 	}
 }
+
+// The selector must land on the same behaviour as the constructor it stands in
+// for, or a service using it correlates differently from one that does not.
+func TestNewZapCorrelatedIfMatchesTheConstructors(t *testing.T) {
+	for _, tc := range []struct {
+		correlate bool
+		wantID    bool
+	}{{true, true}, {false, false}} {
+		var buf bytes.Buffer
+		NewZapCorrelatedIf(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar(), tc.correlate).
+			WithContext(sampledContext()).Infof("x")
+
+		_, got := decodeRecord(t, &buf)["trace_id"]
+		if got != tc.wantID {
+			t.Fatalf("correlate=%v: trace_id present=%v, want %v", tc.correlate, got, tc.wantID)
+		}
+	}
+}
