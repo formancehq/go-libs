@@ -91,7 +91,7 @@ func entryFields(entry *logrus.Entry) []zapcore.Field {
 	// correlation ids -- or a field's path changes when a service moves from
 	// one stack to the other, which is the whole property these formatters
 	// exist to provide.
-	for _, reserved := range append(append([]string{}, reservedKeys[:]...), "trace_id", "span_id") {
+	for _, reserved := range sharedEscapableKeys {
 		if v, ok := data[reserved]; ok {
 			data[escapeScoped(reserved)] = v
 			delete(data, reserved)
