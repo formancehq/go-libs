@@ -113,6 +113,10 @@ func (l *recordingLogger) Info(args ...any) {
 	l.record("info", fmt.Sprint(args...))
 }
 
+func (l *recordingLogger) Warn(args ...any) {
+	l.record("warn", fmt.Sprint(args...))
+}
+
 func (l *recordingLogger) Error(args ...any) {
 	l.record("error", fmt.Sprint(args...))
 }

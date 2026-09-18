@@ -116,12 +116,14 @@ func (l *recordingLogger) Debugf(format string, args ...any) {
 	l.debugMessages = append(l.debugMessages, fmt.Sprintf(format, args...))
 }
 func (l *recordingLogger) Infof(string, ...any)  {}
+func (l *recordingLogger) Warnf(string, ...any)  {}
 func (l *recordingLogger) Errorf(string, ...any) {}
 func (l *recordingLogger) Trace(...any)          {}
 func (l *recordingLogger) Debug(args ...any) {
 	l.debugMessages = append(l.debugMessages, fmt.Sprint(args...))
 }
 func (l *recordingLogger) Info(...any)  {}
+func (l *recordingLogger) Warn(...any)  {}
 func (l *recordingLogger) Error(...any) {}
 func (l *recordingLogger) WithFields(map[string]any) logging.Logger {
 	return l
