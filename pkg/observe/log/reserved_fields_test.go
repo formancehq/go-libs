@@ -576,7 +576,7 @@ func TestNewZapStackMatchesTheComposition(t *testing.T) {
 	for _, correlate := range []bool{false, true} {
 		var fromStack, fromPieces bytes.Buffer
 
-		NewZapStack(&fromStack, zapcore.InfoLevel, true, correlate).
+		NewZapStack(&fromStack, zapcore.InfoLevel, ZapStackOptions{JSONFormatting: true, Correlate: correlate}).
 			WithContext(sampledContext()).WithField("k", "v").Infof("x")
 		NewZapCorrelatedIf(NewZapLogger(&fromPieces, zapcore.InfoLevel, true).Sugar(), correlate).
 			WithContext(sampledContext()).WithField("k", "v").Infof("x")

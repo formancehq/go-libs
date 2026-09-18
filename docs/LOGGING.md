@@ -127,8 +127,15 @@ call, for a service with several entrypoints that would otherwise repeat the
 composition per entrypoint:
 
 ```go
-logger := logging.NewZapStack(os.Stderr, level, jsonFormatting, traces.Enabled(cmd.Flags()))
+logger := logging.NewZapStack(os.Stderr, level, logging.ZapStackOptions{
+	JSONFormatting: jsonFormatting,
+	Correlate:      traces.Enabled(cmd.Flags()),
+})
 ```
+
+The knobs are a struct rather than two parameters because they are adjacent
+booleans: transposing them would compile, and swap the record format for the
+correlation condition.
 
 Both stamp on a **valid span context**, which includes one propagated from
 another service. The logrus hook stamps only for a **recording** span, so a

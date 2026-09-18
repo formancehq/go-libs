@@ -210,14 +210,10 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 // it is built: adding a key allocates a new map here, and everywhere else it
 // is only read.
 func escapedKeys(parent map[string]struct{}, fields []zapcore.Field) map[string]struct{} {
-	escapes := false
-	for _, f := range fields {
-		// Everything from the first namespace on is nested under it, out of
-		// reach of the record's own keys, and renameReserved leaves it alone.
-		if f.Type == zapcore.NamespaceType {
-			break
-		}
+	root := rootIndex(fields)
 
+	escapes := false
+	for _, f := range fields[:root] {
 		if escapeScoped(f.Key) != f.Key {
 			escapes = true
 
@@ -229,16 +225,12 @@ func escapedKeys(parent map[string]struct{}, fields []zapcore.Field) map[string]
 		return parent
 	}
 
-	escaped := make(map[string]struct{}, len(parent)+len(fields))
+	escaped := make(map[string]struct{}, len(parent)+root)
 	for k := range parent {
 		escaped[k] = struct{}{}
 	}
 
-	for _, f := range fields {
-		if f.Type == zapcore.NamespaceType {
-			break
-		}
-
+	for _, f := range fields[:root] {
 		if name := escapeScoped(f.Key); name != f.Key {
 			escaped[name] = struct{}{}
 		}
@@ -264,15 +256,8 @@ func dropShadowedLiterals(fields []zapcore.Field, escaped map[string]struct{}) [
 	// Only the root can collide. escaped names keys the inner core holds at the
 	// record root; a field nested under a namespace cannot reach them, and
 	// dropping it deleted an application's field outright -- the namespace came
-	// out empty. renameReserved and escapedKeys both stop here too.
-	root := len(fields)
-	for i, f := range fields {
-		if f.Type == zapcore.NamespaceType {
-			root = i
-
-			break
-		}
-	}
+	// out empty.
+	root := rootIndex(fields)
 
 	shadowed := func(f zapcore.Field) bool {
 		_, taken := escaped[f.Key]
@@ -307,16 +292,27 @@ func dropShadowedLiterals(fields []zapcore.Field, escaped map[string]struct{}) [
 	return append(kept, fields[root:]...)
 }
 
-// opensNamespace reports whether these fields leave a namespace open, in which
-// case everything that follows is nested under it.
-func opensNamespace(fields []zapcore.Field) bool {
-	for _, f := range fields {
+// rootIndex returns where the record root ends: the index of the first
+// namespace, or len(fields) when there is none.
+//
+// Everything from that point on is nested under the namespace, out of reach of
+// the keys the encoder writes at the root -- which is why the escaping, the
+// escaped-key set and the shadowed-literal drop all stop here. One walk so a
+// change to that rule lands in one place.
+func rootIndex(fields []zapcore.Field) int {
+	for i, f := range fields {
 		if f.Type == zapcore.NamespaceType {
-			return true
+			return i
 		}
 	}
 
-	return false
+	return len(fields)
+}
+
+// opensNamespace reports whether these fields leave a namespace open, in which
+// case everything that follows is nested under it.
+func opensNamespace(fields []zapcore.Field) bool {
+	return rootIndex(fields) < len(fields)
 }
 
 // Check must add this core rather than the embedded one, or the entry is
@@ -399,14 +395,7 @@ func escapeScoped(key string) string {
 func renameReserved(fields []zapcore.Field, escape func(zapcore.Field) string) []zapcore.Field {
 	// Everything from the first namespace on is nested under it and out of
 	// reach of the record's own keys.
-	root := len(fields)
-	for i, f := range fields {
-		if f.Type == zapcore.NamespaceType {
-			root = i
-
-			break
-		}
-	}
+	root := rootIndex(fields)
 
 	nested := fields[root:]
 	fields = fields[:root]

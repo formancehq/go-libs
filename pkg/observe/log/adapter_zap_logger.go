@@ -74,9 +74,24 @@ func NewZapCorrelatedIf(sugar *zap.SugaredLogger, correlate bool) *ZapLogger {
 	return &ZapLogger{sugar: sugar, correlate: correlate}
 }
 
+// ZapStackOptions are the boolean knobs NewZapStack takes.
+//
+// A struct rather than two parameters: they are adjacent booleans, so
+// NewZapStack(w, level, true, false) says nothing at the call site and
+// transposing them would compile.
+type ZapStackOptions struct {
+	// JSONFormatting encodes records as JSON rather than zap's console format.
+	JSONFormatting bool
+
+	// Correlate stamps the ids of the span a record is emitted under. Set it
+	// from whether a traces exporter is configured -- traces.Enabled answers
+	// that -- since ids pointing at a trace no backend receives correlate a
+	// record with nothing.
+	Correlate bool
+}
+
 // NewZapStack builds the whole stack in one call: the shared encoder writing to
-// w at level, in JSON or console format, behind the Logger façade, correlated
-// only when correlate is set.
+// w at level, behind the Logger façade.
 //
 // It exists so a service wires logging once rather than composing the pieces
 // itself. Composing them is two calls, which is little -- but a deployment with
@@ -85,11 +100,14 @@ func NewZapCorrelatedIf(sugar *zap.SugaredLogger, correlate bool) *ZapLogger {
 // build, and passing a different level or format changes the record shape for
 // one pod in a namespace.
 //
-//	logger := logging.NewZapStack(os.Stderr, level, jsonFormatting, traces.Enabled(cmd.Flags()))
+//	logger := logging.NewZapStack(os.Stderr, level, logging.ZapStackOptions{
+//		JSONFormatting: jsonFormatting,
+//		Correlate:      traces.Enabled(cmd.Flags()),
+//	})
 //
 // The pieces stay exported for a caller that needs one of them alone.
-func NewZapStack(w io.Writer, level zapcore.Level, jsonFormatting, correlate bool) *ZapLogger {
-	return NewZapCorrelatedIf(NewZapLogger(w, level, jsonFormatting).Sugar(), correlate)
+func NewZapStack(w io.Writer, level zapcore.Level, opts ZapStackOptions) *ZapLogger {
+	return NewZapCorrelatedIf(NewZapLogger(w, level, opts.JSONFormatting).Sugar(), opts.Correlate)
 }
 
 // NopZap returns a Logger backed by zap.NewNop() — useful in tests and

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -256,5 +257,63 @@ func TestDefaultLoggerStillRendersJSONNumberAsANumber(t *testing.T) {
 	}
 	if record["amount"] != float64(42) {
 		t.Fatalf("amount = %#v, want the number 42 -- the default logger must not change", record["amount"])
+	}
+}
+
+// sharedFormatter's comment claims one encoder is safe to share across
+// goroutines, because zap's encoders clone their state inside EncodeEntry.
+// Nothing exercised that, and the claim is load-bearing: every service using
+// NewSharedJSONFormatter shares one formatter across its request handlers.
+// Fails under -race if the claim stops holding.
+func TestSharedFormatterIsSafeToShareAcrossGoroutines(t *testing.T) {
+	formatter := NewSharedJSONFormatter()
+
+	const writers, perWriter = 8, 50
+	var wg sync.WaitGroup
+	wg.Add(writers)
+
+	lines := make(chan []byte, writers*perWriter)
+	for i := range writers {
+		go func() {
+			defer wg.Done()
+
+			for range perWriter {
+				entry := &logrus.Entry{
+					Level:   logrus.InfoLevel,
+					Time:    time.Now(),
+					Message: "batch applied",
+					Data:    logrus.Fields{"writer": i, "addr": ":8080"},
+				}
+
+				out, err := formatter.Format(entry)
+				if err != nil {
+					t.Errorf("format: %v", err)
+
+					return
+				}
+				lines <- out
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(lines)
+
+	// Every record must be complete and well formed: a shared encoder losing
+	// its isolation interleaves two records rather than failing outright.
+	count := 0
+	for line := range lines {
+		var record map[string]any
+		if err := json.Unmarshal(bytes.TrimRight(line, "\n"), &record); err != nil {
+			t.Fatalf("corrupted record: %s", line)
+		}
+		if record["msg"] != "batch applied" || record["addr"] != ":8080" {
+			t.Fatalf("record lost fields under concurrency: %v", record)
+		}
+		count++
+	}
+
+	if count != writers*perWriter {
+		t.Fatalf("got %d records, want %d", count, writers*perWriter)
 	}
 }
