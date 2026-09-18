@@ -33,3 +33,17 @@ func TestLogrRendersTheSameShapeAsTheLoggerFacade(t *testing.T) {
 		t.Fatalf("the logr adapter must carry \"time\" too: %v", fromLogr)
 	}
 }
+
+// Regression: zapr maps logr's V(n) onto zapcore.Level(-n), and anything below
+// the custom trace level rendered as "LEVEL(-3)" -- a record whose level is not
+// one of the words every other record carries.
+func TestLogrVerbosityBeyondTraceStillRendersAWord(t *testing.T) {
+	for _, v := range []int{2, 3, 4, 9} {
+		var buf bytes.Buffer
+		NewLogr(NewZapLogger(&buf, zapcore.Level(-10), true)).V(v).Info("cache sync")
+
+		if got := decodeRecord(t, &buf)["level"]; got != "TRACE" {
+			t.Fatalf("V(%d): level = %v, want TRACE", v, got)
+		}
+	}
+}
