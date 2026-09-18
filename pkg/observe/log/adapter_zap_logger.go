@@ -61,6 +61,19 @@ func NewZapWithTraces(sugar *zap.SugaredLogger) *ZapLogger {
 	return &ZapLogger{sugar: sugar, correlate: true}
 }
 
+// NewZapCorrelatedIf returns NewZapWithTraces when correlate is set and NewZap
+// otherwise.
+//
+// Every service wiring this stack makes that choice, on the same condition --
+// whether a traces exporter is configured, which traces.Enabled answers -- and
+// picking the wrong constructor loses correlation without failing a build. A
+// selector keeps the decision in one place:
+//
+//	logger := logging.NewZapCorrelatedIf(z.Sugar(), traces.Enabled(cmd.Flags()))
+func NewZapCorrelatedIf(sugar *zap.SugaredLogger, correlate bool) *ZapLogger {
+	return &ZapLogger{sugar: sugar, correlate: correlate}
+}
+
 // NopZap returns a Logger backed by zap.NewNop() — useful in tests and
 // short-lived CLI commands that need a Logger but discard everything.
 func NopZap() *ZapLogger {
