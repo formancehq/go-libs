@@ -55,6 +55,12 @@ func (f *sharedFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		Message: entry.Message,
 	}, entryFields(entry))
 	if err != nil {
+		// EncodeEntry can hand back a buffer alongside the error; returning
+		// without freeing it would churn zap's pool on every failure.
+		if buf != nil {
+			buf.Free()
+		}
+
 		return nil, err
 	}
 	defer buf.Free()
@@ -66,9 +72,6 @@ func (f *sharedFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return out, nil
 }
 
-// entryFields converts logrus's field map into zap fields, renaming the ones
-// that would collide with a key the encoder writes itself and ordering them so
-// a record renders the same way twice.
 // sharedEscapableKeys is every key the zap stack escapes, derived from the two
 // lists that stack uses rather than restated here: a key added to either must
 // change both stacks at once, or a field's emitted path would differ between
@@ -77,6 +80,9 @@ func (f *sharedFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 // Built once: entryFields runs on every record carrying a field.
 var sharedEscapableKeys = append(append([]string{}, reservedKeys[:]...), traceKeys[:]...)
 
+// entryFields converts logrus's field map into zap fields, renaming the ones
+// that would collide with a key the encoder writes itself and ordering them so
+// a record renders the same way twice.
 func entryFields(entry *logrus.Entry) []zapcore.Field {
 	if len(entry.Data) == 0 {
 		return nil

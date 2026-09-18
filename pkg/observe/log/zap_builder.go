@@ -70,7 +70,16 @@ func ZapEncoderConfig() zapcore.EncoderConfig {
 // "TRACE". EncodeLevelWithTrace renders it lowercase, which would make it the
 // one record in the stream whose level is cased differently.
 func encodeZapLevel(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
-	if l == ToZapLevel(TraceLevel) {
+	// At or below trace, not just equal to it: zapr maps logr's V(n) onto
+	// zapcore.Level(-n), so a controller-runtime or klog call site at V(3) or
+	// beyond reaches a level CapitalLevelEncoder spells "LEVEL(-3)". One
+	// record in a namespace carrying that instead of a word breaks the closed
+	// vocabulary the rest of this stack maintains.
+	//
+	// Verbosity beyond trace therefore renders as TRACE rather than as its own
+	// spelling. Those records become indistinguishable by level, which they
+	// already were in practice -- everything below Debug is trace detail.
+	if l <= ToZapLevel(TraceLevel) {
 		enc.AppendString("TRACE")
 
 		return

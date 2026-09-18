@@ -66,6 +66,12 @@ stack keeps its own shape unless a caller opts in — see Compatibility below.
 | `Logger` | `NewZapWithTraces(z.Sugar())` | same, but trace-correlated |
 | `logr.Logger` | `NewLogr(z)` | controller-runtime, klog |
 
+`zapr` maps logr's `V(n)` onto `zapcore.Level(-n)`, so `V(2)` is the custom
+trace level and anything beyond is more verbose still. Everything at or below
+trace renders as `TRACE`: the level vocabulary stays closed, at the cost of not
+telling `V(3)` from `V(9)`. A record spelling its level `LEVEL(-3)` would be the
+only one in a namespace not carrying a word.
+
 `Logger` is the interface to write application code against. It carries the
 custom `Trace` level, which nothing above `Debug` in the standard hierarchy can
 express.
