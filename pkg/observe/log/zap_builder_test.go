@@ -71,10 +71,10 @@ func TestZapLevelFromFlags(t *testing.T) {
 }
 
 // The timestamp key is the field a deployment queries on; zap's default would
-// put it under "ts" while every slog-based service writes "time".
+// put it under "ts" while every logrus-based service writes "time".
 func TestZapEncoderConfigRecordShape(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Info("batch applied", "source", "aws")
+	NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).WithField("source", "aws").Infof("batch applied")
 
 	record := decodeRecord(t, &buf)
 	if record["msg"] != "batch applied" {
@@ -98,44 +98,24 @@ func TestZapEncoderConfigRecordShape(t *testing.T) {
 	}
 }
 
-// slog encodes a duration as integer nanoseconds; zap's production default
-// would emit float seconds and silently change every latency field.
+// The shared shape encodes a duration as integer nanoseconds; zap's production
+// default would emit float seconds and silently change every latency field.
 func TestDurationsStayIntegerNanoseconds(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Info("applied", "latency", 250*time.Millisecond)
+	NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).
+		WithField("latency", 250*time.Millisecond).Infof("applied")
 
 	if got := decodeRecord(t, &buf)["latency"]; got != float64(250000000) {
 		t.Fatalf("latency = %v, want 250000000", got)
 	}
 }
 
-func TestNewSlogStampsTraceIDFromContext(t *testing.T) {
+// The builder attaches no stack trace: zap's production options would put one
+// on every Error record, multiplying the size of the error lines a busy
+// service emits.
+func TestErrorRecordsDoNotCarryStacktraces(t *testing.T) {
 	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).InfoContext(sampledContext(), "source added")
-
-	record := decodeRecord(t, &buf)
-	if record["trace_id"] != "01000000000000000000000000000000" {
-		t.Fatalf("trace_id missing or wrong: %v", record)
-	}
-	if record["span_id"] != "0200000000000000" {
-		t.Fatalf("span_id missing or wrong: %v", record)
-	}
-}
-
-func TestNewSlogLeavesUntracedRecordsUnstamped(t *testing.T) {
-	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), true).Info("provisioning")
-
-	if _, ok := decodeRecord(t, &buf)["trace_id"]; ok {
-		t.Fatal("a record emitted outside a span must not carry a trace id")
-	}
-}
-
-// slog attaches no stack trace; zapslog would attach one to every Error record,
-// which multiplies the size of the error lines a busy service emits.
-func TestNewSlogDoesNotAttachStacktraces(t *testing.T) {
-	var buf bytes.Buffer
-	NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false).Error("apply batch failed")
+	NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar()).Errorf("apply batch failed")
 
 	if _, ok := decodeRecord(t, &buf)["stacktrace"]; ok {
 		t.Fatalf("error records must not carry a stack trace: %s", buf.String())
@@ -147,7 +127,7 @@ func TestNewSlogDoesNotAttachStacktraces(t *testing.T) {
 // without zapcore.Lock.
 func TestNewZapLoggerSerialisesConcurrentWrites(t *testing.T) {
 	var buf bytes.Buffer
-	logger := NewSlog(NewZapLogger(&buf, zapcore.InfoLevel, true), false)
+	logger := NewZap(NewZapLogger(&buf, zapcore.InfoLevel, true).Sugar())
 
 	const writers, perWriter = 8, 50
 	var wg sync.WaitGroup
@@ -156,7 +136,7 @@ func TestNewZapLoggerSerialisesConcurrentWrites(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range perWriter {
-				logger.Info("batch applied", "writer", i)
+				logger.WithField("writer", i).Infof("batch applied")
 			}
 		}()
 	}

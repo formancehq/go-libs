@@ -28,7 +28,6 @@ otel  := otelTracesExporter != ""                            // a traces exporte
 
 z := logging.NewZapLogger(os.Stderr, level, json)            // the one logger
 
-slogLogger := logging.NewSlog(z, otel)                       // *slog.Logger
 appLogger  := logging.NewZapWithTraces(z.Sugar())            // Logger, correlated
 ctrlLogger := logging.NewLogr(z)                             // logr.Logger
 ```
@@ -56,7 +55,7 @@ one per interface.
 | `NewDefaultLogger(w, debug, json, otel)` | logrus | what `pkg/service` gives a service that has not migrated |
 
 The zap stack emits the record above and is the direction: it is what this
-package builds on, and only it offers the slog and logr interfaces. The logrus
+package builds on, and only it offers the logr interface. The logrus
 stack keeps its own shape unless a caller opts in — see Compatibility below.
 
 ### Adapters over one `*zap.Logger`
@@ -64,14 +63,12 @@ stack keeps its own shape unless a caller opts in — see Compatibility below.
 | Interface | Constructor | Consumers |
 | --- | --- | --- |
 | `Logger` | `NewZap(z.Sugar())` | lifecycle, existing consumers |
-| `Logger` | `NewSlogLogger(NewSlog(z))` | same, but trace-correlated |
-| `*slog.Logger` | `NewSlog(z, otelTraces)` | standard-library call sites |
+| `Logger` | `NewZapWithTraces(z.Sugar())` | same, but trace-correlated |
 | `logr.Logger` | `NewLogr(z)` | controller-runtime, klog |
 
-Prefer `NewZap` when starting from the `*zap.Logger`: it keeps the custom trace
-level, which the slog path cannot — `zapslog` clamps every slog level below Info
-to Debug, so a `Trace` record arrives at `Debug`. `NewSlogLogger` is for code
-that already holds an `*slog.Logger`.
+`Logger` is the interface to write application code against. It carries the
+custom `Trace` level, which nothing above `Debug` in the standard hierarchy can
+express.
 
 ## Trace correlation
 
@@ -86,7 +83,6 @@ correlates a record with nothing.
 | `NewDefaultLogger(w, debug, json, otelTraces)` | when `otelTraces` is set |
 | `NewZap(sugar)` | no — `WithContext` returns the receiver |
 | `NewZapWithTraces(sugar)` | yes |
-| `NewSlog(z, otelTraces)` | when `otelTraces` is set |
 
 `NewZapWithTraces` belongs at the same place in a service's wiring as the
 logrus hook: alongside a configured traces exporter, on the same condition.
@@ -102,14 +98,17 @@ has a traces exporter configured, which `pkg/service` derives from
 
 ```go
 otelTraces, _ := cmd.Flags().GetString(otlptraces.OtelTracesExporterFlag)
-logger := logging.NewSlog(z, otelTraces != "")   // as NewDefaultLogger takes it
+
+sugar := z.Sugar()
+logger := logging.NewZap(sugar)
+if otelTraces != "" {
+	logger = logging.NewZapWithTraces(sugar)
+}
 ```
 
-`NewSlog` takes it as a parameter rather than offering a correlated and an
-uncorrelated constructor, so a call site cannot pick the wrong one by accident.
-`NewZap` keeps its signature — it predates this — so `NewZapWithTraces` is its
-opt-in form. `TraceHandler` stays exported for a caller composing its own
-handler chain.
+`NewZap` keeps its signature — it predates this — so `NewZapWithTraces` is the
+opt-in form rather than a parameter on `NewZap`, which would have been a
+breaking change for every existing caller.
 
 Both stamp on a **valid span context**, which includes one propagated from
 another service. The logrus hook stamps only for a **recording** span, so a
@@ -178,15 +177,16 @@ so the record's own value is not shadowed. `logrus`'s default did it for
 does, and a field named `logger` gains the same protection.
 
 The escaping lives in a `zapcore.Core`, so it applies to **every** façade over a
-logger — `NewSlog`, `NewLogr`, `NewZap` and any direct zap use — rather than to
-whichever adapter implemented it. `NewSlog` additionally escapes `trace_id` and
+logger — `NewLogr`, `NewZap` and any direct zap use — rather than to whichever
+adapter implemented it. `NewZapWithTraces` additionally escapes `trace_id` and
 `span_id`, since it is what injects them; it does so whether or not a span is
 active, so a field's path does not depend on whether the request was traced.
 
 A field carrying both a reserved key and its escaped form (`msg` and
 `fields.msg`) resolves in favour of the reserved one, deterministically, on
-every path. Attributes inside a `WithGroup` are namespaced and keep their own
-names.
+every path. Attributes under a `zap.Namespace` are nested and keep their own
+names — they cannot collide with a key at the record root, so they are not
+escaped.
 
 ### Text — unified too
 
@@ -214,9 +214,9 @@ their layout, so the two stacks *encode* through one encoder: level spelling,
 timestamp precision, field escaping and value conversion cannot drift apart.
 The tests assert on the rendered bytes of both stacks, in both formats.
 
-**Field order is not guaranteed between the two.** It follows the source. slog
-and zap carry a call order and keep it, so `Info("x", "b", 2, "a", 1)` renders
-`b` before `a`. logrus holds its fields in a map and has no order to preserve,
+**Field order is not guaranteed between the two.** It follows the source. zap
+carries a call order and keeps it, so `WithField("b", 2).WithField("a", 1)`
+renders `b` before `a`. logrus holds its fields in a map and has no order to preserve,
 so the shared formatter sorts them to stay deterministic across runs. The two
 therefore agree only when the call order happens to be the sorted one.
 
