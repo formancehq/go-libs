@@ -49,8 +49,11 @@ func TestSharedFormattersMatchTheZapStackByteForByte(t *testing.T) {
 			sharedLogrus(&fromLogrus, InfoLevel, tc.formatter).
 				WithFields(map[string]any{"addr": ":8080", "auth": true}).Infof("listening")
 
-			NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, tc.json), false).
-				Info("listening", "addr", ":8080", "auth", true)
+			// Chained WithField rather than a map: the formatter sorts its keys,
+			// and Go's map iteration would not, so the two stacks would only
+			// agree by luck.
+			NewZap(NewZapLogger(&fromZap, zapcore.InfoLevel, tc.json).Sugar()).
+				WithField("addr", ":8080").WithField("auth", true).Infof("listening")
 
 			if normalise(fromLogrus.String()) != normalise(fromZap.String()) {
 				t.Fatalf("the two stacks diverge:\n logrus: %s\n    zap: %s", fromLogrus.String(), fromZap.String())
@@ -67,13 +70,13 @@ func TestSharedFormattersMatchTheZapStackAtEveryLevel(t *testing.T) {
 		zap   func(*bytes.Buffer)
 	}{
 		{DebugLevel, func(l Logger) { l.Debugf("x") }, func(b *bytes.Buffer) {
-			NewSlog(NewZapLogger(b, zapcore.DebugLevel, true), false).Debug("x")
+			NewZap(NewZapLogger(b, zapcore.DebugLevel, true).Sugar()).Debugf("x")
 		}},
 		{InfoLevel, func(l Logger) { l.Infof("x") }, func(b *bytes.Buffer) {
-			NewSlog(NewZapLogger(b, zapcore.InfoLevel, true), false).Info("x")
+			NewZap(NewZapLogger(b, zapcore.InfoLevel, true).Sugar()).Infof("x")
 		}},
 		{ErrorLevel, func(l Logger) { l.Errorf("x") }, func(b *bytes.Buffer) {
-			NewSlog(NewZapLogger(b, zapcore.ErrorLevel, true), false).Error("x")
+			NewZap(NewZapLogger(b, zapcore.ErrorLevel, true).Sugar()).Errorf("x")
 		}},
 	} {
 		var fromLogrus, fromZap bytes.Buffer
@@ -222,7 +225,7 @@ func TestSharedFormatterValueConversionsMatchTheZapStack(t *testing.T) {
 
 			sharedLogrus(&fromLogrus, InfoLevel, NewSharedJSONFormatter()).
 				WithField("v", tc.value).Infof("x")
-			NewSlog(NewZapLogger(&fromZap, zapcore.InfoLevel, true), false).Info("x", "v", tc.value)
+			NewZap(NewZapLogger(&fromZap, zapcore.InfoLevel, true).Sugar()).WithField("v", tc.value).Infof("x")
 
 			if normalise(fromLogrus.String()) != normalise(fromZap.String()) {
 				t.Fatalf("the stacks render this value differently:\n logrus: %s\n    zap: %s",

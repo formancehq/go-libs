@@ -18,15 +18,15 @@ func TestLogrVerboseLevelRendersAsTrace(t *testing.T) {
 	}
 }
 
-func TestLogrRendersTheSameShapeAsSlog(t *testing.T) {
-	var logrBuf, slogBuf bytes.Buffer
+func TestLogrRendersTheSameShapeAsTheLoggerFacade(t *testing.T) {
+	var logrBuf, zapBuf bytes.Buffer
 	NewLogr(NewZapLogger(&logrBuf, zapcore.InfoLevel, true)).Info("starting manager")
-	NewSlog(NewZapLogger(&slogBuf, zapcore.InfoLevel, true), false).Info("starting manager")
+	NewZap(NewZapLogger(&zapBuf, zapcore.InfoLevel, true).Sugar()).Infof("starting manager")
 
-	fromLogr, fromSlog := decodeRecord(t, &logrBuf), decodeRecord(t, &slogBuf)
+	fromLogr, fromZap := decodeRecord(t, &logrBuf), decodeRecord(t, &zapBuf)
 	for _, key := range []string{"level", "msg"} {
-		if fromLogr[key] != fromSlog[key] {
-			t.Fatalf("%q differs between the logr and slog adapters: %v vs %v", key, fromLogr, fromSlog)
+		if fromLogr[key] != fromZap[key] {
+			t.Fatalf("%q differs between the logr and Logger adapters: %v vs %v", key, fromLogr, fromZap)
 		}
 	}
 	if _, ok := fromLogr["time"]; !ok {

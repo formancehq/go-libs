@@ -80,8 +80,8 @@ func encodeZapLevel(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 // console format otherwise.
 //
 // Expose the result through the adapters in this package rather than building a
-// second logger: NewZap for this package's Logger, NewSlog for slog call sites,
-// NewLogr for controller-runtime and klog. All of them write through this core,
+// second logger: NewZap for this package's Logger, NewLogr for
+// controller-runtime and klog. All of them write through this core,
 // so the choice of interface stays invisible in the output.
 func NewZapLogger(w io.Writer, level zapcore.Level, jsonFormatting bool) *zap.Logger {
 	cfg := ZapEncoderConfig()
@@ -100,8 +100,8 @@ func NewZapLogger(w io.Writer, level zapcore.Level, jsonFormatting bool) *zap.Lo
 	// any io.Writer -- a bytes.Buffer in tests, a bufio.Writer in a caller --
 	// none of which tolerate concurrent writes from several goroutines.
 	// The renaming lives in a core rather than in one adapter, so it covers
-	// every façade over this logger -- NewSlog, NewLogr, NewZap and any direct
-	// zap use -- instead of whichever one remembered to apply it.
+	// every façade over this logger -- NewZap, NewLogr and any direct zap use --
+	// instead of whichever one remembered to apply it.
 	core := zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(w)), level)
 
 	return zap.New(&reservedFieldCore{Core: core})
@@ -157,7 +157,7 @@ func (c *reservedFieldCore) With(fields []zapcore.Field) zapcore.Core {
 	}
 
 	// Fields reaching With are always application fields: the correlation ids
-	// TraceHandler stamps arrive on the record, through Write. So this is the
+	// a correlating ZapLogger stamps arrive on the record, through Write. So this is the
 	// one place where trace_id and span_id can be escaped without risking the
 	// stamped pair.
 	renamed := renameReserved(fields, escapeScoped)
@@ -207,7 +207,7 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 	}
 
 	// Only the encoder's own keys here: the record may carry the correlation
-	// ids TraceHandler just stamped, and nothing at this level distinguishes
+	// ids a correlating logger just stamped, and nothing at this level distinguishes
 	// them from an application field of the same name.
 	out := renameReserved(fields, emittedFieldName)
 
@@ -225,6 +225,19 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 	}
 
 	return c.Core.Write(ent, out)
+}
+
+// escapeTraceKey renames an application field that would collide with the
+// correlation ids a trace-correlating logger stamps. It renames whether or not
+// a span is active, so a field's path does not depend on whether the request
+// happened to be traced.
+func escapeTraceKey(key string) string {
+	switch key {
+	case "trace_id", "span_id":
+		return "fields." + key
+	default:
+		return key
+	}
 }
 
 // escapeScoped escapes both the encoder's keys and the correlation ids, for
