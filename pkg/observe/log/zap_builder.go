@@ -117,6 +117,11 @@ func NewZapLogger(w io.Writer, level zapcore.Level, jsonFormatting bool) *zap.Lo
 // timestamp, or the logger name.
 var reservedKeys = [...]string{"level", "time", "msg", "logger"}
 
+// traceKeys are the correlation ids a correlating logger stamps. An
+// application field using one of them is escaped the same way a reserved key
+// is -- see escapeTraceKey.
+var traceKeys = [...]string{"trace_id", "span_id"}
+
 // emittedFieldName renames a field that would collide with one of those.
 //
 // logrus.JSONFormatter made the same substitution for level, time and msg, so
@@ -295,16 +300,15 @@ func (c *reservedFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) err
 // path depend on whether the service configured a traces exporter, and on
 // whether the request happened to be sampled.
 func escapeTraceKey(key string) string {
-	switch key {
-	case "trace_id", "span_id":
-		return "fields." + key
-	default:
-		return key
+	for _, id := range traceKeys {
+		if key == id {
+			return "fields." + key
+		}
 	}
+
+	return key
 }
 
-// escapeScoped escapes both the encoder's keys and the correlation ids, for
-// fields scoped ahead of the record.
 // scopedName is the escaping applied to a field scoped with With. Everything
 // reaching that path is an application field: the pair a correlating logger
 // stamps arrives on the record instead.
@@ -323,6 +327,8 @@ func recordName(f zapcore.Field) string {
 	return escapeScoped(f.Key)
 }
 
+// escapeScoped escapes both the encoder's keys and the correlation ids, for
+// fields scoped ahead of the record.
 func escapeScoped(key string) string {
 	if name := emittedFieldName(key); name != key {
 		return name

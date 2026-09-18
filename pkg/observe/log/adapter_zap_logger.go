@@ -155,8 +155,12 @@ func (z *ZapLogger) emit(level zapcore.Level, msg string) {
 }
 
 // correlation returns the ids of the span carried by this logger's context, or
-// nothing when there is no context or no valid span in it -- an unsampled or
-// untraced record gains no fields.
+// nothing when there is no context or no valid span in it.
+//
+// Valid, not recording: a span propagated from another service, or one sampled
+// out, still carries real ids and is stamped. That is deliberate and differs
+// from the logrus hook, which stamps only for a recording span -- see
+// docs/LOGGING.md, where the divergence is recorded as an open decision.
 func (z *ZapLogger) correlation() []zap.Field {
 	if !z.correlate || z.ctx == nil {
 		return nil

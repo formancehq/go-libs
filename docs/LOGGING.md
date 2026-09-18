@@ -273,3 +273,9 @@ still has to round it.
 
 `ZapLevelFromFlags(logLevel, debug)` clamps the level to at least Debug when
 `--debug` is set, matching what the default logger does with that flag.
+
+**An unrecognised or empty value falls back to Info, silently.** A mistyped
+`--log-level=erro` therefore changes verbosity without saying so. That is the
+deliberate trade — a typo in a log knob should not crash-loop a pod — but it is
+worth knowing when a level does not take effect. `ParseLevel` returns an error
+instead, for a caller that would rather refuse to start.

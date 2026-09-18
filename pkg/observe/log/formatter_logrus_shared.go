@@ -69,10 +69,13 @@ func (f *sharedFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 // entryFields converts logrus's field map into zap fields, renaming the ones
 // that would collide with a key the encoder writes itself and ordering them so
 // a record renders the same way twice.
-// sharedEscapableKeys is every key the zap stack escapes: the encoder's own,
-// plus the correlation ids. Built once -- entryFields runs on every record
-// carrying a field.
-var sharedEscapableKeys = append(append([]string{}, reservedKeys[:]...), "trace_id", "span_id")
+// sharedEscapableKeys is every key the zap stack escapes, derived from the two
+// lists that stack uses rather than restated here: a key added to either must
+// change both stacks at once, or a field's emitted path would differ between
+// them -- the one property these formatters exist to guarantee.
+//
+// Built once: entryFields runs on every record carrying a field.
+var sharedEscapableKeys = append(append([]string{}, reservedKeys[:]...), traceKeys[:]...)
 
 func entryFields(entry *logrus.Entry) []zapcore.Field {
 	if len(entry.Data) == 0 {
