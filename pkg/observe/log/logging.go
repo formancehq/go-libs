@@ -86,6 +86,9 @@ func Debugf(format string, args ...any) {
 func Infof(format string, args ...any) {
 	FromContext(context.TODO()).Infof(format, args...)
 }
+func Warnf(format string, args ...any) {
+	FromContext(context.TODO()).Warnf(format, args...)
+}
 func Errorf(format string, args ...any) {
 	FromContext(context.TODO()).Errorf(format, args...)
 }
@@ -97,6 +100,9 @@ func Debug(args ...any) {
 }
 func Info(args ...any) {
 	FromContext(context.TODO()).Info(args...)
+}
+func Warn(args ...any) {
+	FromContext(context.TODO()).Warn(args...)
 }
 func Error(args ...any) {
 	FromContext(context.TODO()).Error(args...)
