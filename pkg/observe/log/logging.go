@@ -10,6 +10,9 @@ import (
 // Level represents a logging severity level. Lower values are more verbose.
 type Level int
 
+// There is deliberately no WarnLevel: Logger can emit warnings (see Warn), but
+// nothing gates on them. Callers checking Enabled for a warning should ask for
+// InfoLevel, which is what the slog adapter does (see fromSlogLevel).
 const (
 	TraceLevel Level = iota - 1 // -1, more verbose than Debug; reserved for per-event/per-request logs.
 	DebugLevel                  // 0
@@ -54,10 +57,23 @@ type Logger interface {
 	Tracef(fmt string, args ...any)
 	Debugf(fmt string, args ...any)
 	Infof(fmt string, args ...any)
+	// Warnf, like Warn, exists so adapters that receive a warning from an
+	// upstream API have somewhere correct to put it.
+	Warnf(fmt string, args ...any)
 	Errorf(fmt string, args ...any)
 	Trace(args ...any)
 	Debug(args ...any)
 	Info(args ...any)
+	// Warn emits a warning. Both bundled adapters already implemented
+	// Warn/Warnf before they were part of this interface — the omission was
+	// accidental — but until they were declared here, an adapter holding a
+	// Logger had nowhere correct to send a warning: routing it to Error turns
+	// every warning into an alert, and routing it to Info loses the severity.
+	// NewSlogHandler needs this to map slog.LevelWarn faithfully.
+	//
+	// Adding these is a breaking change for out-of-tree implementations of
+	// Logger, which must now provide Warn and Warnf.
+	Warn(args ...any)
 	Error(args ...any)
 	WithFields(map[string]any) Logger
 	WithField(key string, value any) Logger
@@ -81,6 +97,9 @@ func Debugf(format string, args ...any) {
 func Infof(format string, args ...any) {
 	FromContext(context.TODO()).Infof(format, args...)
 }
+func Warnf(format string, args ...any) {
+	FromContext(context.TODO()).Warnf(format, args...)
+}
 func Errorf(format string, args ...any) {
 	FromContext(context.TODO()).Errorf(format, args...)
 }
@@ -92,6 +111,9 @@ func Debug(args ...any) {
 }
 func Info(args ...any) {
 	FromContext(context.TODO()).Info(args...)
+}
+func Warn(args ...any) {
+	FromContext(context.TODO()).Warn(args...)
 }
 func Error(args ...any) {
 	FromContext(context.TODO()).Error(args...)
