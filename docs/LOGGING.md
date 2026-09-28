@@ -151,12 +151,12 @@ ordered keys, and text as `key="value"` pairs — because changing either would
 rewrite the output of every service that has not migrated. A test pins both
 against bare `logrus.JSONFormatter` and `logrus.TextFormatter`.
 
-**The `Logger` interface is unchanged.** Existing implementations still satisfy
-it. The concrete `ZapLogger` and logrus adapter retain their existing `Warn`
-and `Warnf` methods. Callers using the shared `Logger` interface choose `Info`
-or `Error` for warning conditions. The Temporal adapter maps its `Warn` callback
-to `Errorf`, so those callbacks now write `ERROR` records rather than `WARN`
-records.
+**The `Logger` interface has no `Warn` methods.** The concrete `ZapLogger` and
+logrus adapter retain `Warn` and `Warnf` for callers using those concrete types,
+but emit them at `ERROR` severity. Callers using the shared `Logger` interface
+choose `Error` for warning conditions. The Temporal adapter also maps its
+`Warn` callback to `Errorf`. Code calling the underlying `*zap.Logger` or
+`*logrus.Logger` directly still uses those libraries' native `WARN` severity.
 
 The shared shape is therefore reached by **moving to the zap stack**, one
 service at a time. A service that has to stay on logrus for now can opt into

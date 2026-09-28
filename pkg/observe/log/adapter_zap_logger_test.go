@@ -65,6 +65,20 @@ func TestZapLoggerTraceEmittedAtTraceLevel(t *testing.T) {
 	}
 }
 
+func TestZapLoggerWarnMethodsEmitError(t *testing.T) {
+	for _, emit := range []func(*ZapLogger){
+		func(l *ZapLogger) { l.Warn("warning") },
+		func(l *ZapLogger) { l.Warnf("warning %d", 1) },
+	} {
+		var buf bytes.Buffer
+		emit(NewZap(NewZapLogger(&buf, zapcore.ErrorLevel, true).Sugar()))
+
+		if got := decodeRecord(t, &buf)["level"]; got != "ERROR" {
+			t.Fatalf("level = %v, want ERROR", got)
+		}
+	}
+}
+
 func TestZapLoggerTraceSilentAtDebugLevel(t *testing.T) {
 	t.Parallel()
 

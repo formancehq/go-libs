@@ -121,7 +121,7 @@ func (z *ZapLogger) Debugf(format string, args ...any) {
 	z.logf(zapcore.DebugLevel, format, args...)
 }
 func (z *ZapLogger) Infof(format string, args ...any) { z.logf(zapcore.InfoLevel, format, args...) }
-func (z *ZapLogger) Warnf(format string, args ...any) { z.logf(zapcore.WarnLevel, format, args...) }
+func (z *ZapLogger) Warnf(format string, args ...any) { z.logf(zapcore.ErrorLevel, format, args...) }
 func (z *ZapLogger) Errorf(format string, args ...any) {
 	z.logf(zapcore.ErrorLevel, format, args...)
 }
@@ -129,7 +129,7 @@ func (z *ZapLogger) Errorf(format string, args ...any) {
 func (z *ZapLogger) Trace(args ...any) { z.log(zapTraceLevel, args...) }
 func (z *ZapLogger) Debug(args ...any) { z.log(zapcore.DebugLevel, args...) }
 func (z *ZapLogger) Info(args ...any)  { z.log(zapcore.InfoLevel, args...) }
-func (z *ZapLogger) Warn(args ...any)  { z.log(zapcore.WarnLevel, args...) }
+func (z *ZapLogger) Warn(args ...any)  { z.log(zapcore.ErrorLevel, args...) }
 func (z *ZapLogger) Error(args ...any) { z.log(zapcore.ErrorLevel, args...) }
 
 // logf and log emit the record, stamped with the active span's ids when the
