@@ -151,12 +151,16 @@ func hookStamped(entry *logrus.Entry, key string) bool {
 	if !span.IsRecording() {
 		return false
 	}
+	value, ok := entry.Data[key].(string)
+	if !ok {
+		return false
+	}
 
 	switch key {
 	case "trace_id":
-		return entry.Data[key] == span.SpanContext().TraceID().String()
+		return value == span.SpanContext().TraceID().String()
 	case "span_id":
-		return entry.Data[key] == span.SpanContext().SpanID().String()
+		return value == span.SpanContext().SpanID().String()
 	default:
 		return false
 	}

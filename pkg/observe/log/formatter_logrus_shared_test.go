@@ -356,3 +356,30 @@ func TestSharedFormatterLeavesHookStampedIdsAtTheRoot(t *testing.T) {
 		t.Fatalf("an application trace_id must still be escaped: %s", app.String())
 	}
 }
+
+func TestSharedFormatterEscapesNonStringTraceFieldsDuringRecordingSpan(t *testing.T) {
+	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "op")
+	defer span.End()
+
+	var buf bytes.Buffer
+	sharedLogrus(&buf, InfoLevel, NewSharedJSONFormatter()).
+		WithContext(ctx).
+		WithFields(map[string]any{
+			"trace_id": []string{"application trace"},
+			"span_id":  map[string]string{"source": "application"},
+		}).Infof("x")
+
+	record := decodeRecord(t, &buf)
+	if _, ok := record["trace_id"]; ok {
+		t.Fatalf("application trace_id must not be stamped at the root: %v", record)
+	}
+	if _, ok := record["span_id"]; ok {
+		t.Fatalf("application span_id must not be stamped at the root: %v", record)
+	}
+	if got, ok := record["fields.trace_id"].([]any); !ok || len(got) != 1 || got[0] != "application trace" {
+		t.Fatalf("application trace_id lost: %v", record)
+	}
+	if got, ok := record["fields.span_id"].(map[string]any); !ok || got["source"] != "application" {
+		t.Fatalf("application span_id lost: %v", record)
+	}
+}
