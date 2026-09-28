@@ -29,7 +29,7 @@ func (l logger) Info(msg string, keyvals ...interface{}) {
 }
 
 func (l logger) Warn(msg string, keyvals ...interface{}) {
-	l.logger.WithFields(keyvalsToMap(keyvals...)).Warnf("%s", msg)
+	l.logger.WithFields(keyvalsToMap(keyvals...)).Errorf("%s", msg)
 }
 
 func (l logger) Error(msg string, keyvals ...interface{}) {
