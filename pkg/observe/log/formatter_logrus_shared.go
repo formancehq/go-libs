@@ -139,16 +139,15 @@ func entryFields(entry *logrus.Entry) []zapcore.Field {
 // SetHooks would emit its correlation under a different key from every zap
 // service -- the identity these formatters exist to provide.
 //
-// logrus carries no marker, but the hook's own condition is reproducible: it
-// stamps from the recording span on entry.Context, so an id equal to that
-// span's is the hook's.
+// The hook marks the entry's context after stamping. Comparing only the value
+// to the span ID would mistake a matching application string for a hook stamp.
 func hookStamped(entry *logrus.Entry, key string) bool {
-	if entry.Context == nil {
+	if entry.Context == nil || entry.Context.Value(traceHookStampKey{}) != true {
 		return false
 	}
 
 	span := trace.SpanFromContext(entry.Context)
-	if !span.IsRecording() {
+	if !span.SpanContext().IsValid() {
 		return false
 	}
 	value, ok := entry.Data[key].(string)

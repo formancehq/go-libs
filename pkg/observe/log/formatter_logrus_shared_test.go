@@ -383,3 +383,42 @@ func TestSharedFormatterEscapesNonStringTraceFieldsDuringRecordingSpan(t *testin
 		t.Fatalf("application span_id lost: %v", record)
 	}
 }
+
+func TestSharedFormatterDoesNotMistakeMatchingApplicationIDForHookStamp(t *testing.T) {
+	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "op")
+	defer span.End()
+
+	var buf bytes.Buffer
+	sharedLogrus(&buf, InfoLevel, NewSharedJSONFormatter()).
+		WithContext(ctx).
+		WithField("trace_id", span.SpanContext().TraceID().String()).
+		Info("x")
+
+	record := decodeRecord(t, &buf)
+	if _, ok := record["trace_id"]; ok {
+		t.Fatalf("application trace_id must not be treated as a hook stamp: %v", record)
+	}
+	if got := record["fields.trace_id"]; got != span.SpanContext().TraceID().String() {
+		t.Fatalf("application trace_id lost: %v", record)
+	}
+}
+
+func TestSharedFormatterPreservesLiteralBesideHookStampedID(t *testing.T) {
+	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "op")
+	defer span.End()
+
+	var buf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&buf)
+	l.SetFormatter(NewSharedJSONFormatter())
+	l.AddHook(NewTraceHook())
+	l.WithContext(ctx).WithField("fields.trace_id", "application").Info("x")
+
+	record := decodeRecord(t, &buf)
+	if got := record["trace_id"]; got != span.SpanContext().TraceID().String() {
+		t.Fatalf("hook stamp lost: %v", record)
+	}
+	if got := record["fields.trace_id"]; got != "application" {
+		t.Fatalf("literal field lost: %v", record)
+	}
+}

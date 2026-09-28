@@ -226,6 +226,12 @@ application field using the same key — without that marker the core would have
 to escape both, losing the correlation, or neither, letting an application
 field shadow the span.
 
+The logrus trace hook marks the entry when it stamps the pair. A matching
+application string in a recording span is still escaped if the hook did not
+run. When the hook did run, a literal `fields.trace_id` remains alongside the
+root `trace_id`; without a hook stamp, an application `trace_id` takes the
+`fields.trace_id` slot if both names were supplied.
+
 **A namespace swallows the correlation.** If a caller opens a `zap.Namespace`
 on the underlying logger, everything written afterwards nests under it — the
 stamped pair included, so the record carries `request.trace_id` rather than a
