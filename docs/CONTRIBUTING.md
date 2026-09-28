@@ -3,6 +3,10 @@
 ## Before you start
 
 Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the project structure and rules.
+[LOGGING.md](./LOGGING.md) covers the two logger stacks, the record shape the
+zap stack emits, and what changes for a service moving onto it — `pkg/service`
+still builds the logrus logger, which keeps its own shape until a service
+migrates or opts in.
 
 ## Dependency rules checklist
 

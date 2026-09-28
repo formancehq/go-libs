@@ -1,6 +1,8 @@
 package logging
 
 import (
+	"context"
+
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -8,6 +10,10 @@ import (
 var _ logrus.Hook = (*traceHook)(nil)
 
 type traceHook struct{}
+
+// traceHookStampKey marks the entry whose ids this hook stamped. A matching
+// application string is not evidence that the hook ran.
+type traceHookStampKey struct{}
 
 // Fire implements logrus.Hook.
 func (h *traceHook) Fire(entry *logrus.Entry) error {
@@ -23,6 +29,7 @@ func (h *traceHook) Fire(entry *logrus.Entry) error {
 
 	entry.Data["trace_id"] = span.SpanContext().TraceID().String()
 	entry.Data["span_id"] = span.SpanContext().SpanID().String()
+	entry.Context = context.WithValue(ctx, traceHookStampKey{}, true)
 	return nil
 
 }

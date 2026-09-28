@@ -25,7 +25,7 @@ func TestKeyvalsToMapHandlesOddAndNonStringKeys(t *testing.T) {
 	}, got)
 }
 
-func TestLoggerWarnUsesWarnLevel(t *testing.T) {
+func TestLoggerWarnUsesErrorLevel(t *testing.T) {
 	t.Parallel()
 
 	recorder := newRecordingLogger()
@@ -34,7 +34,7 @@ func TestLoggerWarnUsesWarnLevel(t *testing.T) {
 
 	require.Len(t, recorder.state.entries, 1)
 	require.Equal(t, recordedLogEntry{
-		level:  "warn",
+		level:  "error",
 		msg:    "temporal warning",
 		fields: map[string]any{"attempt": 3},
 	}, recorder.state.entries[0])
@@ -54,7 +54,7 @@ func TestLoggerPreservesPercentSignsInMessages(t *testing.T) {
 	require.Equal(t, []recordedLogEntry{
 		{level: "debug", msg: "debug 100% done", fields: map[string]any{}},
 		{level: "info", msg: "info 100% done", fields: map[string]any{}},
-		{level: "warn", msg: "warn 100% done", fields: map[string]any{}},
+		{level: "error", msg: "warn 100% done", fields: map[string]any{}},
 		{level: "error", msg: "error 100% done", fields: map[string]any{}},
 	}, recorder.state.entries)
 }
@@ -91,10 +91,6 @@ func (l *recordingLogger) Debugf(format string, args ...any) {
 
 func (l *recordingLogger) Infof(format string, args ...any) {
 	l.record("info", fmt.Sprintf(format, args...))
-}
-
-func (l *recordingLogger) Warnf(format string, args ...any) {
-	l.record("warn", fmt.Sprintf(format, args...))
 }
 
 func (l *recordingLogger) Errorf(format string, args ...any) {

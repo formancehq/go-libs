@@ -17,8 +17,6 @@ type LogrusLogger struct {
 		Debug(args ...any)
 		Infof(format string, args ...any)
 		Info(args ...any)
-		Warnf(format string, args ...any)
-		Warn(args ...any)
 		Errorf(format string, args ...any)
 		Error(args ...any)
 		WithFields(fields logrus.Fields) *logrus.Entry
@@ -59,10 +57,10 @@ func (l *LogrusLogger) Info(args ...any) {
 	l.entry.Info(args...)
 }
 func (l *LogrusLogger) Warnf(fmt string, args ...any) {
-	l.entry.Warnf(fmt, args...)
+	l.entry.Errorf(fmt, args...)
 }
 func (l *LogrusLogger) Warn(args ...any) {
-	l.entry.Warn(args...)
+	l.entry.Error(args...)
 }
 func (l *LogrusLogger) Errorf(fmt string, args ...any) {
 	l.entry.Errorf(fmt, args...)
@@ -155,8 +153,11 @@ func NewDefaultLoggerWithLevel(
 
 	var formatter logrus.Formatter
 	if formatJSON {
-		jsonFormatter := &logrus.JSONFormatter{}
-		formatter = jsonFormatter
+		// logrus's own shape, deliberately: changing it here would rewrite the
+		// records of every service that has not migrated. A service that wants
+		// the shared shape opts in with NewSharedJSONFormatter, or moves to the
+		// zap stack.
+		formatter = &logrus.JSONFormatter{}
 	} else {
 		textFormatter := new(logrus.TextFormatter)
 		textFormatter.FullTimestamp = true
