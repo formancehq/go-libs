@@ -185,3 +185,29 @@ All packages comply with the FX isolation rule. The only exception is
 
 The module path is `github.com/formancehq/go-libs/v5`.
 This is a breaking change from v4 to enforce the new structure.
+
+## Service shutdown budget
+
+`service.App.Run` applies `--total-stop-timeout` to the complete Fx stop
+operation. Every `OnStop` hook receives the same deadline, including the
+`--grace-period` hook. Shutdown uses a fresh context so cancellation of the
+command context does not cancel cleanup immediately; logger and lifecycle
+context values are preserved.
+
+The default total budget is 25 seconds. This accommodates the standard
+five-second routing grace period while leaving up to 20 seconds for ordered
+cleanup across all hooks and five seconds for the process to exit before
+Kubernetes' default 30-second termination window expires. Deployments with a
+different supervisor window must keep it longer than the application budget.
+In particular, the Formance operator gives liveness-probe failures a 10-second
+termination grace period, so the process may be killed before the default
+25-second application budget expires on that path.
+
+Set `--total-stop-timeout=0` to disable the deadline and allow all stop hooks to
+run without a total time limit.
+
+If the budget expires, `Run` returns a shutdown error. Cleanup may be incomplete:
+Fx can return before a hook that ignores context cancellation has finished.
+Callers must handle the error and separately bound any cleanup they perform
+after `Run` returns. Consumers upgrading from an unbounded runner should size
+their total timeout to include the grace period and all stop hooks.
