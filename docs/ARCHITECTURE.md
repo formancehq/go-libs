@@ -199,6 +199,12 @@ five-second routing grace period while leaving up to 20 seconds for ordered
 cleanup across all hooks and five seconds for the process to exit before
 Kubernetes' default 30-second termination window expires. Deployments with a
 different supervisor window must keep it longer than the application budget.
+In particular, the Formance operator gives liveness-probe failures a 10-second
+termination grace period, so the process may be killed before the default
+25-second application budget expires on that path.
+
+Set `--total-stop-timeout=0` to disable the deadline and allow all stop hooks to
+run without a total time limit.
 
 If the budget expires, `Run` returns a shutdown error. Cleanup may be incomplete:
 Fx can return before a hook that ignores context cancellation has finished.

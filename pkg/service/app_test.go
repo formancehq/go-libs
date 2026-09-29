@@ -3,6 +3,7 @@ package service_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -104,6 +105,51 @@ func TestRunCompletesCooperativeStop(t *testing.T) {
 	default:
 		t.Fatal("lifecycle did not report stopped")
 	}
+}
+
+func TestRunWithZeroTimeoutDoesNotBoundStop(t *testing.T) {
+	t.Parallel()
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	service.AddFlags(cmd.Flags())
+	require.NoError(t, cmd.Flags().Set(service.TotalStopTimeoutFlag, "0"))
+	stopContext := make(chan context.Context, 1)
+	app := service.NewWithLogger(logging.Testing(), fx.Invoke(func(lc fx.Lifecycle, shutdowner fx.Shutdowner) {
+		lc.Append(fx.Hook{
+			OnStart: func(context.Context) error { return shutdowner.Shutdown() },
+			OnStop: func(ctx context.Context) error {
+				stopContext <- ctx
+				return nil
+			},
+		})
+	}))
+
+	require.NoError(t, app.Run(cmd))
+	select {
+	case ctx := <-stopContext:
+		_, bounded := ctx.Deadline()
+		require.False(t, bounded)
+	default:
+		t.Fatal("stop hook did not run")
+	}
+}
+
+func TestRunPreservesStopHookError(t *testing.T) {
+	t.Parallel()
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	service.AddFlags(cmd.Flags())
+	stopErr := errors.New("connection refused")
+	app := service.NewWithLogger(logging.Testing(), fx.Invoke(func(lc fx.Lifecycle, shutdowner fx.Shutdowner) {
+		lc.Append(fx.Hook{
+			OnStart: func(context.Context) error { return shutdowner.Shutdown() },
+			OnStop:  func(context.Context) error { return stopErr },
+		})
+	}))
+
+	err := app.Run(cmd)
+	require.ErrorIs(t, err, stopErr)
+	require.Equal(t, stopErr.Error(), err.Error())
 }
 
 func TestRunGracePeriodConsumesStopBudget(t *testing.T) {

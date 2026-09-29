@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -91,14 +92,21 @@ func (a *App) Run(cmd *cobra.Command) error {
 
 	// App.Stop does not apply StopTimeout itself. Use a fresh context so
 	// cancellation of the command does not prevent graceful cleanup.
-	stopCtx, cancel := context.WithTimeout(context.Background(), app.StopTimeout())
+	stopCtx := context.Background()
+	cancel := func() {}
+	if app.StopTimeout() > 0 {
+		stopCtx, cancel = context.WithTimeout(stopCtx, app.StopTimeout())
+	}
 	defer cancel()
 
 	if err := app.Stop(logging.ContextWithLogger(contextWithLifecycle(
 		stopCtx,
 		lifecycleFromContext(cmd.Context()),
 	), a.logger)); err != nil {
-		return fmt.Errorf("stopping application within %s: %w", app.StopTimeout(), err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("stopping application within %s: %w", app.StopTimeout(), err)
+		}
+		return err
 	}
 
 	if exitCode != 0 {
