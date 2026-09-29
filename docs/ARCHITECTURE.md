@@ -194,6 +194,12 @@ operation. Every `OnStop` hook receives the same deadline, including the
 command context does not cancel cleanup immediately; logger and lifecycle
 context values are preserved.
 
+The default total budget is 25 seconds. This accommodates the standard
+five-second routing grace period while leaving up to 20 seconds for ordered
+cleanup across all hooks and five seconds for the process to exit before
+Kubernetes' default 30-second termination window expires. Deployments with a
+different supervisor window must keep it longer than the application budget.
+
 If the budget expires, `Run` returns a shutdown error. Cleanup may be incomplete:
 Fx can return before a hook that ignores context cancellation has finished.
 Callers must handle the error and separately bound any cleanup they perform

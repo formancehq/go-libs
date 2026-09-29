@@ -52,9 +52,20 @@ func TestRunBoundsStop(t *testing.T) {
 	select {
 	case err := <-result:
 		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorContains(t, err, "stopping application within 100ms")
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run exceeded its shutdown allowance")
 	}
+}
+
+func TestTotalStopTimeoutDefaultsToTwentyFiveSeconds(t *testing.T) {
+	t.Parallel()
+	cmd := &cobra.Command{}
+	service.AddFlags(cmd.Flags())
+
+	totalStopTimeout, err := cmd.Flags().GetDuration(service.TotalStopTimeoutFlag)
+	require.NoError(t, err)
+	require.Equal(t, 25*time.Second, totalStopTimeout)
 }
 
 func TestRunCompletesCooperativeStop(t *testing.T) {

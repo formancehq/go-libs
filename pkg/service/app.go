@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -20,6 +21,10 @@ const (
 	DebugFlag                   = "debug"
 	GracePeriodBeforeOnStopFlag = "grace-period" // Keeping the same flag value for retro compatibility
 	TotalStopTimeoutFlag        = "total-stop-timeout"
+	// The default allows the standard five-second routing grace period, up to
+	// 20 seconds for ordered cleanup, and five seconds for the process to exit
+	// before Kubernetes' default 30-second termination window expires.
+	defaultTotalStopTimeout = 25 * time.Second
 )
 
 func AddFlags(flags *pflag.FlagSet) {
@@ -27,7 +32,7 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.Bool(logging.JsonFormattingLoggerFlag, false, "Format logs as json")
 	flags.Duration(GracePeriodBeforeOnStopFlag, 0, "Grace period before triggering onStop hooks (e.g. to give time for"+
 		" k8s to stop sending requests to the app before turning down the http server")
-	flags.Duration(TotalStopTimeoutFlag, fx.DefaultTimeout, "Total time allowed for all OnStop hooks to complete (see https://pkg.go.dev/go.uber.org/fx#StopTimeout)")
+	flags.Duration(TotalStopTimeoutFlag, defaultTotalStopTimeout, "Total time allowed for all OnStop hooks to complete (see https://pkg.go.dev/go.uber.org/fx#StopTimeout)")
 }
 
 type App struct {
@@ -93,7 +98,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 		stopCtx,
 		lifecycleFromContext(cmd.Context()),
 	), a.logger)); err != nil {
-		return err
+		return fmt.Errorf("stopping application within %s: %w", app.StopTimeout(), err)
 	}
 
 	if exitCode != 0 {
