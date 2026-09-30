@@ -5,13 +5,25 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	errorsutils "github.com/formancehq/go-libs/v5/pkg/errors"
 )
 
+// Execute runs cmd and exits the process when it fails: with the exit code
+// the error carries (see errors.NewErrorWithExitCode), 1 otherwise.
 func Execute(cmd *cobra.Command) {
 	bindEnvForExecute(cmd)
 	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
+}
+
+func exitCode(err error) int {
+	if code, ok := errorsutils.ExitCodeFromError(err); ok {
+		return code
+	}
+
+	return 1
 }
 
 // bindEnvForExecute preserves the existing early environment binding so Cobra

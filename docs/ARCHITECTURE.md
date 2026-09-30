@@ -188,6 +188,16 @@ All packages comply with the FX isolation rule. The only exception is
 The module path is `github.com/formancehq/go-libs/v5`.
 This is a breaking change from v4 to enforce the new structure.
 
+## Exit codes
+
+`service.App.Run` never exits the process. An error carrying an exit code
+(`errors.NewErrorWithExitCode`), whether returned by a constructor or an
+`OnStart` hook or requested through `fx.Shutdowner` with `fx.ExitCode`
+(`service.ErrShutdownExitCode`), comes back from `Run` with the code intact.
+`service.Execute` exits with that code, and with 1 for any other error.
+A service calling `cmd.Execute` itself must do the same, for example with
+`errors.ExitCodeFromError`, to keep its exit codes.
+
 ## Service shutdown budget
 
 `service.App.Run` applies `--total-stop-timeout` to the complete Fx stop

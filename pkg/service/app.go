@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -36,6 +35,10 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.Duration(TotalStopTimeoutFlag, defaultTotalStopTimeout, "Total time allowed for all OnStop hooks to complete (see https://pkg.go.dev/go.uber.org/fx#StopTimeout)")
 }
 
+// ErrShutdownExitCode is returned by Run, carrying the exit code, when the
+// application was shut down through fx.Shutdowner with a non-zero fx.ExitCode.
+var ErrShutdownExitCode = errors.New("application shut down with a non-zero exit code")
+
 type App struct {
 	options []fx.Option
 	output  io.Writer
@@ -61,19 +64,16 @@ func (a *App) Run(cmd *cobra.Command) error {
 
 	app := a.newFxApp(a.logger, gracePeriod, totalStopTimeout)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), a.logger)); err != nil {
-		switch exitCode, hasExitCode := errorsutils.ExitCodeFromError(err); {
-		case hasExitCode:
-			a.logger.Errorf("Error: %v", err)
-			// We want to have a specific exit code for the error
-			os.Exit(exitCode)
-		default:
-			// Return complete error if we are debugging
-			// While polluting the output most of the time, it sometimes gives some precious information
-			if IsDebug(cmd) {
-				return err
-			}
-			return dig.RootCause(err)
+		// An exit code carried by err survives both returns: Execute exits with
+		// it. Run itself never exits, so a caller with its own Execute can
+		// still render, redact or classify the error first.
+		//
+		// Return complete error if we are debugging
+		// While polluting the output most of the time, it sometimes gives some precious information
+		if IsDebug(cmd) {
+			return err
 		}
+		return dig.RootCause(err)
 	}
 
 	var exitCode int
@@ -110,7 +110,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 	}
 
 	if exitCode != 0 {
-		os.Exit(exitCode)
+		return errorsutils.NewErrorWithExitCode(ErrShutdownExitCode, exitCode)
 	}
 
 	return nil

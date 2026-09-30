@@ -1,10 +1,14 @@
 package service
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+
+	errorsutils "github.com/formancehq/go-libs/v5/pkg/errors"
 )
 
 func TestBindEnvBeforeRunRejectsMalformedSelectedEnvironment(t *testing.T) {
@@ -98,4 +102,10 @@ func TestBindEnvBeforeRunIgnoresMalformedEnvironmentForUnselectedCommand(t *test
 	bindEnvForExecute(root)
 	require.NoError(t, root.Execute())
 	require.True(t, versionCalled)
+}
+
+func TestExecuteExitCode(t *testing.T) {
+	require.Equal(t, 1, exitCode(errors.New("plain failure")))
+	require.Equal(t, 78, exitCode(fmt.Errorf("start: %w", errorsutils.NewErrorWithExitCode(errors.New("bad config"), 78))))
+	require.Equal(t, 3, exitCode(errorsutils.ErrorWithExitCode{Err: errors.New("value form"), ExitCode: 3}))
 }
