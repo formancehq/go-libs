@@ -269,3 +269,47 @@ func TestSpansArePerAttempt(t *testing.T) {
 	}
 	require.Equal(t, map[int64]bool{1: true}, resendCounts, "only the resend carries http.request.resend_count=1")
 }
+
+// TestSpanURLIsRedacted: otelhttp stamps url.full from the raw URL, which
+// carries a credential for an upstream embedding one in the path or query.
+// The span must hold only the redacted rendering, including on retries.
+func TestSpanURLIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+
+			return
+		}
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+
+	const pathKey, queryKey = "k9Ab7Cd3Ef1Gh5Ij2Kl", "q-secret-value"
+	client := fastRetryClient(RetryConfig{TracerProvider: tp})
+	resp, err := rtDoRequest(t, client, http.MethodGet, srv.URL+"/v2/"+pathKey+"/items?api_key="+queryKey+"&page=2", nil)
+	require.NoError(t, err)
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+
+	spans := exporter.GetSpans()
+	require.Len(t, spans, 2)
+	for _, span := range spans {
+		var full string
+		for _, kv := range span.Attributes {
+			require.NotContains(t, kv.Value.Emit(), pathKey, "attribute %s leaks the path credential", kv.Key)
+			require.NotContains(t, kv.Value.Emit(), queryKey, "attribute %s leaks the query credential", kv.Key)
+			if string(kv.Key) == urlFullAttr {
+				full = kv.Value.AsString()
+			}
+		}
+		require.Contains(t, full, "/items", "url.full keeps the route")
+		require.Contains(t, full, "page=2", "url.full keeps non-sensitive query values")
+	}
+}
