@@ -322,3 +322,24 @@ func TestPathKeepsShortAndPrefixedSegments(t *testing.T) {
 	require.Equal(t, "/v2/page1/abcdefghijklmnopqrstuvwxyz", Path("/v2/page1/abcdefghijklmnopqrstuvwxyz"))
 	require.Equal(t, "/0XABCDEF0123456789ABCDEF/[REDACTED]", Path("/0XABCDEF0123456789ABCDEF/abc0123456789def0"))
 }
+
+func TestHeadersRedactsURLValuedHeaders(t *testing.T) {
+	t.Parallel()
+
+	h := http.Header{}
+	h.Set("Location", "https://bucket.s3.amazonaws.com/report.csv?X-Amz-Signature=presigned-secret&X-Amz-Expires=300")
+	h.Set("Content-Location", "https://user:pass@example.test/v1/items?page=2")
+	h.Set("Referer", "%%not-a-url")
+
+	got := Headers(h)
+	for _, secret := range []string{"presigned-secret", "user:pass", "%%not-a-url"} {
+		if strings.Contains(got, secret) {
+			t.Errorf("Headers leaked %q: %s", secret, got)
+		}
+	}
+	for _, kept := range []string{"X-Amz-Expires=300", "page=2", "/v1/items", "bucket.s3.amazonaws.com"} {
+		if !strings.Contains(got, kept) {
+			t.Errorf("Headers dropped %q: %s", kept, got)
+		}
+	}
+}

@@ -157,10 +157,44 @@ func Headers(h http.Header) string {
 
 			continue
 		}
+		if urlValuedHeader(name) {
+			// A redirect to a presigned URL carries its credential in the query.
+			b.WriteString(headerURLs(h.Values(name)))
+
+			continue
+		}
 		b.WriteString(strings.Join(h.Values(name), ","))
 	}
 
 	return b.String()
+}
+
+// urlValuedHeader reports whether a header's value is a URL, which is rendered
+// through URL rather than verbatim.
+func urlValuedHeader(name string) bool {
+	switch http.CanonicalHeaderKey(name) {
+	case "Location", "Content-Location", "Referer":
+		return true
+	}
+
+	return false
+}
+
+// headerURLs renders URL-valued header values through URL. A value that does
+// not parse is masked whole: it cannot be shown to hold no credential.
+func headerURLs(values []string) string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		u, err := url.Parse(value)
+		if err != nil {
+			out = append(out, Marker)
+
+			continue
+		}
+		out = append(out, URL(u))
+	}
+
+	return strings.Join(out, ",")
 }
 
 // URL renders u for a log line. url.URL.Redacted is not sufficient: it masks
