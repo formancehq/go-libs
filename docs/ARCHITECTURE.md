@@ -35,7 +35,7 @@ go-libs/
     │   ├── serverport/              #   Server address discovery and context binding
     │   ├── httpserver/              #   HTTP server (chi, middlewares, OTEL)
     │   ├── grpcserver/              #   gRPC server
-    │   ├── httpclient/              #   HTTP client debug/tracing
+    │   ├── httpclient/              #   HTTP client debug/tracing, retry, rate limiting
     │   ├── webhook/                 #   Bounded inbound webhook receiver (verify, then deliver)
     │   └── api/                     #   Response formatting, pagination, idempotency
     │
