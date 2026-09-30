@@ -3,13 +3,18 @@ package grpcserver
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
@@ -302,4 +307,113 @@ func dial(t *testing.T, addr string) *grpc.ClientConn {
 		require.NoError(t, conn.Close())
 	})
 	return conn
+}
+
+func TestHookHealthServerGoesNotServingBeforeDrain(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
+
+	probe := health.NewServer()
+	handler := newBlockingHandler()
+	hook := NewHook(
+		WithServerPortOptions(serverport.WithListener(listener)),
+		WithGRPCSetupOptions(handler.register),
+		WithHealthServer(probe),
+	)
+
+	resp, err := probe.Check(context.Background(), &healthpb.HealthCheckRequest{})
+	require.NoError(t, err)
+	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, resp.GetStatus(), "before start")
+
+	require.NoError(t, hook.OnStart(logging.TestingContext()))
+
+	client := healthpb.NewHealthClient(dial(t, addr))
+	resp, err = client.Check(context.Background(), &healthpb.HealthCheckRequest{})
+	require.NoError(t, err)
+	require.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.GetStatus(), "after start")
+
+	// Hold an RPC so the drain cannot complete while the probe is read.
+	handler.call(t, addr)
+
+	// A new Check cannot reach a draining server (GOAWAY, closed listener), so
+	// subscribe with Watch before the stop begins and read the pushed update.
+	watchCtx, cancelWatch := context.WithCancel(context.Background())
+	defer cancelWatch()
+	watch, err := client.Watch(watchCtx, &healthpb.HealthCheckRequest{})
+	require.NoError(t, err)
+	first, err := watch.Recv()
+	require.NoError(t, err)
+	require.Equal(t, healthpb.HealthCheckResponse_SERVING, first.GetStatus())
+
+	stopCtx, cancelStop := context.WithTimeout(logging.TestingContext(), 5*time.Second)
+	defer cancelStop()
+	done := make(chan error, 1)
+	go func() {
+		done <- hook.OnStop(stopCtx)
+	}()
+
+	next, err := watch.Recv()
+	require.NoError(t, err)
+	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, next.GetStatus())
+	select {
+	case <-handler.returned:
+		t.Fatal("NOT_SERVING was only reported after the in-flight RPC finished")
+	default:
+	}
+
+	cancelWatch()
+	close(handler.release)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop did not return after the in-flight RPCs finished")
+	}
+}
+
+func TestHookWithoutHealthServerDoesNotRegisterHealth(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		options []ServerOptionModifier
+	}{
+		{name: "no option"},
+		{name: "nil probe", options: []ServerOptionModifier{WithHealthServer(nil)}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+
+			hook := NewHook(append(tc.options, WithServerPortOptions(serverport.WithListener(listener)))...)
+			require.NoError(t, hook.OnStart(logging.TestingContext()))
+			t.Cleanup(func() {
+				require.NoError(t, hook.OnStop(logging.TestingContext()))
+			})
+
+			client := healthpb.NewHealthClient(dial(t, listener.Addr().String()))
+			_, err = client.Check(context.Background(), &healthpb.HealthCheckRequest{})
+			require.Equal(t, codes.Unimplemented, status.Code(err))
+		})
+	}
+}
+
+func TestHealthMethodPrefix(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "/grpc.health.v1.Health/", HealthMethodPrefix)
+	for _, method := range []string{
+		healthpb.Health_Check_FullMethodName,
+		healthpb.Health_List_FullMethodName,
+		healthpb.Health_Watch_FullMethodName,
+	} {
+		require.True(t, strings.HasPrefix(method, HealthMethodPrefix), method)
+	}
 }
