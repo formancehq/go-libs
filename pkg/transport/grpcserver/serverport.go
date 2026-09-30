@@ -10,7 +10,9 @@ import (
 )
 
 // Hook represents a lifecycle hook for the gRPC server.
-// OnStart starts the server, OnStop shuts it down gracefully.
+// OnStart starts the server, OnStop shuts it down gracefully: it drains
+// in-flight RPCs until its context expires, then closes every transport, and
+// returns only once the server has fully stopped.
 type Hook struct {
 	OnStart func(ctx context.Context) error
 	OnStop  func(ctx context.Context) error
@@ -32,27 +34,41 @@ func startServer(ctx context.Context, s *serverport.Server, serverOptions []grpc
 	for _, option := range setupOptions {
 		option(grpcServer)
 	}
+	served := make(chan struct{})
 	go func() {
+		defer close(served)
 		if err := grpcServer.Serve(s.Listener); err != nil {
 			logging.FromContext(ctx).Errorf("failed to serve: %v", err)
 		}
 	}()
 
 	return func(ctx context.Context) error {
-		stopped := make(chan struct{})
-		go func() {
-			grpcServer.GracefulStop()
-			close(stopped)
-		}()
-
-		select {
-		case <-stopped:
-			return nil
-		case <-ctx.Done():
-			go grpcServer.Stop()
-			return ctx.Err()
-		}
+		return stopServer(ctx, grpcServer, served)
 	}, nil
+}
+
+// stopServer drains in-flight RPCs until ctx expires, then closes every
+// transport. It returns only once GracefulStop has returned (all handlers have
+// exited) and Serve has returned (served is closed), including when ctx has
+// already expired, so the caller never moves on mid-shutdown. It returns
+// ctx.Err() when the drain was cut short.
+func stopServer(ctx context.Context, grpcServer *grpc.Server, served <-chan struct{}) error {
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		grpcServer.GracefulStop()
+	}()
+
+	select {
+	case <-stopped:
+		<-served
+		return nil
+	case <-ctx.Done():
+		grpcServer.Stop()
+		<-stopped
+		<-served
+		return ctx.Err()
+	}
 }
 
 func Address(ctx context.Context) string {
