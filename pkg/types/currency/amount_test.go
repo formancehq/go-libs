@@ -83,6 +83,48 @@ func TestGetAmountWithPrecisionFromString(t *testing.T) {
 			expected:     big.NewInt(123),
 			expecterErr:  nil,
 		},
+		{
+			name:         "dot without decimals",
+			amountString: "1.",
+			precision:    2,
+			expected:     big.NewInt(100),
+			expecterErr:  nil,
+		},
+		{
+			name:         "dot without integer part",
+			amountString: ".5",
+			precision:    2,
+			expected:     big.NewInt(50),
+			expecterErr:  nil,
+		},
+		{
+			name:         "negative amount",
+			amountString: "-1.23",
+			precision:    2,
+			expected:     big.NewInt(-123),
+			expecterErr:  nil,
+		},
+		{
+			name:         "explicit positive sign",
+			amountString: "+1.23",
+			precision:    2,
+			expected:     big.NewInt(123),
+			expecterErr:  nil,
+		},
+		{
+			name:         "sign before dot without integer part",
+			amountString: "-.5",
+			precision:    1,
+			expected:     big.NewInt(-5),
+			expecterErr:  nil,
+		},
+		{
+			name:         "negative zero",
+			amountString: "-0",
+			precision:    2,
+			expected:     big.NewInt(0),
+			expecterErr:  nil,
+		},
 
 		// Error cases
 		{
@@ -90,6 +132,90 @@ func TestGetAmountWithPrecisionFromString(t *testing.T) {
 			precision:   -1,
 			expected:    nil,
 			expecterErr: ErrInvalidPrecision,
+		},
+		{
+			name:         "digitless amount: dot",
+			amountString: ".",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "digitless amount: dot with zero precision",
+			amountString: ".",
+			precision:    0,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "digitless amount: minus",
+			amountString: "-",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "digitless amount: plus",
+			amountString: "+",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "digitless amount: minus dot",
+			amountString: "-.",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "digitless amount: plus dot",
+			amountString: "+.",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "sign in decimal part",
+			amountString: "1.-5",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "sign in decimal part without integer part",
+			amountString: ".-5",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "plus sign in decimal part without integer part",
+			amountString: ".+5",
+			precision:    3,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "double sign",
+			amountString: "--1",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "mixed double sign",
+			amountString: "+-1",
+			precision:    0,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
+		},
+		{
+			name:         "trailing sign",
+			amountString: "1-",
+			precision:    2,
+			expected:     nil,
+			expecterErr:  ErrInvalidAmount,
 		},
 		{
 			name:         "invalid amount multiple dots",
@@ -160,6 +286,7 @@ func TestGetAmountWithPrecisionFromString(t *testing.T) {
 				return
 			}
 
+			require.NoError(t, err)
 			require.NotNil(t, amount)
 			if amount.Cmp(tc.expected) != 0 {
 				t.Errorf("expected %v, got %v", tc.expected, amount)

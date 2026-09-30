@@ -2,8 +2,14 @@ package currency
 
 import (
 	"math/big"
+	"regexp"
 	"testing"
 )
+
+// decimalGrammar is an independent oracle for the accepted input syntax: an
+// optional single leading sign, ASCII digits and at most one dot, with at
+// least one digit.
+var decimalGrammar = regexp.MustCompile(`^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)$`)
 
 func FuzzGetAmountWithPrecisionFromString(f *testing.F) {
 	// Seed corpus from existing test cases
@@ -58,6 +64,16 @@ func FuzzAmountRoundTrip(f *testing.F) {
 	f.Add("999.999", 3)
 	f.Add("0.000001", 6)
 
+	// Inputs that must be rejected: digitless, or a sign after the first character
+	f.Add(".", 2)
+	f.Add("-", 2)
+	f.Add("+.", 2)
+	f.Add(".-5", 2)
+	f.Add(".+5", 3)
+	f.Add("1.-5", 2)
+	f.Add("1-", 2)
+	f.Add("--1", 2)
+
 	f.Fuzz(func(t *testing.T, amountString string, precision int) {
 		if precision < 0 || precision > 30 {
 			return
@@ -67,6 +83,11 @@ func FuzzAmountRoundTrip(f *testing.F) {
 		parsed, err := GetAmountWithPrecisionFromString(amountString, precision)
 		if err != nil {
 			return
+		}
+
+		// Round-trip alone cannot catch a digitless input parsed as zero
+		if !decimalGrammar.MatchString(amountString) {
+			t.Fatalf("accepted malformed amount %q (precision %d) as %s", amountString, precision, parsed.String())
 		}
 
 		// Convert back big.Int -> string

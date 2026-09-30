@@ -43,6 +43,18 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 		return nil, fmt.Errorf("got multiple dots in amount: %s: %w", amountString, ErrInvalidAmount)
 	}
 
+	if lengthParts == 2 && len(parts[1]) > precision {
+		// The decimal part is longer than the precision, we have to send an
+		// error because we don't want to lose the precision
+		return nil, ErrInvalidPrecision
+	}
+
+	if _, _, _, ok := splitDecimal(amountString); !ok {
+		// Rejects digitless amounts and signs anywhere but the first character,
+		// which big.Int.SetString would accept once the parts are concatenated
+		return nil, fmt.Errorf("amount is not a decimal number: %s: %w", amountString, ErrInvalidAmount)
+	}
+
 	if lengthParts == 1 {
 		// No dot, which means it's an integer
 		for range precision {
@@ -56,36 +68,43 @@ func GetAmountWithPrecisionFromString(amountString string, precision int) (*big.
 	}
 
 	// Here we are in the case where we have one dot, which means we have a
-	// decimal amount
-	decimalPart := parts[1]
-	lengthDecimalPart := len(decimalPart)
-	switch {
-	case lengthDecimalPart == precision:
-		// The decimal part has the same length as the precision, we can
-		// concatenate the two parts and return the result
-		res, ok := new(big.Int).SetString(parts[0]+decimalPart, 10)
-		if !ok {
-			return nil, fmt.Errorf("invalid amount computed: %s from amount %s: %w", parts[0]+decimalPart, amountString, ErrInvalidAmount)
-		}
-		return res, nil
-
-	case lengthDecimalPart < precision:
-		// The decimal part is shorter than the precision, we need to add
-		// some zeros at the end of the decimal part
-		for p := 0; p < precision-lengthDecimalPart; p++ {
-			decimalPart += "0"
-		}
-		res, ok := new(big.Int).SetString(parts[0]+decimalPart, 10)
-		if !ok {
-			return nil, fmt.Errorf("invalid amount computed: %s from amount %s: %w", parts[0]+decimalPart, amountString, ErrInvalidAmount)
-		}
-		return res, nil
-
-	default:
-		// The decimal part is longer than the precision, we have to send an
-		// error because we don't want to lose the precision
-		return nil, ErrInvalidPrecision
+	// decimal amount. The decimal part is at most as long as the precision, we
+	// add zeros at its end up to the precision and concatenate the two parts
+	decimalPart := parts[1] + strings.Repeat("0", precision-len(parts[1]))
+	res, ok := new(big.Int).SetString(parts[0]+decimalPart, 10)
+	if !ok {
+		return nil, fmt.Errorf("invalid amount computed: %s from amount %s: %w", parts[0]+decimalPart, amountString, ErrInvalidAmount)
 	}
+	return res, nil
+}
+
+// splitDecimal splits a decimal string into its sign, integer digits and
+// fractional digits. It accepts an optional single leading '+' or '-', ASCII
+// digits and at most one dot, with at least one digit overall; ok is false for
+// anything else.
+func splitDecimal(amount string) (sign, integer, fraction string, ok bool) {
+	rest := amount
+	if rest != "" && (rest[0] == '-' || rest[0] == '+') {
+		sign, rest = rest[:1], rest[1:]
+	}
+
+	integer, fraction, _ = strings.Cut(rest, ".")
+	if integer == "" && fraction == "" {
+		return "", "", "", false
+	}
+	if !isDigits(integer) || !isDigits(fraction) {
+		return "", "", "", false
+	}
+	return sign, integer, fraction, true
+}
+
+func isDigits(s string) bool {
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func GetStringAmountFromBigIntWithPrecision(amount *big.Int, precision int) (string, error) {
