@@ -3,6 +3,7 @@ package currency
 import (
 	"errors"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -291,6 +292,81 @@ func TestGetAmountWithPrecisionFromString(t *testing.T) {
 			if amount.Cmp(tc.expected) != 0 {
 				t.Errorf("expected %v, got %v", tc.expected, amount)
 			}
+		})
+	}
+}
+
+func TestParseMinorUnits(t *testing.T) {
+	t.Parallel()
+
+	maxPrecisionOne, ok := new(big.Int).SetString("1"+strings.Repeat("0", MaxPrecision), 10)
+	require.True(t, ok)
+
+	type testCase struct {
+		name        string
+		amount      string
+		precision   int
+		expected    *big.Int
+		expectedErr error
+	}
+
+	testCases := []testCase{
+		{name: "decimals = precision", amount: "123.45", precision: 2, expected: big.NewInt(12345)},
+		{name: "decimals < precision", amount: "123.1", precision: 2, expected: big.NewInt(12310)},
+		{name: "integer", amount: "123", precision: 2, expected: big.NewInt(12300)},
+		{name: "integer with precision 0", amount: "123", precision: 0, expected: big.NewInt(123)},
+		{name: "dot without decimals", amount: "1.", precision: 2, expected: big.NewInt(100)},
+		{name: "dot without integer part", amount: ".5", precision: 2, expected: big.NewInt(50)},
+		{name: "zeros", amount: "0.00", precision: 2, expected: big.NewInt(0)},
+		{name: "trailing zero beyond precision", amount: "1.230", precision: 2, expected: big.NewInt(123)},
+		{name: "trailing zeros beyond precision 0", amount: "1.000", precision: 0, expected: big.NewInt(1)},
+		{name: "only zeros beyond precision 0", amount: ".00", precision: 0, expected: big.NewInt(0)},
+		{name: "negative amount", amount: "-1.23", precision: 2, expected: big.NewInt(-123)},
+		{name: "negative amount with trailing zeros", amount: "-1.2300", precision: 2, expected: big.NewInt(-123)},
+		{name: "negative zero", amount: "-0.00", precision: 2, expected: big.NewInt(0)},
+		{name: "explicit positive sign", amount: "+1.23", precision: 2, expected: big.NewInt(123)},
+		{name: "sign before dot without integer part", amount: "+.5", precision: 1, expected: big.NewInt(5)},
+		{name: "leading zeros", amount: "007.5", precision: 1, expected: big.NewInt(75)},
+		{name: "max precision", amount: "1", precision: MaxPrecision, expected: maxPrecisionOne},
+
+		// Error cases
+		{name: "negative precision", amount: "1", precision: -1, expectedErr: ErrInvalidPrecision},
+		{name: "precision above max", amount: "1", precision: MaxPrecision + 1, expectedErr: ErrInvalidPrecision},
+		{name: "non-zero digit beyond precision", amount: "1.235", precision: 2, expectedErr: ErrPrecisionLoss},
+		{name: "non-zero digit beyond precision 0", amount: "1.5", precision: 0, expectedErr: ErrPrecisionLoss},
+		{name: "non-zero digit after zeros beyond precision", amount: "1.2301", precision: 2, expectedErr: ErrPrecisionLoss},
+		{name: "empty", amount: "", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "digitless amount: dot", amount: ".", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "digitless amount: minus", amount: "-", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "digitless amount: plus", amount: "+", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "digitless amount: minus dot", amount: "-.", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "multiple dots", amount: "1.2.3", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "sign in decimal part", amount: "1.-5", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "sign in decimal part without integer part", amount: ".-5", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "double sign", amount: "--1", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "trailing sign", amount: "1-", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "letter", amount: "12a3.4", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "letter beyond precision", amount: "1.23a", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "exponent", amount: "1e2", precision: 0, expectedErr: ErrInvalidAmount},
+		{name: "underscore", amount: "1_000", precision: 0, expectedErr: ErrInvalidAmount},
+		{name: "leading whitespace", amount: " 1", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "trailing whitespace", amount: "1 ", precision: 2, expectedErr: ErrInvalidAmount},
+		{name: "non-ASCII digit", amount: "١", precision: 0, expectedErr: ErrInvalidAmount},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			amount, err := ParseMinorUnits(tc.amount, tc.precision)
+			if tc.expectedErr != nil {
+				require.ErrorIs(t, err, tc.expectedErr)
+				require.Nil(t, amount)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Zero(t, tc.expected.Cmp(amount), "expected %v, got %v", tc.expected, amount)
 		})
 	}
 }

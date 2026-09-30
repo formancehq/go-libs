@@ -1,8 +1,10 @@
 package currency
 
 import (
+	"errors"
 	"math/big"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -106,6 +108,90 @@ func FuzzAmountRoundTrip(f *testing.F) {
 		if parsed.Cmp(reparsed) != 0 {
 			t.Errorf("round-trip mismatch: %q (precision %d) -> %s -> %q -> %s",
 				amountString, precision, parsed.String(), backToString, reparsed.String())
+		}
+	})
+}
+
+func FuzzParseMinorUnitsRoundTrip(f *testing.F) {
+	// Seed corpus: (amount string, precision) pairs
+	f.Add("123.45", 2)
+	f.Add("1.230", 2)
+	f.Add("1.235", 2)
+	f.Add("-1.23", 2)
+	f.Add("-0.00", 2)
+	f.Add("+.5", 1)
+	f.Add("1.", 2)
+	f.Add("007.5", 1)
+	f.Add(".00", 0)
+	f.Add("1", MaxPrecision)
+	f.Add("", 0)
+	f.Add(".", 2)
+	f.Add("-", 2)
+	f.Add(".-5", 2)
+	f.Add("1.-5", 2)
+	f.Add(" 1", 2)
+
+	f.Fuzz(func(t *testing.T, amount string, precision int) {
+		if precision < 0 || precision > MaxPrecision {
+			return
+		}
+
+		parsed, err := ParseMinorUnits(amount, precision)
+
+		// Independent exactness oracle: amount * 10^precision as a rational
+		if decimalGrammar.MatchString(amount) {
+			scaled, ok := new(big.Rat).SetString(amount)
+			if !ok {
+				t.Fatalf("big.Rat rejects %q", amount)
+			}
+			scaled.Mul(scaled, new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(precision)), nil)))
+			switch {
+			case scaled.IsInt() && (err != nil || scaled.Num().Cmp(parsed) != 0):
+				t.Fatalf("%q (precision %d): exact value %s, ParseMinorUnits gives %v, %v",
+					amount, precision, scaled.Num().String(), parsed, err)
+			case !scaled.IsInt() && !errors.Is(err, ErrPrecisionLoss):
+				t.Fatalf("%q (precision %d): inexact value, ParseMinorUnits gives %v, %v",
+					amount, precision, parsed, err)
+			}
+		}
+
+		// Wherever GetAmountWithPrecisionFromString accepts, ParseMinorUnits must agree
+		legacy, legacyErr := GetAmountWithPrecisionFromString(amount, precision)
+		if legacyErr == nil && (err != nil || legacy.Cmp(parsed) != 0) {
+			t.Fatalf("%q (precision %d): GetAmountWithPrecisionFromString gives %s, ParseMinorUnits gives %v, %v",
+				amount, precision, legacy.String(), parsed, err)
+		}
+
+		if err != nil {
+			return
+		}
+
+		// Without digits beyond the precision, GetAmountWithPrecisionFromString must accept too
+		if _, fraction, _ := strings.Cut(amount, "."); len(fraction) <= precision && legacyErr != nil {
+			t.Fatalf("%q (precision %d): ParseMinorUnits gives %s, GetAmountWithPrecisionFromString fails: %v",
+				amount, precision, parsed.String(), legacyErr)
+		}
+
+		if !decimalGrammar.MatchString(amount) {
+			t.Fatalf("accepted malformed amount %q (precision %d) as %s", amount, precision, parsed.String())
+		}
+
+		// Convert back big.Int -> string
+		backToString, err := GetStringAmountFromBigIntWithPrecision(parsed, precision)
+		if err != nil {
+			t.Fatalf("round-trip serialize failed: %v", err)
+		}
+
+		// Re-parse the serialized string
+		reparsed, err := ParseMinorUnits(backToString, precision)
+		if err != nil {
+			t.Fatalf("round-trip reparse failed for %q: %v", backToString, err)
+		}
+
+		// Values must match
+		if parsed.Cmp(reparsed) != 0 {
+			t.Errorf("round-trip mismatch: %q (precision %d) -> %s -> %q -> %s",
+				amount, precision, parsed.String(), backToString, reparsed.String())
 		}
 	})
 }
