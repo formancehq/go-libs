@@ -574,9 +574,10 @@ func (t *RetryTransport) logger(ctx context.Context) logging.Logger {
 }
 
 // closeAttemptBody closes the body of a prepared attempt that will never be
-// sent, unless it is the caller's own request.
+// sent, unless it is the caller's own body: a clone of a request without
+// GetBody shares it, and closeOriginalBody alone closes that one, once.
 func closeAttemptBody(original, attempt *http.Request) {
-	if attempt == nil || attempt == original || attempt.Body == nil {
+	if attempt == nil || attempt == original || attempt.Body == nil || attempt.Body == original.Body {
 		return
 	}
 	_ = attempt.Body.Close()

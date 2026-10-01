@@ -84,6 +84,27 @@ func TestRoundTripClosesTheOriginalBody(t *testing.T) {
 	}
 }
 
+// TestSignFailureClosesASharedBodyOnce: without GetBody the attempt clone
+// shares the caller's body, so a failed Sign must leave closing it to
+// RoundTrip's own cleanup instead of closing it a second time.
+func TestSignFailureClosesASharedBodyOnce(t *testing.T) {
+	t.Parallel()
+
+	var closed atomic.Int32
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://api.example/data", nil)
+	require.NoError(t, err)
+	req.Body = &countedReadCloser{Reader: strings.NewReader("body"), closed: &closed}
+
+	resp, err := NewRetryTransport(RetryConfig{
+		Base:   closingBase(http.StatusOK),
+		Sign:   func(*http.Request) error { return errors.New("signer unavailable") },
+		Logger: rtDiscardLogger(),
+	}).RoundTrip(req)
+	require.Nil(t, resp)
+	require.ErrorContains(t, err, "sign request")
+	require.EqualValues(t, 1, closed.Load(), "the shared body is closed exactly once")
+}
+
 // TestRetryTransportIsSafeForConcurrentUse shares one transport (bearer source,
 // limiter, signer, metrics) across goroutines whose tokens are rejected and
 // re-minted under them. Run with -race: the per-request state (attempt count,
