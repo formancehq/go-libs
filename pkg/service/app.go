@@ -64,12 +64,20 @@ func (a *App) Run(cmd *cobra.Command) error {
 
 	app := a.newFxApp(a.logger, gracePeriod, totalStopTimeout)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), a.logger)); err != nil {
-		// An exit code carried by err survives both returns: Execute exits with
-		// it. Run itself never exits, so a caller with its own Execute can
-		// still render, redact or classify the error first.
+		// Run never exits, so a caller with its own Execute can still render,
+		// redact or classify the error first.
+		//
+		// The error is returned as is rather than wrapped in a new
+		// ErrorWithExitCode, as the shutdown path below does: a start error
+		// already carries its own exit code (a constructor or OnStart hook
+		// returned errors.NewErrorWithExitCode), and both returns keep it in
+		// the chain, where errors.ExitCodeFromError finds it. A shutdown has
+		// no error of its own, only fx's exit code, hence its sentinel.
 		//
 		// Return complete error if we are debugging
-		// While polluting the output most of the time, it sometimes gives some precious information
+		// While polluting the output most of the time, it sometimes gives some precious information.
+		// Otherwise dig.RootCause drops dig's "could not build arguments for
+		// function …" wrapping and returns the error the application raised.
 		if IsDebug(cmd) {
 			return err
 		}
