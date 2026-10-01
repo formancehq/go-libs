@@ -475,69 +475,97 @@ func TestBearerRecoveryIsOneShotAcrossSameOriginRedirects(t *testing.T) {
 
 // TestBearerReplayBudgetDoesNotCancelTheResponseBody pins that the MaxElapsed
 // budget bounding the re-mint is not the context of the replay's body read:
-// the body keeps streaming after the budget has expired. Not parallel: the
-// replay must start inside the budget.
+// the body keeps streaming after the budget has expired.
+//
+// A controlled transport and the bubble's fake clock replace the network, so
+// the replay always starts inside the budget and the budget expires exactly
+// while the body is held, with no wall-clock race and no real wait.
 func TestBearerReplayBudgetDoesNotCancelTheResponseBody(t *testing.T) {
-	const budget = 100 * time.Millisecond
-	source := &fakeBearerSource{current: "old", replacement: "new"}
-	headersSent := make(chan struct{})
-	releaseBody := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") == "Bearer old" {
-			w.WriteHeader(http.StatusUnauthorized)
+	t.Parallel()
 
-			return
+	synctest.Test(t, func(t *testing.T) {
+		const budget = 100 * time.Millisecond
+		source := &fakeBearerSource{current: "old", replacement: "new"}
+		headersSent := make(chan struct{})
+		releaseBody := make(chan struct{})
+		client := quietRetryClient(RetryConfig{
+			Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+				if r.Header.Get("Authorization") == "Bearer old" {
+					return rtResponse(r, http.StatusUnauthorized, "rejected"), nil
+				}
+				resp := rtResponse(r, http.StatusOK, "")
+				resp.Body = &gatedBody{ctx: r.Context(), release: releaseBody, payload: `{"ok":true}`}
+				close(headersSent)
+
+				return resp, nil
+			}),
+			Bearer:     source,
+			MaxElapsed: budget,
+		})
+
+		type result struct {
+			out map[string]bool
+			err error
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			t.Error("test response writer cannot flush headers")
+		done := make(chan result, 1)
+		go func() {
+			out := map[string]bool{}
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/data", nil)
+			if err != nil {
+				done <- result{err: err}
 
-			return
+				return
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				done <- result{err: err}
+
+				return
+			}
+			defer func() { _ = resp.Body.Close() }()
+			err = json.NewDecoder(resp.Body).Decode(&out)
+			done <- result{out: out, err: err}
+		}()
+
+		<-headersSent
+		// Advances the fake clock past the budget while the body is held.
+		time.Sleep(budget + budget/2)
+		synctest.Wait()
+		select {
+		case got := <-done:
+			t.Fatalf("response body ended before release: %#v", got)
+		default:
 		}
-		flusher.Flush()
-		close(headersSent)
-		<-releaseBody
-		_, _ = io.WriteString(w, `{"ok":true}`)
-	}))
-	t.Cleanup(server.Close)
-
-	client := quietRetryClient(RetryConfig{Bearer: source, MaxElapsed: budget})
-	type result struct {
-		out map[string]bool
-		err error
-	}
-	done := make(chan result, 1)
-	go func() {
-		out := map[string]bool{}
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
-		if err != nil {
-			done <- result{err: err}
-
-			return
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			done <- result{err: err}
-
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		err = json.NewDecoder(resp.Body).Decode(&out)
-		done <- result{out: out, err: err}
-	}()
-	<-headersSent
-	select {
-	case got := <-done:
-		t.Fatalf("response body ended before release: %#v", got)
-	case <-time.After(budget + budget/2):
-	}
-	close(releaseBody)
-	got := <-done
-	require.NoError(t, got.err, "the auth budget must not cancel the replay's body read")
-	require.True(t, got.out["ok"])
+		close(releaseBody)
+		got := <-done
+		require.NoError(t, got.err, "the auth budget must not cancel the replay's body read")
+		require.True(t, got.out["ok"])
+	})
 }
+
+// gatedBody holds its payload until release is closed and, like net/http's
+// response bodies, fails once the attempt's request context is done.
+type gatedBody struct {
+	ctx     context.Context
+	release <-chan struct{}
+	payload string
+	r       *strings.Reader
+}
+
+func (b *gatedBody) Read(p []byte) (int, error) {
+	if b.r == nil {
+		select {
+		case <-b.release:
+			b.r = strings.NewReader(b.payload)
+		case <-b.ctx.Done():
+			return 0, b.ctx.Err()
+		}
+	}
+
+	return b.r.Read(p)
+}
+
+func (b *gatedBody) Close() error { return nil }
 
 func TestBearerRevalidatesAfterLimiterWait(t *testing.T) {
 	t.Parallel()
