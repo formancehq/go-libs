@@ -274,17 +274,29 @@ const maxSigningBody = 32 << 20
 // 32 MiB ceiling.
 var ErrSigningBodyTooLarge = errors.New("httpclient: request body exceeds the signing limit")
 
+// ErrSigningBodyNotReplayable is returned by BodyForSigning for a request that
+// carries a body but no GetBody: the body cannot be read without consuming
+// the bytes the send needs, and signing the empty string instead would send a
+// signature that does not cover the payload.
+var ErrSigningBodyNotReplayable = errors.New("httpclient: request body cannot be read for signing without GetBody")
+
 // BodyForSigning returns the request body as a string for a RetryConfig.Sign
 // hook that must bind it byte-for-byte. It reads through GetBody, so req.Body
 // stays unconsumed for the send that follows; an absent body signs the empty
-// string, which is what a GET or an empty-form POST expects.
+// string, which is what a GET or an empty-form POST expects. A body without
+// GetBody is ErrSigningBodyNotReplayable: build the request from a bytes,
+// strings or buffer reader (http.NewRequest sets GetBody), or set GetBody.
 //
 // Sign runs on a fresh clone before every attempt, so this is called once per
 // try. A signer covering a body should route through here rather than reach
 // for req.Body, which the transport still needs.
 func BodyForSigning(req *http.Request) (string, error) {
 	if req.GetBody == nil {
-		return "", nil
+		if req.Body == nil || req.Body == http.NoBody {
+			return "", nil
+		}
+
+		return "", ErrSigningBodyNotReplayable
 	}
 	rc, err := req.GetBody()
 	if err != nil {

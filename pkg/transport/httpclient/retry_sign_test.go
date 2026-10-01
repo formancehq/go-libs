@@ -253,6 +253,55 @@ func TestBodyForSigningNoBody(t *testing.T) {
 	require.Empty(t, got)
 }
 
+// TestBodyForSigningRejectsNonReplayableBody: a body without GetBody cannot be
+// read without consuming what the send needs, so signing it must fail rather
+// than bind the empty string to a nonempty payload. An explicit NoBody still
+// signs empty.
+func TestBodyForSigningRejectsNonReplayableBody(t *testing.T) {
+	t.Parallel()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://example.test/v1/x", nil)
+	require.NoError(t, err)
+	req.Body = io.NopCloser(strings.NewReader("a=1"))
+	_, err = BodyForSigning(req)
+	require.ErrorIs(t, err, ErrSigningBodyNotReplayable)
+
+	req.Body = http.NoBody
+	got, err := BodyForSigning(req)
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
+// TestSignWithNonReplayableBodyFailsBeforeSend: a Sign hook routing through
+// BodyForSigning surfaces the error as a preparation failure, so the
+// unsignable request never reaches the wire.
+func TestSignWithNonReplayableBodyFailsBeforeSend(t *testing.T) {
+	t.Parallel()
+
+	var sent atomic.Int32
+	transport := NewRetryTransport(RetryConfig{
+		Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+			sent.Add(1)
+
+			return rtResponse(r, http.StatusOK, "ok"), nil
+		}),
+		Sign: func(r *http.Request) error {
+			_, err := BodyForSigning(r)
+
+			return err
+		},
+		Logger: rtDiscardLogger(),
+	})
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://example.test/v1/x", nil)
+	require.NoError(t, err)
+	req.Body = io.NopCloser(strings.NewReader("a=1"))
+
+	resp, err := transport.RoundTrip(req)
+	require.Nil(t, resp)
+	require.ErrorIs(t, err, ErrSigningBodyNotReplayable)
+	require.Zero(t, sent.Load(), "an unsignable request must not be sent")
+}
+
 // TestSignRefusesCrossOriginRedirect proves a Sign hook cannot be tricked into
 // minting a credential for a host the caller never addressed. net/http builds
 // a NEW request for each redirect and calls the transport again, so the
