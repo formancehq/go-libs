@@ -2,8 +2,10 @@ package webhook_test
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -296,6 +298,8 @@ func TestReceiverRecordsOneSpanPerDelivery(t *testing.T) {
 		secretQuery  = "query-secret-value"
 		secretVerify = "verify-secret-value"
 	)
+	// A Deliver error built from the delivery, quoting all three.
+	deliverErr := fmt.Errorf("spool rejected %s (sig %s, token %s)", secretBody, secretHeader, secretQuery)
 
 	for _, tc := range []struct {
 		name       string
@@ -309,7 +313,7 @@ func TestReceiverRecordsOneSpanPerDelivery(t *testing.T) {
 		{name: "delivered", body: secretBody, wantStatus: http.StatusOK, wantCode: codes.Unset, wantCalls: 2},
 		{name: "oversized", body: secretBody + strings.Repeat("x", 64), wantStatus: http.StatusRequestEntityTooLarge, wantCode: codes.Error},
 		{name: "unverified", body: secretBody, verifyErr: errors.New(secretVerify), wantStatus: http.StatusUnauthorized, wantCode: codes.Error, wantCalls: 1},
-		{name: "undelivered", body: secretBody, deliverErr: errors.New("spool full"), wantStatus: http.StatusServiceUnavailable, wantCode: codes.Error, wantCalls: 2},
+		{name: "undelivered", body: secretBody, deliverErr: deliverErr, wantStatus: http.StatusServiceUnavailable, wantCode: codes.Error, wantCalls: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var ctxSpans []trace.SpanID
@@ -351,8 +355,9 @@ func TestReceiverRecordsOneSpanPerDelivery(t *testing.T) {
 			for _, secret := range []string{secretBody, secretHeader, secretQuery, secretVerify} {
 				require.NotContains(t, text, secret)
 			}
-			if tc.deliverErr != nil {
-				require.Contains(t, text, tc.deliverErr.Error(), "the Deliver error is recorded on the span")
+			if failure := cmp.Or(tc.verifyErr, tc.deliverErr); failure != nil {
+				require.NotContains(t, text, failure.Error(), "a callback's error text stays off the span")
+				require.Contains(t, text, fmt.Sprintf("%T", failure), "the error's Go type is kept")
 			}
 		})
 	}
@@ -370,22 +375,34 @@ func TestReceiverRecordsOneSpanPerDelivery(t *testing.T) {
 func TestReceiverLogsRejectionsWithoutRequestContent(t *testing.T) {
 	t.Parallel()
 
-	var out bytes.Buffer
-	logger := logging.NewDefaultLogger(&out, true, false, false)
-	p := &probe{verifyErr: errors.New("bad signature")}
-	h := newReceiver(t, p.config(testMaxBody))
+	for _, tc := range []struct {
+		name       string
+		probe      *probe
+		wantStatus int
+	}{
+		{name: "unverified", probe: &probe{verifyErr: errors.New("bad signature header-secret")}, wantStatus: http.StatusUnauthorized},
+		{name: "undelivered", probe: &probe{deliverErr: errors.New("spool rejected body-secret token=query-secret")}, wantStatus: http.StatusServiceUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	req := httptest.NewRequest(http.MethodPost, "/webhooks?token=query-secret", strings.NewReader("body-secret"))
-	req = req.WithContext(logging.ContextWithLogger(req.Context(), logger))
-	req.Header.Set("X-Signature", "header-secret")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
+			var out bytes.Buffer
+			logger := logging.NewDefaultLogger(&out, true, false, false)
+			h := newReceiver(t, tc.probe.config(testMaxBody))
 
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
-	logged := out.String()
-	require.Contains(t, logged, "webhook delivery rejected")
-	require.Contains(t, logged, "bad signature")
-	for _, secret := range []string{"body-secret", "header-secret", "query-secret"} {
-		require.NotContains(t, logged, secret)
+			req := httptest.NewRequest(http.MethodPost, "/webhooks?token=query-secret", strings.NewReader("body-secret"))
+			req = req.WithContext(logging.ContextWithLogger(req.Context(), logger))
+			req.Header.Set("X-Signature", "header-secret")
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			require.Equal(t, tc.wantStatus, rec.Code)
+			logged := out.String()
+			require.Contains(t, logged, "webhook delivery rejected")
+			require.Contains(t, logged, "*errors.errorString", "the error's Go type is logged")
+			for _, secret := range []string{"body-secret", "header-secret", "query-secret", "bad signature", "spool rejected"} {
+				require.NotContains(t, logged, secret)
+			}
+		})
 	}
 }

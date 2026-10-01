@@ -13,9 +13,11 @@
 //     (401) never reaches [Config.Deliver];
 //   - the acknowledgement: 200 with an empty body once Deliver returns nil,
 //     503 when it returns an error so the sender redelivers;
-//   - one span per delivery on the global OpenTelemetry tracer provider. The
-//     span never carries the body, the headers or the query string, which can
-//     hold signatures and secrets.
+//   - one span per delivery on the global OpenTelemetry tracer provider. Neither
+//     the span nor the debug log of a rejection carries the body, the headers,
+//     the query string or the text of a Verify or Deliver error, all of which
+//     can hold signatures and secrets; a failure is recorded as a fixed reason
+//     and the error's Go type.
 //
 // What stays with the consumer:
 //

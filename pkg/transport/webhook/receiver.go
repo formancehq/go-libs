@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -24,9 +25,8 @@ const DefaultMaxBody int64 = 1 << 20 // 1 MiB
 // decodes it. A non-nil error rejects the delivery with 401.
 //
 // The request body has already been read when Verify runs: body holds every
-// byte of it, and r.Body must not be read again. The error is logged at debug
-// level and never put on the span; it must not carry secret material such as
-// an expected signature.
+// byte of it, and r.Body must not be read again. The receiver records only a
+// fixed reason and the error's Go type, never its text (see [Config.Deliver]).
 type Verifier interface {
 	Verify(ctx context.Context, r *http.Request, body []byte) error
 }
@@ -60,6 +60,11 @@ type Config struct {
 	Verifier Verifier
 	// Deliver hands a verified delivery to the consumer. A non-nil error is
 	// answered with 503 so the sender redelivers. Required.
+	//
+	// The error's text never reaches the span or the log: an error built from
+	// the delivery can quote its body, headers or query. The receiver records
+	// a fixed reason and the error's Go type; a consumer that wants the text
+	// logs it inside Deliver, where it knows what is safe to keep.
 	Deliver func(ctx context.Context, d Delivery) error
 }
 
@@ -142,14 +147,13 @@ func (rc *receiver) receive(ctx context.Context, span trace.Span, w http.Respons
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return reject(ctx, span, http.StatusRequestEntityTooLarge, "body exceeds the cap", nil)
 		}
-		span.RecordError(err)
 
 		return reject(ctx, span, http.StatusBadRequest, "read body", err)
 	}
 	span.SetAttributes(attribute.Int("http.request.body.size", len(body)))
 
-	// The verifier's error stays off the span: it may describe the signature
-	// it expected.
+	// Neither callback's error text is recorded (see reject): it may describe
+	// the signature expected or quote the delivery.
 	if err := rc.verifier.Verify(ctx, r, body); err != nil {
 		return reject(ctx, span, http.StatusUnauthorized, "verification failed", err)
 	}
@@ -160,8 +164,6 @@ func (rc *receiver) receive(ctx context.Context, span trace.Span, w http.Respons
 		Body:   body,
 	})
 	if err != nil {
-		span.RecordError(err)
-
 		return reject(ctx, span, http.StatusServiceUnavailable, "deliver failed", err)
 	}
 
@@ -181,9 +183,14 @@ func (rc *receiver) readBody(w http.ResponseWriter, r *http.Request) ([]byte, er
 }
 
 // reject marks the span failed with a fixed reason and logs the rejection at
-// debug level. Neither carries the body, headers or query string.
+// debug level. Neither carries the body, headers or query string, nor the
+// error's text, which can quote any of them: only its Go type is kept, enough
+// to tell a timeout from a full queue.
 func reject(ctx context.Context, span trace.Span, status int, reason string, err error) int {
 	span.SetStatus(codes.Error, reason)
+	if err != nil {
+		span.SetAttributes(attribute.String("error.type", fmt.Sprintf("%T", err)))
+	}
 
 	logger := logging.FromContext(ctx)
 	if logger.Enabled(logging.DebugLevel) {
@@ -192,7 +199,7 @@ func reject(ctx context.Context, span trace.Span, status int, reason string, err
 			"reason": reason,
 		}
 		if err != nil {
-			fields["error"] = err.Error()
+			fields["error.type"] = fmt.Sprintf("%T", err)
 		}
 		logger.WithFields(fields).Debugf("webhook delivery rejected")
 	}
