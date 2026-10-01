@@ -343,3 +343,29 @@ func TestHeadersRedactsURLValuedHeaders(t *testing.T) {
 		}
 	}
 }
+
+// TestReaderCapsRedactionExpansion: a body shorter than the cap can grow past
+// it once a short secret becomes the longer Marker; the preview cap must hold
+// for the rendered text, not just the input.
+func TestReaderCapsRedactionExpansion(t *testing.T) {
+	t.Parallel()
+
+	got := Reader(strings.NewReader("token=x"), 7)
+	preview, truncated := strings.CutSuffix(got, "...[truncated]")
+	require.True(t, truncated, "want the expansion marked as truncated: %q", got)
+	require.LessOrEqual(t, len(preview), 7)
+	require.NotContains(t, preview, "x")
+
+	require.Equal(t, "ok", Reader(strings.NewReader("ok"), 7), "a body that fits is left whole")
+}
+
+func TestHeaderValuesSharesThePolicy(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{Marker}, HeaderValues("Authorization", []string{"Bearer a", "Bearer b"}))
+	require.Equal(t, []string{"application/json"}, HeaderValues("Content-Type", []string{"application/json"}))
+	got := HeaderValues("Location", []string{"https://h.example/p?X-Amz-Signature=sig-secret", "%%bad"})
+	require.Len(t, got, 2)
+	require.NotContains(t, got[0], "sig-secret")
+	require.Equal(t, Marker, got[1], "an unparsable URL is masked whole")
+}

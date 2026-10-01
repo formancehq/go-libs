@@ -96,9 +96,11 @@ func redactHeaderEchoes(data []byte) []byte {
 }
 
 // Reader reads at most maxBytes from r, redacts the complete read window, then
-// applies the display cut and marks it "...[truncated]". A non-positive
-// maxBytes uses a 4 KiB default. Reader never reads more than maxBytes+1 bytes
-// from r, so it is safe on arbitrarily large bodies.
+// applies the display cut and marks it "...[truncated]". The cut applies to
+// the redacted text too, so a short secret replaced by the longer Marker never
+// pushes the preview past maxBytes. A non-positive maxBytes uses a 4 KiB
+// default. Reader never reads more than maxBytes+1 bytes from r, so it is safe
+// on arbitrarily large bodies.
 func Reader(r io.Reader, maxBytes int) string {
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxBody
@@ -112,11 +114,8 @@ func Reader(r io.Reader, maxBytes int) string {
 	}
 
 	s := strings.TrimSpace(string(Bytes(data)))
-	if truncated {
-		if len(s) > maxBytes {
-			s = s[:maxBytes]
-		}
-		s += "...[truncated]"
+	if truncated || len(s) > maxBytes {
+		s = s[:min(len(s), maxBytes)] + "...[truncated]"
 	}
 
 	return s
@@ -152,18 +151,7 @@ func Headers(h http.Header) string {
 		}
 		b.WriteString(name)
 		b.WriteString(": ")
-		if SensitiveHeader(name) {
-			b.WriteString(Marker)
-
-			continue
-		}
-		if urlValuedHeader(name) {
-			// A redirect to a presigned URL carries its credential in the query.
-			b.WriteString(headerURLs(h.Values(name)))
-
-			continue
-		}
-		b.WriteString(strings.Join(h.Values(name), ","))
+		b.WriteString(strings.Join(HeaderValues(name, h.Values(name)), ","))
 	}
 
 	return b.String()
@@ -180,9 +168,25 @@ func urlValuedHeader(name string) bool {
 	return false
 }
 
+// HeaderValues renders one header's values for a log line, the policy every
+// header rendering shares: a credential header becomes a single Marker, a
+// URL-valued header (Location, Content-Location, Referer) goes through URL,
+// since a redirect to a presigned URL carries its credential in the query,
+// and any other value is kept as is.
+func HeaderValues(name string, values []string) []string {
+	switch {
+	case SensitiveHeader(name):
+		return []string{Marker}
+	case urlValuedHeader(name):
+		return headerURLs(values)
+	default:
+		return values
+	}
+}
+
 // headerURLs renders URL-valued header values through URL. A value that does
 // not parse is masked whole: it cannot be shown to hold no credential.
-func headerURLs(values []string) string {
+func headerURLs(values []string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		u, err := url.Parse(value)
@@ -194,7 +198,7 @@ func headerURLs(values []string) string {
 		out = append(out, URL(u))
 	}
 
-	return strings.Join(out, ",")
+	return out
 }
 
 // URL renders u for a log line. url.URL.Redacted is not sufficient: it masks

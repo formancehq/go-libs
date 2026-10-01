@@ -548,3 +548,37 @@ func TestDebugHTTPTransportReplaysHeadBeforeReadError(t *testing.T) {
 	require.Contains(t, logs, "Etag: e1", "the header portion is still logged")
 	require.Contains(t, logs, "failed to dump HTTP response body: connection reset")
 }
+
+// TestDebugHTTPTransportRedactsURLValuedHeaders: Location, Content-Location
+// and Referer are not credential header names, but their URLs can carry one
+// (a presigned redirect, a referring page with a token). The dump must render
+// them through the URL policy, not verbatim.
+func TestDebugHTTPTransportRedactsURLValuedHeaders(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := debugServer(t, http.Header{
+		"Location":         {"https://bucket.s3.amazonaws.com/report.csv?X-Amz-Signature=presigned-secret&X-Amz-Expires=300"},
+		"Content-Location": {"https://cdnuser:cdnpass@cdn.example/v1/report.csv"},
+	}, []byte("ok"))
+
+	logger := &recordingLogger{debugEnabled: true}
+	ctx := logging.ContextWithLogger(context.Background(), logger)
+	client := &http.Client{Transport: NewDebugHTTPTransport(srv.Client().Transport)}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/data", nil)
+	require.NoError(t, err)
+	req.Header.Set("Referer", "https://app.example/callback?token=referer-secret&step=2")
+
+	rsp, err := client.Do(req)
+	require.NoError(t, err)
+	_, _ = io.Copy(io.Discard, rsp.Body)
+	_ = rsp.Body.Close()
+
+	logs := strings.Join(logger.debugMessages, "\n")
+	for _, secret := range []string{"presigned-secret", "cdnuser", "cdnpass", "referer-secret"} {
+		require.NotContains(t, logs, secret)
+	}
+	for _, want := range []string{"X-Amz-Expires=300", "cdn.example/v1/report.csv", "step=2"} {
+		require.Contains(t, logs, want)
+	}
+}

@@ -191,9 +191,8 @@ func (p *prefixReadCloser) Close() error {
 }
 
 // writeRedactedHeaders writes one "Name: value" line per header, sorted by
-// name. Values of headers redact.SensitiveHeader classifies as credentials are
-// replaced by redact.Marker; every other value is written in full, joined by
-// ", ".
+// name, with each value rendered by redact.HeaderValues (credentials masked,
+// URL-valued headers redacted as URLs) and joined by ", ".
 func writeRedactedHeaders(builder *strings.Builder, headers http.Header) {
 	names := make([]string, 0, len(headers))
 	for name := range headers {
@@ -202,10 +201,6 @@ func writeRedactedHeaders(builder *strings.Builder, headers http.Header) {
 	sort.Strings(names)
 
 	for _, name := range names {
-		value := redact.Marker
-		if !redact.SensitiveHeader(name) {
-			value = strings.Join(headers[name], ", ")
-		}
-		fmt.Fprintf(builder, "%s: %s\r\n", name, value)
+		fmt.Fprintf(builder, "%s: %s\r\n", name, strings.Join(redact.HeaderValues(name, headers[name]), ", "))
 	}
 }
