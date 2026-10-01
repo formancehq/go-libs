@@ -369,3 +369,18 @@ func TestHeaderValuesSharesThePolicy(t *testing.T) {
 	require.NotContains(t, got[0], "sig-secret")
 	require.Equal(t, Marker, got[1], "an unparsable URL is masked whole")
 }
+
+func TestBytesMasksBareJSONCredentialValues(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ in, want string }{
+		{`{"password":123456,"ok":true}`, `{"password":[REDACTED],"ok":true}`},
+		{`{"user_passcode": 4321 , "step":2}`, `{"user_passcode": [REDACTED] , "step":2}`},
+		{`{"api_key":true,"n":1}`, `{"api_key":[REDACTED],"n":1}`},
+		// Not credentials: identifiers, amounts, and nested objects stay.
+		{`{"token_id":7,"amount":100}`, `{"token_id":7,"amount":100}`},
+		{`{"credentials":{"id":3}}`, `{"credentials":{"id":3}}`},
+	} {
+		require.Equal(t, tc.want, string(Bytes([]byte(tc.in))), "Bytes(%s)", tc.in)
+	}
+}

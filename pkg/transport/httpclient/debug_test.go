@@ -180,7 +180,7 @@ func TestDebugHTTPTransportRedactsCredentialsAndKeepsDiagnostics(t *testing.T) {
 
 	const (
 		pathKey     = "alcht_0123456789abcdefghijklmnop"
-		requestBody = `{"side":"buy","api_key":"sk-live-secret"}`
+		requestBody = `{"side":"buy","api_key":"sk-live-secret","pin":"x","passcode":987654321,"qty":1}`
 		respBody    = `{"data":[{"id":"txn-1"}],"session_token":"leak-me-not"}`
 	)
 	srv, received := debugServer(t, http.Header{
@@ -219,7 +219,7 @@ func TestDebugHTTPTransportRedactsCredentialsAndKeepsDiagnostics(t *testing.T) {
 	for _, secret := range []string{
 		"svcuser", "svcpass", base64.StdEncoding.EncodeToString([]byte("svcuser:svcpass")),
 		pathKey, "query-secret", "cb-key-value", "bitstamp-api-key-abc123",
-		"sk-live-secret", "super-secret", "leak-me-not",
+		"sk-live-secret", "987654321", "super-secret", "leak-me-not",
 	} {
 		require.NotContains(t, logs, secret)
 	}
@@ -231,6 +231,7 @@ func TestDebugHTTPTransportRedactsCredentialsAndKeepsDiagnostics(t *testing.T) {
 		"X-Auth-Version: v2",
 		"X-Auth-Subaccount: sub-42",
 		`"side":"buy"`,
+		`"qty":1`,
 		"Content-Type: application/json",
 		`Etag: "v1-etag"`,
 		"Ratelimit-Remaining: 42",

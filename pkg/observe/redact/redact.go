@@ -44,6 +44,11 @@ var (
 	// The string-value matcher accepts JSON escape sequences: a [^"]* shape
 	// stops at an escaped quote and exposes the rest of the secret.
 	kvSecretRe = regexp.MustCompile(`(?i)("?[a-z0-9]*` + bodySecretKey + `"?\s*[:=]\s*")((?:\\.|[^"\\])*)(")`)
+	// A JSON credential is not always a string: a numeric password, PIN or
+	// passcode is written bare ({"password":123456}). Mask the scalar up to
+	// the next JSON delimiter; an object or array value is left to the keys
+	// inside it.
+	kvBareSecretRe = regexp.MustCompile(`(?i)("[a-z0-9_-]*` + bodySecretKey + `"\s*:\s*)([^\s",{}\[\]]+)`)
 	// Error bodies are not always JSON. Cover unquoted key/value echoes while
 	// stopping at the usual text and JSON delimiters.
 	headerSecretRe = regexp.MustCompile(`(?i)((?:x-[a-z0-9-]*(?:key|secret|token|signature|passphrase)|authorization|` + bodySecretKey + `)\s*[:=]\s*)([^\s",}]+)`)
@@ -67,6 +72,7 @@ func Bytes(data []byte) []byte {
 	out := redactHeaderEchoes(data)
 	out = danglingSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 	out = kvSecretRe.ReplaceAll(out, []byte("${1}"+Marker+"${3}"))
+	out = kvBareSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 	out = bearerRe.ReplaceAll(out, []byte("${1}"+Marker))
 	out = headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 
