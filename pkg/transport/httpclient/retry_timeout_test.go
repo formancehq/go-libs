@@ -155,8 +155,9 @@ func TestPerAttemptTimeoutCutsStalledHeaders(t *testing.T) {
 func TestPerAttemptTimeoutAllowsSlowBody(t *testing.T) {
 	t.Parallel()
 
-	const perAttempt = 150 * time.Millisecond
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	const perAttempt = 50 * time.Millisecond
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -164,13 +165,16 @@ func TestPerAttemptTimeoutAllowsSlowBody(t *testing.T) {
 
 			return
 		}
+		_, _ = w.Write([]byte("chunk"))
 		flusher.Flush()
-		// Dribble the body out well past the per-attempt header deadline.
-		for range 4 {
-			_, _ = w.Write([]byte("chunk"))
-			flusher.Flush()
-			time.Sleep(perAttempt / 2)
+		// The rest of the body waits for the test, which releases it only
+		// once the per-attempt header deadline has passed.
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
 		}
+		_, _ = w.Write([]byte("chunkchunkchunk"))
 	}))
 	defer srv.Close()
 
@@ -180,9 +184,19 @@ func TestPerAttemptTimeoutAllowsSlowBody(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	head := make([]byte, len("chunk"))
+	_, err = io.ReadFull(resp.Body, head)
 	require.NoError(t, err)
-	require.Equal(t, "chunkchunkchunkchunk", string(body), "want the full slow stream")
+
+	// The header deadline is ResponseHeaderTimeout on the transport; a timer
+	// marks when it has certainly elapsed, then the body resumes.
+	pastDeadline := time.NewTimer(2 * perAttempt)
+	<-pastDeadline.C
+	close(release)
+
+	rest, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "chunkchunkchunkchunk", string(head)+string(rest), "want the full slow stream")
 }
 
 // TestRetryableStatuses pins which statuses the default policy replays: 408,

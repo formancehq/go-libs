@@ -115,7 +115,9 @@ type RetryConfig struct {
 }
 
 // RetryTransport is an http.RoundTripper that paces and retries requests. Build
-// it with NewRetryTransport.
+// it with NewRetryTransport. It is safe for concurrent use: its fields are
+// read-only after construction, and every RoundTrip keeps its per-request
+// state (attempt count, the bearer token it carries) in its own roundTrip.
 type RetryTransport struct {
 	cfg     RetryConfig
 	timeout time.Duration
@@ -234,6 +236,10 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		maxAttempts:   t.cfg.MaxAttempts,
 		policyAttempt: 1,
 	}
+	// A RoundTripper must close the request body, including on errors. Base
+	// closes whatever body it is handed; the caller's own body is closed here
+	// whenever no attempt handed it to Base.
+	defer rt.closeOriginalBody()
 
 	// One measurement per logical request, so the histogram reflects what the
 	// caller actually waited for rather than one attempt out of several.
@@ -323,6 +329,22 @@ type roundTrip struct {
 	// carries, which a 401 compare-and-clears.
 	attempt int
 	bearer  string
+
+	// originalBodySent records that an attempt handed the caller's own
+	// req.Body to Base, which then owns closing it.
+	originalBodySent bool
+}
+
+// closeOriginalBody closes the caller's request body unless an attempt handed
+// it to Base. Attempts that run on a clone carry a fresh body from GetBody,
+// which Base closes; the original is otherwise never closed. GetBody must
+// return a reader independent of the original, as net/http's own do.
+func (rt *roundTrip) closeOriginalBody() {
+	body := rt.req.Body
+	if rt.originalBodySent || body == nil || body == http.NoBody {
+		return
+	}
+	_ = body.Close()
 }
 
 // prepare readies one attempt for the wire: the bearer token and limiter
@@ -419,6 +441,9 @@ func (rt *roundTrip) authorize(ctx context.Context) (*http.Request, error) {
 // any decision about it: the attempt metric, then a limiter that learns from
 // responses.
 func (rt *roundTrip) send(ctx context.Context, r *http.Request) (*http.Response, error) {
+	if r.Body != nil && r.Body == rt.req.Body {
+		rt.originalBodySent = true
+	}
 	resp, err := rt.t.cfg.Base.RoundTrip(r)
 	rt.authReplayPending = false
 	rt.t.metrics.observeAttempt(ctx, rt.req, resp, err)

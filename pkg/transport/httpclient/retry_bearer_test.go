@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -641,32 +642,38 @@ func TestBearerRefreshReturnsCallerCancellation(t *testing.T) {
 func TestBearerReplayChecksBudgetAfterSigningBeforeSend(t *testing.T) {
 	t.Parallel()
 
-	source := &fakeBearerSource{current: "old", replacement: "new"}
-	var hits atomic.Int32
-	client := quietRetryClient(RetryConfig{
-		Base: rtFunc(func(r *http.Request) (*http.Response, error) {
-			if hits.Add(1) > 1 {
-				t.Error("the replay reached the wire after the auth budget expired")
-			}
+	// The bubble's fake clock only moves when every goroutine in it is
+	// blocked, so the original attempt costs no time and the budget expires
+	// exactly while the replay's signer runs: no wall-clock race, no real wait.
+	synctest.Test(t, func(t *testing.T) {
+		source := &fakeBearerSource{current: "old", replacement: "new"}
+		var hits atomic.Int32
+		client := quietRetryClient(RetryConfig{
+			Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+				if hits.Add(1) > 1 {
+					t.Error("the replay reached the wire after the auth budget expired")
+				}
 
-			return rtResponse(r, http.StatusUnauthorized, "original rejection"), nil
-		}),
-		Bearer: source,
-		Sign: func(*http.Request) error {
-			if hits.Load() == 1 {
-				time.Sleep(30 * time.Millisecond)
-			}
+				return rtResponse(r, http.StatusUnauthorized, "original rejection"), nil
+			}),
+			Bearer: source,
+			Sign: func(*http.Request) error {
+				if hits.Load() == 1 {
+					// Advances the fake clock past MaxElapsed; returns at once.
+					time.Sleep(30 * time.Millisecond)
+				}
 
-			return nil
-		},
-		MaxElapsed: 20 * time.Millisecond,
+				return nil
+			},
+			MaxElapsed: 20 * time.Millisecond,
+		})
+		resp, err := rtDoRequest(t, client, http.MethodGet, "https://api.example/data", nil)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		require.ErrorIs(t, err, context.DeadlineExceeded, "want the auth budget deadline")
+		require.EqualValues(t, 1, hits.Load(), "want only the original request on the wire")
 	})
-	resp, err := rtDoRequest(t, client, http.MethodGet, "https://api.example/data", nil)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
-	require.ErrorIs(t, err, context.DeadlineExceeded, "want the auth budget deadline")
-	require.EqualValues(t, 1, hits.Load(), "want only the original request on the wire")
 }
 
 func TestSignFailureClosesThePreparedAttemptBody(t *testing.T) {
