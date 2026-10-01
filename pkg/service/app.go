@@ -35,9 +35,18 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.Duration(TotalStopTimeoutFlag, defaultTotalStopTimeout, "Total time allowed for all OnStop hooks to complete (see https://pkg.go.dev/go.uber.org/fx#StopTimeout)")
 }
 
-// ErrShutdownExitCode is returned by Run, carrying the exit code, when the
-// application was shut down through fx.Shutdowner with a non-zero fx.ExitCode.
-var ErrShutdownExitCode = errors.New("application shut down with a non-zero exit code")
+var (
+	// ErrStartFailed wraps every error Run returns because the application
+	// did not start: a constructor or an OnStart hook failed. The cause, its
+	// message and any exit code it carries stay in the chain, so
+	// errors.Is(err, ErrStartFailed) tells a start failure from a shutdown
+	// without losing either.
+	ErrStartFailed = errors.New("application failed to start")
+	// ErrShutdownExitCode is returned by Run, carrying the exit code, when the
+	// application was shut down through fx.Shutdowner with a non-zero
+	// fx.ExitCode.
+	ErrShutdownExitCode = errors.New("application shut down with a non-zero exit code")
+)
 
 type App struct {
 	options []fx.Option
@@ -67,21 +76,23 @@ func (a *App) Run(cmd *cobra.Command) error {
 		// Run never exits, so a caller with its own Execute can still render,
 		// redact or classify the error first.
 		//
-		// The error is returned as is rather than wrapped in a new
+		// The cause is wrapped with %w rather than replaced by a new
 		// ErrorWithExitCode, as the shutdown path below does: a start error
 		// already carries its own exit code (a constructor or OnStart hook
-		// returned errors.NewErrorWithExitCode), and both returns keep it in
-		// the chain, where errors.ExitCodeFromError finds it. A shutdown has
-		// no error of its own, only fx's exit code, hence its sentinel.
+		// returned errors.NewErrorWithExitCode), and %w keeps it in the chain,
+		// where errors.ExitCodeFromError finds it, along with the cause's
+		// message. A shutdown has no error of its own, only fx's exit code.
 		//
 		// Return complete error if we are debugging
 		// While polluting the output most of the time, it sometimes gives some precious information.
 		// Otherwise dig.RootCause drops dig's "could not build arguments for
-		// function …" wrapping and returns the error the application raised.
-		if IsDebug(cmd) {
-			return err
+		// function …" wrapping and keeps the error the application raised.
+		cause := err
+		if !IsDebug(cmd) {
+			cause = dig.RootCause(err)
 		}
-		return dig.RootCause(err)
+
+		return fmt.Errorf("%w: %w", ErrStartFailed, cause)
 	}
 
 	var exitCode int

@@ -191,11 +191,32 @@ func TestRunReturnsExitCodedStartError(t *testing.T) {
 		}))
 
 		err := app.Run(cmd)
+		require.ErrorIs(t, err, service.ErrStartFailed, "debug=%v", debug)
+		require.ErrorIs(t, err, startErr, "debug=%v: the cause stays in the chain", debug)
 		code, ok := errorsutils.ExitCodeFromError(err)
 		require.True(t, ok, "debug=%v: exit code lost from %v", debug, err)
 		require.Equal(t, 78, code)
 		require.ErrorContains(t, err, "invalid configuration")
+		if !debug {
+			require.NotContains(t, err.Error(), "could not build arguments", "dig's wrapping is dropped outside debug")
+		}
 	}
+}
+
+func TestRunWrapsStartErrorWithoutExitCode(t *testing.T) {
+	t.Parallel()
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	service.AddFlags(cmd.Flags())
+	app := service.NewWithLogger(logging.Testing(), fx.Provide(func() (*bytes.Buffer, error) {
+		return nil, errors.New("dial database")
+	}), fx.Invoke(func(*bytes.Buffer) {}))
+
+	err := app.Run(cmd)
+	require.ErrorIs(t, err, service.ErrStartFailed)
+	require.Equal(t, "application failed to start: dial database", err.Error())
+	_, ok := errorsutils.ExitCodeFromError(err)
+	require.False(t, ok, "no exit code was attached")
 }
 
 func TestRunReturnsShutdownExitCode(t *testing.T) {
@@ -209,6 +230,7 @@ func TestRunReturnsShutdownExitCode(t *testing.T) {
 
 	err := app.Run(cmd)
 	require.ErrorIs(t, err, service.ErrShutdownExitCode)
+	require.NotErrorIs(t, err, service.ErrStartFailed, "a shutdown is not a start failure")
 	code, ok := errorsutils.ExitCodeFromError(err)
 	require.True(t, ok)
 	require.Equal(t, 3, code)

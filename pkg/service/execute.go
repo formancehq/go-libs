@@ -12,9 +12,10 @@ import (
 // Execute runs cmd and exits the process when it fails: with the exit code
 // the error carries (see errors.NewErrorWithExitCode), 1 otherwise. App.Run
 // returns both kinds of exit-coded failure with the code in the chain: a
-// start error with the code its constructor or hook attached, and a shutdown
-// exit code as ErrShutdownExitCode. One lookup therefore covers both, and an
-// error without a code needs no wrapping to exit 1.
+// start failure as ErrStartFailed wrapping its cause and the code the
+// constructor or hook attached, and a shutdown exit code as
+// ErrShutdownExitCode. One lookup therefore covers both, and an error without
+// a code needs no wrapping to exit 1.
 func Execute(cmd *cobra.Command) {
 	bindEnvForExecute(cmd)
 	if err := cmd.Execute(); err != nil {
