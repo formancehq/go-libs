@@ -14,7 +14,7 @@ type Attempt struct {
 	Response *http.Response // nil on transport error
 	Err      error
 	Count    int    // 1-based attempt number (the try that just finished)
-	Body     []byte // bounded response-body head, only when RetryConfig.BufferBody > 0
+	Body     []byte // bounded response-body head, only when RetryConfig.BufferBody > 0 and budget remains
 }
 
 // RetryPolicy decides whether to retry a completed attempt and how long to

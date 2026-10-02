@@ -378,3 +378,118 @@ func TestRetryPacingKeepsCallerCancellation(t *testing.T) {
 		require.NotErrorIs(t, err, context.DeadlineExceeded)
 	})
 }
+
+// slowBody serves data one Read after a delay, so a read of it is in progress
+// for that long.
+type slowBody struct {
+	io.Reader
+	delay  time.Duration
+	closed atomic.Int32
+}
+
+func (b *slowBody) Read(p []byte) (int, error) {
+	time.Sleep(b.delay)
+
+	return b.Reader.Read(p)
+}
+
+func (b *slowBody) Close() error {
+	b.closed.Add(1)
+
+	return nil
+}
+
+// TestBufferedPolicyReadIsBoundedByTheBudget: with BufferBody set, the policy's
+// snapshot of a retryable response is read inside MaxElapsed and the caller's
+// context. A body that stalls after its headers is closed when either ends,
+// and the call fails with that cause, without another attempt; the response
+// could no longer be surfaced intact.
+func TestBufferedPolicyReadIsBoundedByTheBudget(t *testing.T) {
+	t.Parallel()
+
+	const budget = 100 * time.Millisecond
+	for _, tc := range []struct {
+		name        string
+		cancelAfter time.Duration // 0 = never
+		wantErr     error
+		wantElapsed time.Duration
+	}{
+		{name: "budget ends during the read", wantErr: context.DeadlineExceeded, wantElapsed: budget},
+		{name: "caller cancels during the read", cancelAfter: budget / 4, wantErr: context.Canceled, wantElapsed: budget / 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				if tc.cancelAfter > 0 {
+					time.AfterFunc(tc.cancelAfter, cancel)
+				}
+				body := newStallingBody()
+				var hits atomic.Int32
+				transport := NewRetryTransport(RetryConfig{
+					Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+						hits.Add(1)
+						resp := rtResponse(r, http.StatusServiceUnavailable, "")
+						resp.Body = body
+
+						return resp, nil
+					}),
+					BufferBody: 1 << 10,
+					BaseDelay:  10 * time.Millisecond,
+					MaxDelay:   10 * time.Millisecond,
+					MaxElapsed: budget,
+					Logger:     rtDiscardLogger(),
+				})
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example/data", nil)
+				require.NoError(t, err)
+
+				start := time.Now()
+				resp, err := transport.RoundTrip(req)
+				require.Nil(t, resp)
+				require.ErrorIs(t, err, tc.wantErr)
+				if tc.wantErr == context.Canceled {
+					require.NotErrorIs(t, err, context.DeadlineExceeded)
+				}
+				require.EqualValues(t, 1, hits.Load(), "no attempt is sent after the cut read")
+				require.EqualValues(t, 1, body.closes.Load(), "the stalled body is closed exactly once")
+				require.Equal(t, tc.wantElapsed, time.Since(start))
+			})
+		})
+	}
+}
+
+// TestBufferedPolicyReadSkippedOnceTheBudgetIsSpent: an attempt that completes
+// after MaxElapsed cannot be retried, so its response is surfaced untouched
+// rather than lost to a snapshot cut at the deadline, however slow its body.
+func TestBufferedPolicyReadSkippedOnceTheBudgetIsSpent(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const budget = 100 * time.Millisecond
+		body := &slowBody{Reader: strings.NewReader("late but whole"), delay: time.Millisecond}
+		transport := NewRetryTransport(RetryConfig{
+			Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+				time.Sleep(2 * budget)
+				resp := rtResponse(r, http.StatusOK, "")
+				resp.Body = body
+
+				return resp, nil
+			}),
+			BufferBody: 1 << 10,
+			MaxElapsed: budget,
+			Logger:     rtDiscardLogger(),
+		})
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/data", nil)
+		require.NoError(t, err)
+
+		resp, err := transport.RoundTrip(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		got, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, "late but whole", string(got))
+		require.Zero(t, body.closed.Load(), "the body is the caller's to close")
+	})
+}

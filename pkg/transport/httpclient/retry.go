@@ -67,6 +67,11 @@ type RetryConfig struct {
 	// BufferBody, when > 0, snapshots up to that many bytes of each response
 	// body for the policy (Attempt.Body) and re-wraps resp.Body so the caller
 	// still reads the full body. Needed only for body-signalled rate limits.
+	// The snapshot is read inside MaxElapsed: a body that stalls past it is
+	// closed and the call fails with context.DeadlineExceeded, since the
+	// response can no longer be surfaced intact. An attempt that completes
+	// with the budget already spent is judged without a snapshot, since no
+	// retry can follow it.
 	BufferBody int
 	// Policy overrides the retry decision (nil = DefaultRetryPolicy built from
 	// BaseDelay and MaxDelay).
@@ -293,7 +298,10 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			continue
 		}
 
-		wait, retry := rt.decide(ctx, r, resp, err)
+		wait, retry, derr := rt.decide(ctx, r, resp, err)
+		if derr != nil {
+			return nil, derr
+		}
 		if !retry {
 			return resp, err
 		}
@@ -505,19 +513,24 @@ func (rt *roundTrip) send(ctx context.Context, r *http.Request) (*http.Response,
 // means resp/err is the answer: a request that is not safe to replay, the last
 // allowed attempt, a policy refusal, or a wait the remaining budget cannot
 // honor. Otherwise wait is how long to back off before the next attempt.
-func (rt *roundTrip) decide(ctx context.Context, r *http.Request, resp *http.Response, err error) (wait time.Duration, retry bool) {
+// fail is set when buffering the response for the policy was cut short, which
+// leaves no response to surface.
+func (rt *roundTrip) decide(ctx context.Context, r *http.Request, resp *http.Response, err error) (wait time.Duration, retry bool, fail error) {
 	if !rt.idempotent || rt.attempt >= rt.maxAttempts {
 		if rt.idempotent && failed(resp, err) {
 			rt.t.metrics.observeExhausted(ctx, rt.req, causeAttempts)
 		}
 
-		return 0, false
+		return 0, false, nil
 	}
 
-	body := rt.t.snapshot(resp)
+	body, fail := rt.snapshot(ctx, resp)
+	if fail != nil {
+		return 0, false, fail
+	}
 	wait, retry = rt.t.cfg.Policy.Retry(Attempt{Request: r, Response: resp, Err: err, Count: rt.policyAttempt, Body: body})
 	if !retry {
-		return 0, false
+		return 0, false, nil
 	}
 	if wait <= 0 {
 		wait = rt.t.cfg.BaseDelay
@@ -528,10 +541,10 @@ func (rt *roundTrip) decide(ctx context.Context, r *http.Request, resp *http.Res
 		// otherwise impossible to spot from the outside.
 		rt.t.metrics.observeExhausted(ctx, rt.req, causeBudget)
 
-		return 0, false
+		return 0, false, nil
 	}
 
-	return wait, true
+	return wait, true, nil
 }
 
 // waitBackoff records the retry that decide granted, drains the discarded
@@ -599,16 +612,47 @@ func (t *RetryTransport) attemptRequest(ctx context.Context, req *http.Request, 
 
 // snapshot reads a bounded copy of the response body (when BufferBody is set)
 // and re-wraps resp.Body so the caller still reads the full body. It returns
-// nil when there is nothing to buffer.
-func (t *RetryTransport) snapshot(resp *http.Response) []byte {
-	if t.cfg.BufferBody <= 0 || resp == nil || resp.Body == nil {
-		return nil
+// nil when there is nothing to buffer, or when the budget is already spent: no
+// retry can follow, so the policy's verdict cannot need the body, and the
+// response is surfaced untouched.
+//
+// The read is bounded in time as well as size. A body that stalls past the
+// MaxElapsed deadline, or past the caller's cancellation, is closed to unblock
+// the read; the response can then no longer be surfaced intact, so the error
+// says why instead: the caller's ctx error, or context.DeadlineExceeded.
+func (rt *roundTrip) snapshot(ctx context.Context, resp *http.Response) ([]byte, error) {
+	if rt.t.cfg.BufferBody <= 0 || resp == nil || resp.Body == nil || !time.Now().Before(rt.deadline) {
+		return nil, nil
 	}
-	buf, err := io.ReadAll(io.LimitReader(resp.Body, int64(t.cfg.BufferBody)))
+	var (
+		once sync.Once
+		cut  bool
+	)
+	closeBody := func() {
+		once.Do(func() {
+			cut = true
+			_ = resp.Body.Close()
+		})
+	}
+	timer := time.AfterFunc(time.Until(rt.deadline), closeBody)
+	stopCancel := context.AfterFunc(ctx, closeBody)
+	buf, err := io.ReadAll(io.LimitReader(resp.Body, int64(rt.t.cfg.BufferBody)))
+	timer.Stop()
+	stopCancel()
+	// Claim the once: a close that raced the end of the read has either run
+	// in full, setting cut, or never will.
+	once.Do(func() {})
+	if cut {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		return nil, rt.budgetSpent(ctx, "while buffering the response for the retry policy", nil)
+	}
 	// Re-wrap: the buffered head followed by whatever remains unread.
 	resp.Body = &joinReadCloser{head: buf, tail: resp.Body, pendingErr: err}
 
-	return buf
+	return buf, nil
 }
 
 // logger returns the configured logger, or the one the request context
