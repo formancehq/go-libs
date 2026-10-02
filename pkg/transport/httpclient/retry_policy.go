@@ -78,13 +78,15 @@ func (p DefaultRetryPolicy) maxDelay() time.Duration {
 }
 
 // backoff is exponential (base << (attempt-1)) capped by Max, with up-to-half
-// jitter so concurrent clients do not resynchronize their retries.
+// jitter so concurrent clients do not resynchronize their retries. The cap is
+// checked before the shift, which saturates at Max: a shift that would pass
+// Max can overflow and wrap back to a small positive delay.
 func (p DefaultRetryPolicy) backoff(attempt int) time.Duration {
 	base, maxDelay := p.baseDelay(), p.maxDelay()
 	d := maxDelay
-	if attempt >= 1 && attempt < 31 {
-		if v := base << uint(attempt-1); v > 0 && v < maxDelay {
-			d = v
+	if attempt >= 1 && attempt < 64 {
+		if shift := uint(attempt - 1); base <= maxDelay>>shift {
+			d = base << shift
 		}
 	}
 	half := d / 2

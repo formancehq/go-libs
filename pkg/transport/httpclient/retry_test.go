@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -398,6 +399,28 @@ func TestDefaultPolicyBackoffIsBoundedAndJittered(t *testing.T) {
 			require.GreaterOrEqual(t, d, want/2, "attempt %d", attempt)
 			require.LessOrEqual(t, d, want, "attempt %d", attempt)
 		}
+	}
+}
+
+// TestDefaultPolicyBackoffSaturatesInsteadOfWrapping: a large Base whose shift
+// overflows int64 can wrap back to a small positive duration (here 4ns at the
+// third attempt); the backoff must saturate at Max instead.
+func TestDefaultPolicyBackoffSaturatesInsteadOfWrapping(t *testing.T) {
+	t.Parallel()
+
+	const maxDelay = time.Duration(math.MaxInt64)
+	p := DefaultRetryPolicy{Base: time.Duration(1<<62 + 1), Max: maxDelay}
+	for attempt, want := range map[int]time.Duration{1: time.Duration(1<<62 + 1), 2: maxDelay, 3: maxDelay, 63: maxDelay, 64: maxDelay} {
+		d := p.backoff(attempt)
+		require.GreaterOrEqual(t, d, want/2, "attempt %d", attempt)
+		require.LessOrEqual(t, d, want, "attempt %d", attempt)
+	}
+
+	// A Max that is not a power of two still caps a shift landing just past it.
+	p = DefaultRetryPolicy{Base: 3 * time.Second, Max: 5 * time.Second}
+	for range 20 {
+		require.LessOrEqual(t, p.backoff(2), 5*time.Second)
+		require.GreaterOrEqual(t, p.backoff(2), 5*time.Second/2)
 	}
 }
 
