@@ -560,3 +560,85 @@ func TestRetryBudgetCoversSigning(t *testing.T) {
 		})
 	}
 }
+
+// countingBearer counts the tokens a fakeBearerSource hands out.
+type countingBearer struct {
+	*fakeBearerSource
+	calls atomic.Int32
+}
+
+func (b *countingBearer) Token(ctx context.Context) (string, error) {
+	b.calls.Add(1)
+
+	return b.fakeBearerSource.Token(ctx)
+}
+
+// TestDiscardedResponseDrainEndsOnCallerCancel: a discarded response whose
+// body stalls is closed as soon as the caller cancels, not only when
+// MaxElapsed runs out, for an ordinary retry and for the bearer replay alike.
+// The caller gets its own context.Canceled at once, even when the cancel
+// leaves too little budget for the backoff, and no replay token is minted
+// for a cancelled call.
+func TestDiscardedResponseDrainEndsOnCallerCancel(t *testing.T) {
+	t.Parallel()
+
+	const (
+		budget  = 100 * time.Millisecond
+		backoff = 10 * time.Millisecond
+	)
+	for _, tc := range []struct {
+		name        string
+		status      int
+		bearer      bool
+		cancelAfter time.Duration
+	}{
+		{name: "ordinary retry", status: http.StatusServiceUnavailable, cancelAfter: budget / 4},
+		{name: "ordinary retry near the deadline", status: http.StatusServiceUnavailable, cancelAfter: budget - backoff/2},
+		{name: "bearer replay", status: http.StatusUnauthorized, bearer: true, cancelAfter: budget / 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				time.AfterFunc(tc.cancelAfter, cancel)
+				body := newStallingBody()
+				var hits atomic.Int32
+				var bearer *countingBearer
+				cfg := RetryConfig{
+					Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+						hits.Add(1)
+						resp := rtResponse(r, tc.status, "")
+						resp.Body = body
+
+						return resp, nil
+					}),
+					BaseDelay:  backoff,
+					MaxDelay:   backoff,
+					MaxElapsed: budget,
+					Logger:     rtDiscardLogger(),
+				}
+				if tc.bearer {
+					bearer = &countingBearer{fakeBearerSource: &fakeBearerSource{current: "old", replacement: "new"}}
+					cfg.Bearer = bearer
+				}
+				transport := NewRetryTransport(cfg)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example/data", nil)
+				require.NoError(t, err)
+
+				start := time.Now()
+				resp, err := transport.RoundTrip(req)
+				require.Nil(t, resp)
+				require.ErrorIs(t, err, context.Canceled)
+				require.NotErrorIs(t, err, context.DeadlineExceeded)
+				require.Equal(t, tc.cancelAfter, time.Since(start), "the drain ends when the caller cancels")
+				require.EqualValues(t, 1, hits.Load())
+				require.EqualValues(t, 1, body.closes.Load(), "the stalled body is closed exactly once")
+				if bearer != nil {
+					require.EqualValues(t, 2, bearer.calls.Load(), "the first token and the re-mint, no replay token")
+				}
+			})
+		})
+	}
+}

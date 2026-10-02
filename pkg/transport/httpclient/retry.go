@@ -576,9 +576,13 @@ func (rt *roundTrip) decide(ctx context.Context, r *http.Request, resp *http.Res
 func (rt *roundTrip) waitBackoff(ctx context.Context, resp *http.Response, err error, wait time.Duration) error {
 	// Drain and close so the connection can be reused before the next try,
 	// within the budget: a body that stalls must not carry the call past
-	// MaxElapsed. decide checked the wait against the budget before the
-	// drain, so check again: nothing after the sleep looks at it.
-	rt.drainWithinBudget(resp)
+	// MaxElapsed or the caller's cancellation. decide checked the wait against
+	// the budget before the drain, so check again: nothing after the sleep
+	// looks at it.
+	rt.drainWithinBudget(ctx, resp)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if time.Until(rt.deadline) < wait {
 		return rt.budgetSpent(ctx, "while discarding the retried response", nil)
 	}
@@ -719,17 +723,20 @@ func (rt *roundTrip) budgetSpent(ctx context.Context, while string, cause error)
 }
 
 // drainWithinBudget drains a discarded response like drainResponse, but
-// closes the body once the MaxElapsed budget runs out, which unblocks a read
-// the upstream stalls. The body is closed exactly once.
-func (rt *roundTrip) drainWithinBudget(resp *http.Response) {
+// closes the body once the MaxElapsed budget runs out or the caller's ctx is
+// done, either of which unblocks a read the upstream stalls. The body is
+// closed exactly once.
+func (rt *roundTrip) drainWithinBudget(ctx context.Context, resp *http.Response) {
 	if resp == nil || resp.Body == nil {
 		return
 	}
 	var once sync.Once
 	closeBody := func() { once.Do(func() { _ = resp.Body.Close() }) }
 	timer := time.AfterFunc(max(time.Until(rt.deadline), 0), closeBody)
+	stopCancel := context.AfterFunc(ctx, closeBody)
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	timer.Stop()
+	stopCancel()
 	closeBody()
 }
 

@@ -123,7 +123,10 @@ func (rt *roundTrip) recoverBearer(ctx, authBudget context.Context, resp *http.R
 	rt.maxAttempts++ // the auth replay is independent of the ordinary retry cap
 	// A rejected attempt carries no transport error; see bearerRejected.
 	rt.t.metrics.observeRetry(ctx, rt.req, resp, nil)
-	rt.drainWithinBudget(resp)
+	rt.drainWithinBudget(ctx, resp)
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 
 	return true, nil
 }
