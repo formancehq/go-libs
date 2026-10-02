@@ -583,3 +583,38 @@ func TestDebugHTTPTransportRedactsURLValuedHeaders(t *testing.T) {
 		require.Contains(t, logs, want)
 	}
 }
+
+// TestDebugHTTPTransportRedactsEscapedJSONFieldNames: a JSON body whose
+// credential field names are written with escapes is masked in the logs, and
+// both directions still carry the original bytes.
+func TestDebugHTTPTransportRedactsEscapedJSONFieldNames(t *testing.T) {
+	t.Parallel()
+
+	const (
+		requestBody = `{"\u0070assword":"req-hunter2","api\u005fkey":"req-key-secret","qty":1}`
+		respBody    = `{"session\u005ftoken":"resp-token-secret","\u0070asscode":4321987,"id":"txn-9"}`
+	)
+	srv, received := debugServer(t, http.Header{"Content-Type": {"application/json"}}, []byte(respBody))
+
+	logger := &recordingLogger{debugEnabled: true}
+	ctx := logging.ContextWithLogger(context.Background(), logger)
+	client := &http.Client{Transport: NewDebugHTTPTransport(srv.Client().Transport)}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/login", strings.NewReader(requestBody))
+	require.NoError(t, err)
+
+	rsp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = rsp.Body.Close() }()
+	body, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, respBody, string(body), "the caller must read the unredacted response")
+	require.Equal(t, requestBody, string((<-received).body), "the server must receive the unredacted request")
+
+	logs := strings.Join(logger.debugMessages, "\n")
+	for _, secret := range []string{"req-hunter2", "req-key-secret", "resp-token-secret", "4321987"} {
+		require.NotContains(t, logs, secret)
+	}
+	for _, want := range []string{`"password":"[REDACTED]"`, `"api_key":"[REDACTED]"`, `"session_token":"[REDACTED]"`, `"passcode":[REDACTED]`, `"qty":1`, "txn-9"} {
+		require.Contains(t, logs, want)
+	}
+}

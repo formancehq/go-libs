@@ -7,6 +7,8 @@
 //
 // The policy is name-based where the data names itself (headers, query
 // parameters, body keys) and shape-based where it does not (path segments).
+// A JSON body key is classified by the name JSON decodes it to, however its
+// characters are escaped.
 // Redact a complete bounded payload before applying any display cut:
 // truncating first can slice a secret in half and leave the visible head
 // unmatched by every pattern. Reader does both in the right order.
@@ -14,6 +16,7 @@ package redact
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -57,6 +60,11 @@ var (
 	// as "\/" and any character as "\uXXXX": a narrower class masks a prefix
 	// and leaves the rest of the token behind.
 	bearerRe = regexp.MustCompile(`(?i)(bearer\s+)(?:[a-z0-9\-._~+/]|\\/|\\u[0-9a-f]{4})+(?:=|\\u003d)*`)
+	// A JSON field name may spell any of its characters as an escape, so
+	// {"\u0070assword":"..."} names a password field that no literal
+	// spelling matches. This finds the quoted names written with at least one
+	// escape, for decoding before classification.
+	escapedJSONNameRe = regexp.MustCompile(`"((?:[^"\\]*\\.)+[^"\\]*)"\s*:`)
 	// A bounded read may end inside a quoted secret. Mask the incomplete tail
 	// before the display cut is applied.
 	danglingSecretRe  = regexp.MustCompile(`(?i)("?[a-z0-9]*` + bodySecretKey + `"?\s*[:=]\s*"?)(?:\\.|[^"\\\r\n])*\\?$`)
@@ -71,9 +79,10 @@ var (
 // Bytes masks credential-bearing values in a complete bounded payload: JSON
 // and key=value fields named like credentials, bearer tokens, and echoed
 // header lines whose name SensitiveHeader classifies as a credential. It
-// returns a copy and never mutates data.
+// returns a copy and never mutates data. JSON field names written with escape
+// sequences are classified, and shown, by their decoded spelling.
 func Bytes(data []byte) []byte {
-	out := redactHeaderEchoes(data)
+	out := redactHeaderEchoes(decodeEscapedJSONNames(data))
 	out = danglingSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 	out = kvSecretRe.ReplaceAll(out, []byte("${1}"+Marker+"${3}"))
 	out = kvBareSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
@@ -81,6 +90,50 @@ func Bytes(data []byte) []byte {
 	out = headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 
 	return out
+}
+
+// decodeEscapedJSONNames rewrites every quoted JSON field name written with
+// escape sequences to its decoded spelling, so the credential matchers judge
+// the name JSON gives the field rather than how it was spelled. A name that
+// does not decode, or decodes to a quote, a backslash or a control character,
+// keeps its escaped spelling: writing those raw could move where a later
+// matcher sees the string end. It returns data itself when nothing changes and
+// a copy otherwise, so data is never mutated.
+func decodeEscapedJSONNames(data []byte) []byte {
+	matches := escapedJSONNameRe.FindAllSubmatchIndex(data, -1)
+	var out []byte
+	last := 0
+	for _, m := range matches {
+		// m[2]:m[3] is the name between its quotes.
+		name, ok := decodedJSONName(data[m[2]-1 : m[3]+1])
+		if !ok {
+			continue
+		}
+		out = append(out, data[last:m[2]]...)
+		out = append(out, name...)
+		last = m[3]
+	}
+	if out == nil {
+		return data
+	}
+
+	return append(out, data[last:]...)
+}
+
+// decodedJSONName decodes one quoted JSON string, reporting false when it is
+// not valid JSON or decodes to a character that cannot stand raw in a name.
+func decodedJSONName(quoted []byte) (string, bool) {
+	var name string
+	if json.Unmarshal(quoted, &name) != nil {
+		return "", false
+	}
+	for _, r := range name {
+		if r == '"' || r == '\\' || r < 0x20 || r == 0x7f {
+			return "", false
+		}
+	}
+
+	return name, true
 }
 
 // redactHeaderEchoes masks the whole value of every "Name: value" line whose

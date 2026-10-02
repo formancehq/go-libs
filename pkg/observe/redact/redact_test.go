@@ -413,3 +413,46 @@ func TestBytesMasksTheWholeBearerToken(t *testing.T) {
 	got = Reader(strings.NewReader(`{"message":"Bearer abc\/secret+tail="}`), 4096)
 	require.Equal(t, `{"message":"Bearer [REDACTED]"}`, got)
 }
+
+// TestBytesClassifiesEscapedJSONFieldNames: JSON lets a field name spell any
+// character as an escape, so {"password":...} is a password field and
+// must be masked like one. The display shows the decoded name.
+func TestBytesClassifiesEscapedJSONFieldNames(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ in, want string }{
+		{`{"\u0070assword":"hunter2","ok":true}`, `{"password":"[REDACTED]","ok":true}`},
+		{`{"api\u005fkey" : "k-secret"}`, `{"api_key" : "[REDACTED]"}`},
+		{`{"CLIENT\u005FSECRET":"cs-secret"}`, `{"CLIENT_SECRET":"[REDACTED]"}`},
+		{`{"\u0070\u0061\u0073\u0073\u0063\u006f\u0064\u0065":987654,"n":1}`, `{"passcode":[REDACTED],"n":1}`},
+		{`{"user\/name":"ann","pass\u0077ord":"\"quoted\" secret"}`, `{"user/name":"ann","password":"[REDACTED]"}`},
+		// Not credentials: identifiers stay readable under their decoded name.
+		{`{"token\u005fid":7,"amount":100}`, `{"token_id":7,"amount":100}`},
+		// A name decoding to a quote or a control character keeps its spelling,
+		// and an escaped value, quote or not, is not a field name.
+		{`{"pass\"word":"x"}`, `{"pass\"word":"x"}`},
+		{`{"a\u0000b":"x"}`, `{"a\u0000b":"x"}`},
+		{`{"msg":"see \"password\": later"}`, `{"msg":"see \"password\": later"}`},
+		{`{"path":"a\/b\u0070"}`, `{"path":"a\/b\u0070"}`},
+	} {
+		require.Equal(t, tc.want, string(Bytes([]byte(tc.in))), "Bytes(%s)", tc.in)
+	}
+
+	in := []byte(`{"\u0070assword":"hunter2"}`)
+	orig := string(in)
+	_ = Bytes(in)
+	require.Equal(t, orig, string(in), "Bytes must not mutate its input")
+}
+
+func TestReaderClassifiesEscapedJSONFieldNames(t *testing.T) {
+	t.Parallel()
+
+	got := Reader(strings.NewReader(`{"\u0070assword":"hunter2","ok":true}`), 4096)
+	require.Equal(t, `{"password":"[REDACTED]","ok":true}`, got)
+
+	// The read window ends inside the secret: the dangling tail is masked too.
+	secret := strings.Repeat("S", 100)
+	got = Reader(strings.NewReader(`{"api\u005fkey":"`+secret+`"}`), 40)
+	require.NotContains(t, got, "SSSS")
+	require.Contains(t, got, Marker)
+}
