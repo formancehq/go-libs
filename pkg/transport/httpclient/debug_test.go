@@ -618,3 +618,38 @@ func TestDebugHTTPTransportRedactsEscapedJSONFieldNames(t *testing.T) {
 		require.Contains(t, logs, want)
 	}
 }
+
+// TestDebugHTTPTransportRedactsBearerTokensBehindEscapedPrefixes: a JSON body
+// that escapes the "Bearer" scheme or its separator is masked in the logs in
+// both directions, and the wire carries the original bytes.
+func TestDebugHTTPTransportRedactsBearerTokensBehindEscapedPrefixes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		requestBody = `{"forward":"\u0042earer req/secret+tail=","qty":1}`
+		respBody    = `{"message":"Bearer\u0020resp/secret+tail=","id":"txn-7"}`
+	)
+	srv, received := debugServer(t, http.Header{"Content-Type": {"application/json"}}, []byte(respBody))
+
+	logger := &recordingLogger{debugEnabled: true}
+	ctx := logging.ContextWithLogger(context.Background(), logger)
+	client := &http.Client{Transport: NewDebugHTTPTransport(srv.Client().Transport)}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/relay", strings.NewReader(requestBody))
+	require.NoError(t, err)
+
+	rsp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = rsp.Body.Close() }()
+	body, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, respBody, string(body), "the caller must read the unredacted response")
+	require.Equal(t, requestBody, string((<-received).body), "the server must receive the unredacted request")
+
+	logs := strings.Join(logger.debugMessages, "\n")
+	for _, secret := range []string{"req/secret", "resp/secret", "secret+tail", "tail="} {
+		require.NotContains(t, logs, secret)
+	}
+	for _, want := range []string{`"forward":"Bearer [REDACTED]"`, `"message":"Bearer\u0020[REDACTED]"`, `"qty":1`, "txn-7"} {
+		require.Contains(t, logs, want)
+	}
+}

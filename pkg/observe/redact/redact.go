@@ -7,8 +7,8 @@
 //
 // The policy is name-based where the data names itself (headers, query
 // parameters, body keys) and shape-based where it does not (path segments).
-// A JSON body key is classified by the name JSON decodes it to, however its
-// characters are escaped.
+// JSON text is classified as JSON decodes it: a name or value that spells
+// its letters as escapes is matched like its plain spelling.
 // Redact a complete bounded payload before applying any display cut:
 // truncating first can slice a secret in half and leave the visible head
 // unmatched by every pattern. Reader does both in the right order.
@@ -16,12 +16,12 @@ package redact
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -58,13 +58,15 @@ var (
 	// The whole RFC 6750 b64token alphabet, trailing "=" padding included, as
 	// it appears raw or inside a JSON string, where a serializer may write "/"
 	// as "\/" and any character as "\uXXXX": a narrower class masks a prefix
-	// and leaves the rest of the token behind.
-	bearerRe = regexp.MustCompile(`(?i)(bearer\s+)(?:[a-z0-9\-._~+/]|\\/|\\u[0-9a-f]{4})+(?:=|\\u003d)*`)
-	// A JSON field name may spell any of its characters as an escape, so
-	// {"\u0070assword":"..."} names a password field that no literal
-	// spelling matches. This finds the quoted names written with at least one
-	// escape, for decoding before classification.
-	escapedJSONNameRe = regexp.MustCompile(`"((?:[^"\\]*\\.)+[^"\\]*)"\s*:`)
+	// and leaves the rest of the token behind. The separator may be escaped
+	// too ("Bearer\u0020..."); decodeInertEscapes leaves it escaped.
+	bearerRe = regexp.MustCompile(`(?i)(bearer(?:\s|\\u0020|\\u0009|\\t)+)(?:[a-z0-9\-._~+/]|\\/|\\u[0-9a-f]{4})+(?:=|\\u003d)*`)
+	// JSON may spell any character of a string as an escape, so
+	// {"\u0070assword":"..."} names a password field and "\u0042earer ..."
+	// carries a bearer token that no literal spelling matches. This finds
+	// every escape for decodeInertEscapes; an escaped backslash is consumed
+	// whole, so the text after it is not read as an escape.
+	jsonEscapeRe = regexp.MustCompile(`\\(?:u[0-9a-fA-F]{4}|.)`)
 	// A bounded read may end inside a quoted secret. Mask the incomplete tail
 	// before the display cut is applied.
 	danglingSecretRe  = regexp.MustCompile(`(?i)("?[a-z0-9]*` + bodySecretKey + `"?\s*[:=]\s*"?)(?:\\.|[^"\\\r\n])*\\?$`)
@@ -79,10 +81,10 @@ var (
 // Bytes masks credential-bearing values in a complete bounded payload: JSON
 // and key=value fields named like credentials, bearer tokens, and echoed
 // header lines whose name SensitiveHeader classifies as a credential. It
-// returns a copy and never mutates data. JSON field names written with escape
-// sequences are classified, and shown, by their decoded spelling.
+// returns a copy and never mutates data. Letters, digits and the token
+// punctuation written as JSON escapes are classified, and shown, decoded.
 func Bytes(data []byte) []byte {
-	out := redactHeaderEchoes(decodeEscapedJSONNames(data))
+	out := redactHeaderEchoes(decodeInertEscapes(data))
 	out = danglingSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 	out = kvSecretRe.ReplaceAll(out, []byte("${1}"+Marker+"${3}"))
 	out = kvBareSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
@@ -92,26 +94,26 @@ func Bytes(data []byte) []byte {
 	return out
 }
 
-// decodeEscapedJSONNames rewrites every quoted JSON field name written with
-// escape sequences to its decoded spelling, so the credential matchers judge
-// the name JSON gives the field rather than how it was spelled. A name that
-// does not decode, or decodes to a quote, a backslash or a control character,
-// keeps its escaped spelling: writing those raw could move where a later
-// matcher sees the string end. It returns data itself when nothing changes and
-// a copy otherwise, so data is never mutated.
-func decodeEscapedJSONNames(data []byte) []byte {
-	matches := escapedJSONNameRe.FindAllSubmatchIndex(data, -1)
+// decodeInertEscapes decodes every JSON escape whose character is inert to
+// the matchers: an ASCII letter or digit, or one of "-._~+/". No matcher ends
+// a name or a value at one of those, so decoding can only widen what they
+// recognise: {"\u0070assword":...} becomes the password field it is, and
+// "\u0042earer ..." a bearer token. Every other escape keeps its spelling. A
+// decoded quote, backslash or line break would move where a matcher sees a
+// string or a line end, and a decoded space or tab would end an unquoted
+// key=value secret early and expose its tail. It returns data itself when
+// nothing changes and a copy otherwise, so data is never mutated.
+func decodeInertEscapes(data []byte) []byte {
 	var out []byte
 	last := 0
-	for _, m := range matches {
-		// m[2]:m[3] is the name between its quotes.
-		name, ok := decodedJSONName(data[m[2]-1 : m[3]+1])
+	for _, m := range jsonEscapeRe.FindAllIndex(data, -1) {
+		c, ok := inertEscape(data[m[0]:m[1]])
 		if !ok {
 			continue
 		}
-		out = append(out, data[last:m[2]]...)
-		out = append(out, name...)
-		last = m[3]
+		out = append(out, data[last:m[0]]...)
+		out = append(out, c)
+		last = m[1]
 	}
 	if out == nil {
 		return data
@@ -120,20 +122,25 @@ func decodeEscapedJSONNames(data []byte) []byte {
 	return append(out, data[last:]...)
 }
 
-// decodedJSONName decodes one quoted JSON string, reporting false when it is
-// not valid JSON or decodes to a character that cannot stand raw in a name.
-func decodedJSONName(quoted []byte) (string, bool) {
-	var name string
-	if json.Unmarshal(quoted, &name) != nil {
-		return "", false
+// inertEscape returns the character a "\/" or "\uXXXX" escape stands for when
+// decodeInertEscapes may write it raw.
+func inertEscape(escape []byte) (byte, bool) {
+	if len(escape) != len(`\u0000`) {
+		// A short escape: only "\/" stands for an inert character; "\n" or
+		// "\t" stand for a line break and a tab, not for the letter.
+		return '/', escape[1] == '/'
 	}
-	for _, r := range name {
-		if r == '"' || r == '\\' || r < 0x20 || r == 0x7f {
-			return "", false
-		}
+	code, err := strconv.ParseUint(string(escape[2:]), 16, 8)
+	if err != nil {
+		return 0, false
 	}
-
-	return name, true
+	c := byte(code)
+	switch {
+	case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9':
+		return c, true
+	default:
+		return c, strings.IndexByte("-._~+/", c) >= 0
+	}
 }
 
 // redactHeaderEchoes masks the whole value of every "Name: value" line whose

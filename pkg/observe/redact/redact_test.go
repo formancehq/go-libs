@@ -428,12 +428,16 @@ func TestBytesClassifiesEscapedJSONFieldNames(t *testing.T) {
 		{`{"user\/name":"ann","pass\u0077ord":"\"quoted\" secret"}`, `{"user/name":"ann","password":"[REDACTED]"}`},
 		// Not credentials: identifiers stay readable under their decoded name.
 		{`{"token\u005fid":7,"amount":100}`, `{"token_id":7,"amount":100}`},
-		// A name decoding to a quote or a control character keeps its spelling,
-		// and an escaped value, quote or not, is not a field name.
+		// Escapes that do not stand for a letter, a digit or token punctuation
+		// keep their spelling: a quote, a control character, the short escapes
+		// for whitespace, an escaped backslash and the text after it.
 		{`{"pass\"word":"x"}`, `{"pass\"word":"x"}`},
 		{`{"a\u0000b":"x"}`, `{"a\u0000b":"x"}`},
 		{`{"msg":"see \"password\": later"}`, `{"msg":"see \"password\": later"}`},
-		{`{"path":"a\/b\u0070"}`, `{"path":"a\/b\u0070"}`},
+		{`{"m":"a\nb\tc\rd\be\ff\u0020g\u00e9"}`, `{"m":"a\nb\tc\rd\be\ff\u0020g\u00e9"}`},
+		{`{"m":"a\\u0042\\\/"}`, `{"m":"a\\u0042\\/"}`},
+		// Values decode too: the display shows what JSON reads.
+		{`{"path":"a\/b\u0070\u002D1"}`, `{"path":"a/bp-1"}`},
 	} {
 		require.Equal(t, tc.want, string(Bytes([]byte(tc.in))), "Bytes(%s)", tc.in)
 	}
@@ -442,6 +446,46 @@ func TestBytesClassifiesEscapedJSONFieldNames(t *testing.T) {
 	orig := string(in)
 	_ = Bytes(in)
 	require.Equal(t, orig, string(in), "Bytes must not mutate its input")
+}
+
+// TestBytesMasksBearerTokensBehindEscapedPrefixes: JSON may escape the
+// "Bearer" scheme's letters or the separator after it; the token behind it is
+// still a bearer token and must be masked to its end.
+func TestBytesMasksBearerTokensBehindEscapedPrefixes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ in, want string }{
+		{`{"message":"\u0042earer abc/secret+tail="}`, `{"message":"Bearer [REDACTED]"}`},
+		{`{"message":"Bearer\u0020abc/secret+tail="}`, `{"message":"Bearer\u0020[REDACTED]"}`},
+		{`{"message":"\u0062\u0065\u0061\u0072\u0065\u0072\tabc\/secret+tail\u003d"}`, `{"message":"bearer\t[REDACTED]"}`},
+		{`{"message":"BEARER\u0009abc-secret.tail~"}`, `{"message":"BEARER\u0009[REDACTED]"}`},
+	} {
+		got := string(Bytes([]byte(tc.in)))
+		require.Equal(t, tc.want, got, "Bytes(%s)", tc.in)
+		for _, leak := range []string{"secret", "tail"} {
+			require.NotContains(t, got, leak)
+		}
+	}
+
+	got := Reader(strings.NewReader(`{"message":"\u0042earer\u0020abc/secret+tail="}`), 4096)
+	require.Equal(t, `{"message":"Bearer\u0020[REDACTED]"}`, got)
+
+	// The read window ends inside the token: no part of it is shown.
+	got = Reader(strings.NewReader(`{"message":"\u0042earer\u0020abc/`+strings.Repeat("s", 100)+`"}`), 40)
+	require.NotContains(t, got, "sss")
+	require.NotContains(t, got, "abc")
+}
+
+// TestBytesKeepsUnquotedSecretsWholeAroundEscapedSpaces: an escaped space is
+// not decoded, since in a key=value echo the raw space would end the secret
+// early and expose its tail.
+func TestBytesKeepsUnquotedSecretsWholeAroundEscapedSpaces(t *testing.T) {
+	t.Parallel()
+
+	// The later quote keeps the dangling-tail pass from masking to the end.
+	got := string(Bytes([]byte(`upstream said password=ab\u0020cd-tail and "gave" up`)))
+	require.NotContains(t, got, "cd-tail")
+	require.Contains(t, got, Marker)
 }
 
 func TestReaderClassifiesEscapedJSONFieldNames(t *testing.T) {
