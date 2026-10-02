@@ -52,9 +52,11 @@ var (
 	// Error bodies are not always JSON. Cover unquoted key/value echoes while
 	// stopping at the usual text and JSON delimiters.
 	headerSecretRe = regexp.MustCompile(`(?i)((?:x-[a-z0-9-]*(?:key|secret|token|signature|passphrase)|authorization|` + bodySecretKey + `)\s*[:=]\s*)([^\s",}]+)`)
-	// The whole RFC 6750 b64token alphabet, trailing "=" padding included: a
-	// narrower class masks a prefix and leaves the rest of the token behind.
-	bearerRe = regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9\-._~+/]+=*`)
+	// The whole RFC 6750 b64token alphabet, trailing "=" padding included, as
+	// it appears raw or inside a JSON string, where a serializer may write "/"
+	// as "\/" and any character as "\uXXXX": a narrower class masks a prefix
+	// and leaves the rest of the token behind.
+	bearerRe = regexp.MustCompile(`(?i)(bearer\s+)(?:[a-z0-9\-._~+/]|\\/|\\u[0-9a-f]{4})+(?:=|\\u003d)*`)
 	// A bounded read may end inside a quoted secret. Mask the incomplete tail
 	// before the display cut is applied.
 	danglingSecretRe  = regexp.MustCompile(`(?i)("?[a-z0-9]*` + bodySecretKey + `"?\s*[:=]\s*"?)(?:\\.|[^"\\\r\n])*\\?$`)

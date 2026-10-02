@@ -395,6 +395,9 @@ func TestBytesMasksTheWholeBearerToken(t *testing.T) {
 		`{"message":"Bearer abc/secret+tail="}`,
 		`{"message":"bearer abc~secret/more+tail==","n":1}`,
 		"upstream said: Bearer abc/secret+tail= then gave up",
+		// JSON serializers may escape "/" as "\/" and any character as \uXXXX.
+		`{"message":"Bearer abc\/secret+tail="}`,
+		`{"message":"Bearer abc\u002fsecret\u002btail\u003d","n":1}`,
 	} {
 		got := string(Bytes([]byte(in)))
 		for _, leak := range []string{"secret", "tail", "more"} {
@@ -405,5 +408,8 @@ func TestBytesMasksTheWholeBearerToken(t *testing.T) {
 
 	got := Reader(strings.NewReader(`{"message":"Bearer abc/secret+tail="}`), 4096)
 	require.NotContains(t, got, "secret")
+	require.Equal(t, `{"message":"Bearer [REDACTED]"}`, got)
+
+	got = Reader(strings.NewReader(`{"message":"Bearer abc\/secret+tail="}`), 4096)
 	require.Equal(t, `{"message":"Bearer [REDACTED]"}`, got)
 }
