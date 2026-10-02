@@ -384,3 +384,26 @@ func TestBytesMasksBareJSONCredentialValues(t *testing.T) {
 		require.Equal(t, tc.want, string(Bytes([]byte(tc.in))), "Bytes(%s)", tc.in)
 	}
 }
+
+// TestBytesMasksTheWholeBearerToken: slash, plus, tilde and "=" padding are
+// bearer-token characters (RFC 6750 b64token), so a token carrying them must
+// be masked to its end, not up to the first one.
+func TestBytesMasksTheWholeBearerToken(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []string{
+		`{"message":"Bearer abc/secret+tail="}`,
+		`{"message":"bearer abc~secret/more+tail==","n":1}`,
+		"upstream said: Bearer abc/secret+tail= then gave up",
+	} {
+		got := string(Bytes([]byte(in)))
+		for _, leak := range []string{"secret", "tail", "more"} {
+			require.NotContains(t, got, leak, "Bytes(%q) = %q", in, got)
+		}
+		require.Contains(t, got, "[REDACTED]")
+	}
+
+	got := Reader(strings.NewReader(`{"message":"Bearer abc/secret+tail="}`), 4096)
+	require.NotContains(t, got, "secret")
+	require.Equal(t, `{"message":"Bearer [REDACTED]"}`, got)
+}
