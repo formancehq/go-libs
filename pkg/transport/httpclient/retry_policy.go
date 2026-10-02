@@ -31,8 +31,12 @@ type RetryPolicy interface {
 }
 
 // DefaultRetryPolicy retries transport errors, 408, 425, 429 and the
-// transient 5xx statuses, waiting max(Retry-After, jittered exponential
-// backoff) bounded by [Base, Max]. Zero fields fall back to the transport
+// transient 5xx statuses. A valid Retry-After on a retried response, delay
+// seconds or an HTTP date, replaces the backoff: the wait is its delay
+// clamped to [Base, Max], so Retry-After: 0 waits Base whatever the attempt.
+// Exponential backoff applies only when the header is absent or invalid, and
+// to transport errors: Base << (attempt-1) capped by Max, jittered down by up
+// to half, so it can fall below Base. Zero fields fall back to the transport
 // defaults (500ms and 30s).
 type DefaultRetryPolicy struct {
 	Base time.Duration
