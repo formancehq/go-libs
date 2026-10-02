@@ -100,7 +100,7 @@ func (rt *roundTrip) recoverBearer(ctx, authBudget context.Context, resp *http.R
 	outcome, budgetExpired := rt.remintBearer(ctx, authBudget)
 	if outcome != bearerRefreshSucceeded {
 		if ctx.Err() != nil {
-			drainResponse(resp)
+			closeResponse(resp)
 
 			return false, ctx.Err()
 		}

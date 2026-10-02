@@ -281,7 +281,7 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		// retry log and metric while still closing a rare response returned
 		// alongside the context error.
 		if err != nil && ctx.Err() != nil {
-			drainResponse(resp)
+			closeResponse(resp)
 
 			return nil, ctx.Err()
 		}
@@ -722,10 +722,10 @@ func (rt *roundTrip) budgetSpent(ctx context.Context, while string, cause error)
 	return fmt.Errorf("httpclient: retry budget ran out %s: %w", while, cause)
 }
 
-// drainWithinBudget drains a discarded response like drainResponse, but
-// closes the body once the MaxElapsed budget runs out or the caller's ctx is
-// done, either of which unblocks a read the upstream stalls. The body is
-// closed exactly once.
+// drainWithinBudget reads and closes a discarded response body, so the
+// connection can be reused on the next attempt, and closes it early once the
+// MaxElapsed budget runs out or the caller's ctx is done, either of which
+// unblocks a read the upstream stalls. The body is closed exactly once.
 func (rt *roundTrip) drainWithinBudget(ctx context.Context, resp *http.Response) {
 	if resp == nil || resp.Body == nil {
 		return
@@ -740,13 +740,13 @@ func (rt *roundTrip) drainWithinBudget(ctx context.Context, resp *http.Response)
 	closeBody()
 }
 
-// drainResponse reads and closes a discarded response body so the underlying
-// connection can be reused on the next attempt.
-func drainResponse(resp *http.Response) {
+// closeResponse closes a response the caller's cancellation discards. There is
+// no next attempt to reuse the connection for, so the body is not drained: a
+// read the upstream stalls would hold the cancelled call.
+func closeResponse(resp *http.Response) {
 	if resp == nil || resp.Body == nil {
 		return
 	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	_ = resp.Body.Close()
 }
 

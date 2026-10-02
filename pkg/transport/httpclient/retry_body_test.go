@@ -642,3 +642,42 @@ func TestDiscardedResponseDrainEndsOnCallerCancel(t *testing.T) {
 		})
 	}
 }
+
+// TestBearerRecoveryCancelClosesTheRejectedResponse: a caller cancelling while
+// the replacement token is minted ends the call at once. The rejected 401 is
+// closed, not drained, since a body the upstream stalls would otherwise hold
+// the cancelled call forever.
+func TestBearerRecoveryCancelClosesTheRejectedResponse(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const cancelAfter = 25 * time.Millisecond
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		time.AfterFunc(cancelAfter, cancel)
+		body := newStallingBody()
+		var hits atomic.Int32
+		transport := NewRetryTransport(RetryConfig{
+			Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+				hits.Add(1)
+				resp := rtResponse(r, http.StatusUnauthorized, "")
+				resp.Body = body
+
+				return resp, nil
+			}),
+			Bearer:     &blockingBearer{},
+			MaxElapsed: time.Minute,
+			Logger:     rtDiscardLogger(),
+		})
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example/data", nil)
+		require.NoError(t, err)
+
+		start := time.Now()
+		resp, err := transport.RoundTrip(req)
+		require.Nil(t, resp)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Equal(t, cancelAfter, time.Since(start), "the call ends when the caller cancels")
+		require.EqualValues(t, 1, hits.Load())
+		require.EqualValues(t, 1, body.closes.Load(), "the rejected body is closed exactly once")
+	})
+}
