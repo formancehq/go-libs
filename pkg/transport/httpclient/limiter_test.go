@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -375,4 +376,59 @@ func TestRateLimitersReportADeadlineRefusal(t *testing.T) {
 			require.NoError(t, ctx.Err(), "refused at once, not after waiting out the deadline")
 		})
 	}
+}
+
+// TestAdaptiveLimiterHoldsAnExhaustedWindowToItsReset: after a response
+// reports zero remaining, no slot is granted before the reported reset, even
+// with a fraction of a token already back in the bucket (drainTokens spends
+// whole tokens only, and 0.9 of one at one-per-window would be granted a tenth
+// of the window in). A hold the deadline cannot cover is refused at once, and
+// a cancel ends it.
+func TestAdaptiveLimiterHoldsAnExhaustedWindowToItsReset(t *testing.T) {
+	t.Parallel()
+
+	const reset = 10 * time.Second
+	exhausted := func(t *testing.T) *AdaptiveLimiter {
+		t.Helper()
+		lim := NewAdaptiveLimiter(10, 1)
+		require.NoError(t, lim.Wait(context.Background()), "the burst slot is free")
+		time.Sleep(90 * time.Millisecond) // 0.9 of a token back at 10/s
+		observeHeaders(lim, map[string]string{"RateLimit-Remaining": "0", "RateLimit-Reset": "10"})
+		require.InDelta(t, 0.9, lim.lim.Tokens(), 1e-9, "the fraction survives the whole-token drain")
+
+		return lim
+	}
+
+	t.Run("partially replenished bucket", func(t *testing.T) {
+		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			lim := exhausted(t)
+			start := time.Now()
+			require.NoError(t, lim.Wait(context.Background()))
+			require.Equal(t, reset, time.Since(start), "the slot is granted at the reset, not before")
+		})
+	})
+	t.Run("deadline before the reset", func(t *testing.T) {
+		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			lim := exhausted(t)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			start := time.Now()
+			require.ErrorIs(t, lim.Wait(ctx), context.DeadlineExceeded)
+			require.Zero(t, time.Since(start), "refused at once")
+		})
+	})
+	t.Run("cancelled during the hold", func(t *testing.T) {
+		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			lim := exhausted(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			time.AfterFunc(time.Second, cancel)
+			start := time.Now()
+			require.ErrorIs(t, lim.Wait(ctx), context.Canceled)
+			require.Equal(t, time.Second, time.Since(start))
+		})
+	})
 }

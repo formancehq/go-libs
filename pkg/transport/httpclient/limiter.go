@@ -112,6 +112,9 @@ type AdaptiveLimiter struct {
 	mu sync.Mutex
 	// until is when the current throttle expires; zero means not throttled.
 	until time.Time
+	// exhaustedUntil is the reset of the last window the upstream reported
+	// exhausted (zero remaining); no slot is granted before it.
+	exhaustedUntil time.Time
 	// nowFn is a test seam for the WINDOW arithmetic only. The rate.Limiter runs
 	// on real time, so anything handed to it must come from time.Now, never
 	// from here.
@@ -140,12 +143,45 @@ func NewAdaptiveLimiter(r float64, burst int) *AdaptiveLimiter {
 }
 
 // Wait blocks until a slot is available or ctx is done, first restoring the
-// ceiling if the throttle window has passed. A wait that ctx's deadline cannot
-// cover fails at once, without spending the slot.
+// ceiling if the throttle window has passed. After a response reported no
+// remaining budget, no slot is granted before that window resets. A wait that
+// ctx's deadline cannot cover fails at once, without spending the slot.
 func (a *AdaptiveLimiter) Wait(ctx context.Context) error {
+	if err := a.waitForReset(ctx); err != nil {
+		return err
+	}
 	a.restoreIfExpired()
 
 	return waitRate(ctx, a.lim)
+}
+
+// waitForReset holds a Wait until the reset of a window the upstream reported
+// exhausted. The one-request-per-window rate such a response sets is not
+// enough on its own: drainTokens spends only whole tokens, so a fraction left
+// in the bucket would grant the next slot that much earlier, while the
+// upstream still has nothing left. A hold that ctx's deadline cannot cover
+// fails at once, wrapping context.DeadlineExceeded as waitRate does.
+//
+// The hold is measured on nowFn, the window arithmetic's clock, and slept on
+// real time; the two agree outside tests.
+func (a *AdaptiveLimiter) waitForReset(ctx context.Context) error {
+	a.mu.Lock()
+	hold := a.exhaustedUntil.Sub(a.nowFn())
+	a.mu.Unlock()
+	if hold <= 0 {
+		return nil
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < hold {
+		return fmt.Errorf("httpclient: rate-limit window resets past the context deadline: %w", context.DeadlineExceeded)
+	}
+	timer := time.NewTimer(hold)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // Observe reads the rate-limit headers off a completed response and lowers the
@@ -170,9 +206,10 @@ func (a *AdaptiveLimiter) Observe(resp *http.Response) {
 	}
 
 	// Spend the remaining budget evenly across the rest of the window. With
-	// nothing left, pace the next request at the window boundary instead of
-	// hammering a limit that is already exhausted. Because window is clamped to
-	// maxAdaptiveWindow, the quotient can never collapse to zero.
+	// nothing left, hold the next request until the window boundary instead of
+	// hammering a limit that is already exhausted (see waitForReset). Because
+	// window is clamped to maxAdaptiveWindow, the quotient can never collapse
+	// to zero.
 	seconds := window.Seconds()
 	target := 1 / seconds
 	if remaining > 0 {
@@ -183,6 +220,10 @@ func (a *AdaptiveLimiter) Observe(resp *http.Response) {
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if remaining == 0 {
+		// The latest report of an exhausted window is the authoritative one.
+		a.exhaustedUntil = now.Add(window)
+	}
 	// The rate is only ever lowered here, so one generous reply mid-window
 	// cannot undo a throttle an earlier one earned. Only the window elapsing
 	// restores the ceiling.
