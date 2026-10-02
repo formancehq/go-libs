@@ -257,3 +257,124 @@ func TestRetryBudgetCoversDiscardingAndPacing(t *testing.T) {
 		})
 	}
 }
+
+// blockingLimiter grants the first slot at once and holds every later one
+// until its context is done, like a shared limiter throttled after the first
+// response. onBlock, when set, runs as a wait starts blocking.
+type blockingLimiter struct {
+	calls   atomic.Int32
+	onBlock func()
+}
+
+func (l *blockingLimiter) Wait(ctx context.Context) error {
+	if l.calls.Add(1) == 1 {
+		return nil
+	}
+	if l.onBlock != nil {
+		l.onBlock()
+	}
+	<-ctx.Done()
+
+	return ctx.Err()
+}
+
+// blockingBearer hands out its token once and then blocks every later Token
+// call until its context is done, like a mint stalled behind its own upstream.
+type blockingBearer struct {
+	calls atomic.Int32
+}
+
+func (b *blockingBearer) Token(ctx context.Context) (string, error) {
+	if b.calls.Add(1) == 1 {
+		return "tok", nil
+	}
+	<-ctx.Done()
+
+	return "", ctx.Err()
+}
+
+func (*blockingBearer) Invalidate(string) {}
+
+// TestRetryPacingIsBoundedByTheBudget: an ordinary retry's bearer token and
+// limiter waits run inside what is left of MaxElapsed, so a limiter or a mint
+// that would hold the retry indefinitely ends the call at the budget with
+// context.DeadlineExceeded, and a token bucket that cannot grant the slot in
+// time refuses at once instead of waiting the budget out.
+func TestRetryPacingIsBoundedByTheBudget(t *testing.T) {
+	t.Parallel()
+
+	const (
+		budget  = 100 * time.Millisecond
+		backoff = 10 * time.Millisecond
+	)
+	for _, tc := range []struct {
+		name        string
+		limiter     Limiter
+		bearer      BearerTokenSource
+		wantElapsed time.Duration
+	}{
+		{name: "limiter blocks the retry", limiter: &blockingLimiter{}, wantElapsed: budget},
+		{name: "bearer mint blocks the retry", bearer: &blockingBearer{}, wantElapsed: budget},
+		{name: "token bucket cannot grant in time", limiter: NewTokenBucket(1, 1), wantElapsed: backoff},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				var hits atomic.Int32
+				transport := NewRetryTransport(RetryConfig{
+					Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+						hits.Add(1)
+
+						return rtResponse(r, http.StatusServiceUnavailable, "busy"), nil
+					}),
+					Limiter:    tc.limiter,
+					Bearer:     tc.bearer,
+					BaseDelay:  backoff,
+					MaxDelay:   backoff,
+					MaxElapsed: budget,
+					Logger:     rtDiscardLogger(),
+				})
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/data", nil)
+				require.NoError(t, err)
+
+				start := time.Now()
+				resp, err := transport.RoundTrip(req)
+				require.Nil(t, resp)
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+				require.ErrorContains(t, err, "retry budget ran out while pacing the retry")
+				require.EqualValues(t, 1, hits.Load(), "no attempt is sent past the budget")
+				require.LessOrEqual(t, time.Since(start), tc.wantElapsed, "the pacing wait ends with the budget")
+			})
+		})
+	}
+}
+
+// TestRetryPacingKeepsCallerCancellation: a caller cancelling while a retry is
+// held by the limiter gets its own context.Canceled, not the budget's
+// deadline.
+func TestRetryPacingKeepsCallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		transport := NewRetryTransport(RetryConfig{
+			Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+				return rtResponse(r, http.StatusServiceUnavailable, "busy"), nil
+			}),
+			Limiter:    &blockingLimiter{onBlock: cancel},
+			BaseDelay:  10 * time.Millisecond,
+			MaxDelay:   10 * time.Millisecond,
+			MaxElapsed: time.Minute,
+			Logger:     rtDiscardLogger(),
+		})
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example/data", nil)
+		require.NoError(t, err)
+
+		resp, err := transport.RoundTrip(req)
+		require.Nil(t, resp)
+		require.ErrorIs(t, err, context.Canceled)
+		require.NotErrorIs(t, err, context.DeadlineExceeded)
+	})
+}

@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -53,9 +54,11 @@ type RetryConfig struct {
 	// MaxElapsed caps the total time spent across retries, measured from the
 	// start of the request (0 = 2m). A wait that would overrun it ends the
 	// retries and surfaces the last result. Discarding a retried response's
-	// body and pacing the next attempt count against it too; when they use it
-	// up, the call fails with context.DeadlineExceeded, the discarded response
-	// being no longer available to surface.
+	// body and pacing a retry (its bearer token and limiter waits) count
+	// against it too and are cut off when it runs out; the call then fails
+	// with context.DeadlineExceeded, the discarded response being no longer
+	// available to surface. The first attempt's pacing is bounded by the
+	// request context alone.
 	MaxElapsed time.Duration
 	// RequestsPerSecond enables client-side pacing with a token bucket when
 	// > 0 and Limiter is nil. Burst defaults to 1.
@@ -307,7 +310,8 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // The contexts stay parameters: ctx is always the caller's request context,
 // and authBudget is ctx bounded by the MaxElapsed deadline when Bearer is set
 // (otherwise ctx itself). The budget bounds the re-mint a 401 triggers and the
-// token and limiter waits of the replay that re-mint buys.
+// token and limiter waits of the replay that re-mint buys; an ordinary retry's
+// waits get their own bounded context from paceContext.
 type roundTrip struct {
 	t   *RetryTransport
 	req *http.Request
@@ -356,17 +360,15 @@ func (rt *roundTrip) closeOriginalBody() {
 // replay whose budget ran out meanwhile is refused after signing, before the
 // send.
 func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, error) {
-	workCtx := ctx
-	if rt.authReplayPending {
-		workCtx = authBudget
+	workCtx, cancelWork := rt.paceContext(ctx, authBudget)
+	err := rt.pace(ctx, workCtx)
+	spent := rt.retryPacingSpentBudget(ctx, workCtx, err)
+	cancelWork()
+	if spent {
+		return nil, rt.budgetSpent(ctx, "while pacing the retry", err)
 	}
-	if err := rt.pace(ctx, workCtx); err != nil {
+	if err != nil {
 		return nil, err
-	}
-	// An ordinary retry waited out its backoff inside the budget, but a
-	// limiter wait can still use up what was left: do not send past it.
-	if rt.attempt > 1 && !rt.authReplayPending && !time.Now().Before(rt.deadline) {
-		return nil, rt.budgetSpent(ctx, "while pacing the retry")
 	}
 	r, err := rt.authorize(ctx)
 	if err != nil {
@@ -377,6 +379,37 @@ func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, er
 	}
 
 	return r, nil
+}
+
+// paceContext bounds one attempt's token and limiter waits. An ordinary retry
+// waited out its backoff inside the MaxElapsed budget, and its waits run
+// inside what is left of it, so a throttled limiter or a slow mint cannot hold
+// it past MaxElapsed. The auth replay's waits run inside authBudget, and the
+// first attempt's inside the caller's ctx alone.
+func (rt *roundTrip) paceContext(ctx, authBudget context.Context) (context.Context, context.CancelFunc) {
+	switch {
+	case rt.authReplayPending:
+		return authBudget, func() {}
+	case rt.attempt > 1:
+		return context.WithDeadline(ctx, rt.deadline)
+	default:
+		return ctx, func() {}
+	}
+}
+
+// retryPacingSpentBudget reports whether an ordinary retry's pacing ran into
+// the end of the MaxElapsed budget: its bounded wait was cut short or refused
+// as unable to finish in time, or it finished with no budget left to send in.
+// Caller cancellation wins over the budget cause.
+func (rt *roundTrip) retryPacingSpentBudget(ctx, workCtx context.Context, err error) bool {
+	if rt.attempt == 1 || rt.authReplayPending || ctx.Err() != nil {
+		return false
+	}
+	if err != nil {
+		return workCtx.Err() != nil || errors.Is(err, context.DeadlineExceeded)
+	}
+
+	return !time.Now().Before(rt.deadline)
 }
 
 // pace acquires the bearer token, when Bearer is set, and then waits for an
@@ -515,7 +548,7 @@ func (rt *roundTrip) waitBackoff(ctx context.Context, resp *http.Response, err e
 	// drain, so check again: nothing after the sleep looks at it.
 	rt.drainWithinBudget(resp)
 	if time.Until(rt.deadline) < wait {
-		return rt.budgetSpent(ctx, "while discarding the retried response")
+		return rt.budgetSpent(ctx, "while discarding the retried response", nil)
 	}
 
 	rt.t.metrics.observeRetry(ctx, rt.req, resp, err)
@@ -608,10 +641,18 @@ func statusOf(resp *http.Response) int {
 
 // budgetSpent ends the retries when MaxElapsed ran out after the last
 // response was already discarded, so there is no result left to surface.
-func (rt *roundTrip) budgetSpent(ctx context.Context, while string) error {
+// cause, when set, is the wait the budget cut short; the error wraps it and
+// context.DeadlineExceeded.
+func (rt *roundTrip) budgetSpent(ctx context.Context, while string, cause error) error {
 	rt.t.metrics.observeExhausted(ctx, rt.req, causeBudget)
+	switch {
+	case cause == nil:
+		cause = context.DeadlineExceeded
+	case !errors.Is(cause, context.DeadlineExceeded):
+		cause = fmt.Errorf("%w: %w", context.DeadlineExceeded, cause)
+	}
 
-	return fmt.Errorf("httpclient: retry budget ran out %s: %w", while, context.DeadlineExceeded)
+	return fmt.Errorf("httpclient: retry budget ran out %s: %w", while, cause)
 }
 
 // drainWithinBudget drains a discarded response like drainResponse, but

@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -67,9 +68,28 @@ type tokenBucket struct {
 	lim *rate.Limiter
 }
 
-// Wait blocks until a token is available or ctx is done.
+// Wait blocks until a token is available or ctx is done. A wait that ctx's
+// deadline cannot cover fails at once, without spending the token.
 func (b *tokenBucket) Wait(ctx context.Context) error {
-	return b.lim.Wait(ctx)
+	return waitRate(ctx, b.lim)
+}
+
+// waitRate waits for one token from lim within ctx. x/time/rate refuses at
+// once, keeping the token, a wait that ctx's deadline cannot cover, with an
+// error that does not say a deadline caused it; that refusal is reported
+// wrapping context.DeadlineExceeded. Its only other refusal, a burst below the
+// one token asked for, cannot happen: both constructors keep the burst at one
+// or more.
+func waitRate(ctx context.Context, lim *rate.Limiter) error {
+	err := lim.Wait(ctx)
+	if err == nil || ctx.Err() != nil {
+		return err
+	}
+	if _, ok := ctx.Deadline(); ok {
+		return fmt.Errorf("%w: %w", err, context.DeadlineExceeded)
+	}
+
+	return err
 }
 
 // AdaptiveLimiter paces at a ceiling rate and slows itself down when the
@@ -120,11 +140,12 @@ func NewAdaptiveLimiter(r float64, burst int) *AdaptiveLimiter {
 }
 
 // Wait blocks until a slot is available or ctx is done, first restoring the
-// ceiling if the throttle window has passed.
+// ceiling if the throttle window has passed. A wait that ctx's deadline cannot
+// cover fails at once, without spending the slot.
 func (a *AdaptiveLimiter) Wait(ctx context.Context) error {
 	a.restoreIfExpired()
 
-	return a.lim.Wait(ctx)
+	return waitRate(ctx, a.lim)
 }
 
 // Observe reads the rate-limit headers off a completed response and lowers the

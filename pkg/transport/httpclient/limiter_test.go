@@ -349,3 +349,30 @@ func TestTokenBucketPaces(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, time.Since(start), 80*time.Millisecond, "the bucket must pace ~50ms per token")
 }
+
+// TestRateLimitersReportADeadlineRefusal: x/time/rate refuses at once a wait
+// the context deadline cannot cover; both limiters report that refusal as
+// context.DeadlineExceeded.
+func TestRateLimitersReportADeadlineRefusal(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		lim  Limiter
+	}{
+		{name: "token bucket", lim: NewTokenBucket(1, 1)},
+		{name: "adaptive", lim: NewAdaptiveLimiter(1, 1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.NoError(t, tc.lim.Wait(context.Background()), "the burst slot is free")
+			// The next token is a second away, past this deadline.
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+			err := tc.lim.Wait(ctx)
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			require.NoError(t, ctx.Err(), "refused at once, not after waiting out the deadline")
+		})
+	}
+}
