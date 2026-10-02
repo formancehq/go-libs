@@ -5,13 +5,30 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	errorsutils "github.com/formancehq/go-libs/v5/pkg/errors"
 )
 
+// Execute runs cmd and exits the process when it fails: with the exit code
+// the error carries (see errors.NewErrorWithExitCode), 1 otherwise. App.Run
+// returns both kinds of exit-coded failure with the code in the chain: a
+// start failure as ErrStartFailed wrapping its cause and the code the
+// constructor or hook attached, and a shutdown exit code as
+// ErrShutdownExitCode. One lookup therefore covers both, and an error without
+// a code needs no wrapping to exit 1.
 func Execute(cmd *cobra.Command) {
 	bindEnvForExecute(cmd)
 	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
+}
+
+func exitCode(err error) int {
+	if code, ok := errorsutils.ExitCodeFromError(err); ok {
+		return code
+	}
+
+	return 1
 }
 
 // bindEnvForExecute preserves the existing early environment binding so Cobra

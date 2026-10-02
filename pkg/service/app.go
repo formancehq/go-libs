@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -36,6 +35,19 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.Duration(TotalStopTimeoutFlag, defaultTotalStopTimeout, "Total time allowed for all OnStop hooks to complete (see https://pkg.go.dev/go.uber.org/fx#StopTimeout)")
 }
 
+var (
+	// ErrStartFailed wraps every error Run returns because the application
+	// did not start: a constructor or an OnStart hook failed. The cause, its
+	// message and any exit code it carries stay in the chain, so
+	// errors.Is(err, ErrStartFailed) tells a start failure from a shutdown
+	// without losing either.
+	ErrStartFailed = errors.New("application failed to start")
+	// ErrShutdownExitCode is returned by Run, carrying the exit code, when the
+	// application was shut down through fx.Shutdowner with a non-zero
+	// fx.ExitCode.
+	ErrShutdownExitCode = errors.New("application shut down with a non-zero exit code")
+)
+
 type App struct {
 	options []fx.Option
 	output  io.Writer
@@ -61,19 +73,26 @@ func (a *App) Run(cmd *cobra.Command) error {
 
 	app := a.newFxApp(a.logger, gracePeriod, totalStopTimeout)
 	if err := app.Start(logging.ContextWithLogger(cmd.Context(), a.logger)); err != nil {
-		switch exitCode, hasExitCode := errorsutils.ExitCodeFromError(err); {
-		case hasExitCode:
-			a.logger.Errorf("Error: %v", err)
-			// We want to have a specific exit code for the error
-			os.Exit(exitCode)
-		default:
-			// Return complete error if we are debugging
-			// While polluting the output most of the time, it sometimes gives some precious information
-			if IsDebug(cmd) {
-				return err
-			}
-			return dig.RootCause(err)
+		// Run never exits, so a caller with its own Execute can still render,
+		// redact or classify the error first.
+		//
+		// The cause is wrapped with %w rather than replaced by a new
+		// ErrorWithExitCode, as the shutdown path below does: a start error
+		// already carries its own exit code (a constructor or OnStart hook
+		// returned errors.NewErrorWithExitCode), and %w keeps it in the chain,
+		// where errors.ExitCodeFromError finds it, along with the cause's
+		// message. A shutdown has no error of its own, only fx's exit code.
+		//
+		// Return complete error if we are debugging
+		// While polluting the output most of the time, it sometimes gives some precious information.
+		// Otherwise dig.RootCause drops dig's "could not build arguments for
+		// function …" wrapping and keeps the error the application raised.
+		cause := err
+		if !IsDebug(cmd) {
+			cause = dig.RootCause(err)
 		}
+
+		return fmt.Errorf("%w: %w", ErrStartFailed, cause)
 	}
 
 	var exitCode int
@@ -110,7 +129,7 @@ func (a *App) Run(cmd *cobra.Command) error {
 	}
 
 	if exitCode != 0 {
-		os.Exit(exitCode)
+		return errorsutils.NewErrorWithExitCode(ErrShutdownExitCode, exitCode)
 	}
 
 	return nil
