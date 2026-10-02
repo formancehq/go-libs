@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -161,4 +163,97 @@ func TestRetryTransportIsSafeForConcurrentUse(t *testing.T) {
 
 	require.Positive(t, unauthorized.Load(), "some requests carried the rejected token")
 	require.Contains(t, source.invalidated(), "old")
+}
+
+// stallingBody blocks every Read until it is closed, like a response whose
+// upstream sent headers and then went quiet.
+type stallingBody struct {
+	closed chan struct{}
+	once   sync.Once
+	closes atomic.Int32
+}
+
+func newStallingBody() *stallingBody { return &stallingBody{closed: make(chan struct{})} }
+
+func (b *stallingBody) Read([]byte) (int, error) {
+	<-b.closed
+
+	return 0, io.ErrClosedPipe
+}
+
+func (b *stallingBody) Close() error {
+	b.closes.Add(1)
+	b.once.Do(func() { close(b.closed) })
+
+	return nil
+}
+
+// slowLimiter grants the first slot at once and makes every later one wait.
+type slowLimiter struct {
+	calls atomic.Int32
+	delay time.Duration
+}
+
+func (l *slowLimiter) Wait(context.Context) error {
+	if l.calls.Add(1) > 1 {
+		time.Sleep(l.delay)
+	}
+
+	return nil
+}
+
+// TestRetryBudgetCoversDiscardingAndPacing: MaxElapsed bounds the whole call,
+// so a retried response whose body stalls while it is discarded, or a limiter
+// wait before the retry, must end the call with context.DeadlineExceeded
+// instead of sending another attempt past the budget. The bubble's fake clock
+// expires the budget exactly inside the drain or the wait.
+func TestRetryBudgetCoversDiscardingAndPacing(t *testing.T) {
+	t.Parallel()
+
+	const budget = 100 * time.Millisecond
+	for _, tc := range []struct {
+		name    string
+		stall   bool
+		limiter Limiter
+	}{
+		{name: "body stalls while discarded", stall: true},
+		{name: "limiter wait overruns the budget", limiter: &slowLimiter{delay: 2 * budget}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				body := newStallingBody()
+				var hits atomic.Int32
+				transport := NewRetryTransport(RetryConfig{
+					Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+						hits.Add(1)
+						resp := rtResponse(r, http.StatusServiceUnavailable, "busy")
+						if tc.stall {
+							resp.Body = body
+						}
+
+						return resp, nil
+					}),
+					Limiter:    tc.limiter,
+					BaseDelay:  10 * time.Millisecond,
+					MaxDelay:   10 * time.Millisecond,
+					MaxElapsed: budget,
+					Logger:     rtDiscardLogger(),
+				})
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/data", nil)
+				require.NoError(t, err)
+
+				start := time.Now()
+				resp, err := transport.RoundTrip(req)
+				require.Nil(t, resp)
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+				require.EqualValues(t, 1, hits.Load(), "no attempt is sent past the budget")
+				if tc.stall {
+					require.EqualValues(t, 1, body.closes.Load(), "the stalled body is closed exactly once")
+					require.Equal(t, budget, time.Since(start), "the call ends when the budget does, without a backoff sleep after it")
+				}
+			})
+		})
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/metric"
@@ -51,7 +52,10 @@ type RetryConfig struct {
 	MaxDelay  time.Duration
 	// MaxElapsed caps the total time spent across retries, measured from the
 	// start of the request (0 = 2m). A wait that would overrun it ends the
-	// retries and surfaces the last result.
+	// retries and surfaces the last result. Discarding a retried response's
+	// body and pacing the next attempt count against it too; when they use it
+	// up, the call fails with context.DeadlineExceeded, the discarded response
+	// being no longer available to surface.
 	MaxElapsed time.Duration
 	// RequestsPerSecond enables client-side pacing with a token bucket when
 	// > 0 and Limiter is nil. Burst defaults to 1.
@@ -359,6 +363,11 @@ func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, er
 	if err := rt.pace(ctx, workCtx); err != nil {
 		return nil, err
 	}
+	// An ordinary retry waited out its backoff inside the budget, but a
+	// limiter wait can still use up what was left: do not send past it.
+	if rt.attempt > 1 && !rt.authReplayPending && !time.Now().Before(rt.deadline) {
+		return nil, rt.budgetSpent(ctx, "while pacing the retry")
+	}
 	r, err := rt.authorize(ctx)
 	if err != nil {
 		return nil, err
@@ -500,6 +509,15 @@ func (rt *roundTrip) decide(ctx context.Context, r *http.Request, resp *http.Res
 // embeds its credential in the URL would otherwise print it during ordinary
 // operation. The per-attempt span carries the URL to a controlled backend.
 func (rt *roundTrip) waitBackoff(ctx context.Context, resp *http.Response, err error, wait time.Duration) error {
+	// Drain and close so the connection can be reused before the next try,
+	// within the budget: a body that stalls must not carry the call past
+	// MaxElapsed. decide checked the wait against the budget before the
+	// drain, so check again: nothing after the sleep looks at it.
+	rt.drainWithinBudget(resp)
+	if time.Until(rt.deadline) < wait {
+		return rt.budgetSpent(ctx, "while discarding the retried response")
+	}
+
 	rt.t.metrics.observeRetry(ctx, rt.req, resp, err)
 	rt.policyAttempt++
 	rt.t.logger(ctx).WithFields(map[string]any{
@@ -509,9 +527,6 @@ func (rt *roundTrip) waitBackoff(ctx context.Context, resp *http.Response, err e
 		"attempt": rt.attempt,
 		"wait":    wait.String(),
 	}).Infof("http retry after rate limit / server error")
-
-	// Drain and close so the connection can be reused before the next try.
-	drainResponse(resp)
 
 	return sleepContext(ctx, wait)
 }
@@ -589,6 +604,29 @@ func statusOf(resp *http.Response) int {
 	}
 
 	return resp.StatusCode
+}
+
+// budgetSpent ends the retries when MaxElapsed ran out after the last
+// response was already discarded, so there is no result left to surface.
+func (rt *roundTrip) budgetSpent(ctx context.Context, while string) error {
+	rt.t.metrics.observeExhausted(ctx, rt.req, causeBudget)
+
+	return fmt.Errorf("httpclient: retry budget ran out %s: %w", while, context.DeadlineExceeded)
+}
+
+// drainWithinBudget drains a discarded response like drainResponse, but
+// closes the body once the MaxElapsed budget runs out, which unblocks a read
+// the upstream stalls. The body is closed exactly once.
+func (rt *roundTrip) drainWithinBudget(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	var once sync.Once
+	closeBody := func() { once.Do(func() { _ = resp.Body.Close() }) }
+	timer := time.AfterFunc(max(time.Until(rt.deadline), 0), closeBody)
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
+	timer.Stop()
+	closeBody()
 }
 
 // drainResponse reads and closes a discarded response body so the underlying
