@@ -162,25 +162,25 @@ func (a *AdaptiveLimiter) Wait(ctx context.Context) error {
 // upstream still has nothing left. A hold that ctx's deadline cannot cover
 // fails at once, wrapping context.DeadlineExceeded as waitRate does.
 //
+// A response observed during the hold can report a later reset, so the reset
+// is read again each time a hold ends, until one has passed.
+//
 // The hold is measured on nowFn, the window arithmetic's clock, and slept on
 // real time; the two agree outside tests.
 func (a *AdaptiveLimiter) waitForReset(ctx context.Context) error {
-	a.mu.Lock()
-	hold := a.exhaustedUntil.Sub(a.nowFn())
-	a.mu.Unlock()
-	if hold <= 0 {
-		return nil
-	}
-	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < hold {
-		return fmt.Errorf("httpclient: rate-limit window resets past the context deadline: %w", context.DeadlineExceeded)
-	}
-	timer := time.NewTimer(hold)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
+	for {
+		a.mu.Lock()
+		hold := a.exhaustedUntil.Sub(a.nowFn())
+		a.mu.Unlock()
+		if hold <= 0 {
+			return nil
+		}
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < hold {
+			return fmt.Errorf("httpclient: rate-limit window resets past the context deadline: %w", context.DeadlineExceeded)
+		}
+		if err := sleepContext(ctx, hold); err != nil {
+			return err
+		}
 	}
 }
 

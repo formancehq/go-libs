@@ -382,8 +382,8 @@ func TestRateLimitersReportADeadlineRefusal(t *testing.T) {
 // reports zero remaining, no slot is granted before the reported reset, even
 // with a fraction of a token already back in the bucket (drainTokens spends
 // whole tokens only, and 0.9 of one at one-per-window would be granted a tenth
-// of the window in). A hold the deadline cannot cover is refused at once, and
-// a cancel ends it.
+// of the window in), nor before a later reset reported during the hold. A
+// hold the deadline cannot cover is refused at once, and a cancel ends it.
 func TestAdaptiveLimiterHoldsAnExhaustedWindowToItsReset(t *testing.T) {
 	t.Parallel()
 
@@ -406,6 +406,22 @@ func TestAdaptiveLimiterHoldsAnExhaustedWindowToItsReset(t *testing.T) {
 			start := time.Now()
 			require.NoError(t, lim.Wait(context.Background()))
 			require.Equal(t, reset, time.Since(start), "the slot is granted at the reset, not before")
+		})
+	})
+	// A response observed mid-hold reports a later reset without lowering
+	// the rate (one per 8s is looser than one per 10s), so nothing is drained
+	// and the throttle still lapses at 10s: only the re-read reset keeps the
+	// waiter from being granted between 10s and 13s.
+	t.Run("reset extended during the hold", func(t *testing.T) {
+		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			lim := exhausted(t)
+			start := time.Now()
+			time.AfterFunc(5*time.Second, func() {
+				observeHeaders(lim, map[string]string{"RateLimit-Remaining": "0", "RateLimit-Reset": "8"})
+			})
+			require.NoError(t, lim.Wait(context.Background()))
+			require.Equal(t, 13*time.Second, time.Since(start), "the waiter is held to the extended reset")
 		})
 	})
 	t.Run("deadline before the reset", func(t *testing.T) {
