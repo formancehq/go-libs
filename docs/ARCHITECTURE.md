@@ -35,6 +35,7 @@ go-libs/
     │   ├── httpserver/              #   HTTP server (chi, middlewares, OTEL)
     │   ├── grpcserver/              #   gRPC server
     │   ├── httpclient/              #   HTTP client debug/tracing
+    │   ├── webhook/                 #   Bounded inbound webhook receiver (verify, then deliver)
     │   └── api/                     #   Response formatting, pagination, idempotency
     │
     ├── authn/                       # Authentication & authorization
