@@ -225,3 +225,9 @@ Fx can return before a hook that ignores context cancellation has finished.
 Callers must handle the error and separately bound any cleanup they perform
 after `Run` returns. Consumers upgrading from an unbounded runner should size
 their total timeout to include the grace period and all stop hooks.
+
+The `grpcserver` stop hook drains in-flight RPCs until the deadline, then
+closes every transport, and returns only once `Serve` and every handler have
+returned, even when its context has already expired. A handler that ignores
+cancellation therefore holds the hook past the deadline; Fx still returns at
+the budget.
