@@ -365,8 +365,8 @@ func (rt *roundTrip) closeOriginalBody() {
 
 // prepare readies one attempt for the wire: the bearer token and limiter
 // slot, then a fresh request that is signed and authorized. A pending auth
-// replay whose budget ran out meanwhile is refused after signing, before the
-// send.
+// replay or an ordinary retry whose budget ran out meanwhile is refused after
+// signing, before the send.
 func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, error) {
 	workCtx, cancelWork := rt.paceContext(ctx, authBudget)
 	err := rt.pace(ctx, workCtx)
@@ -385,8 +385,27 @@ func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, er
 	if err := rt.replayBudgetSpent(ctx, authBudget, r); err != nil {
 		return nil, err
 	}
+	if err := rt.retryBudgetSpent(ctx, r); err != nil {
+		return nil, err
+	}
 
 	return r, nil
+}
+
+// retryBudgetSpent refuses an ordinary retry that rewinding its body and
+// signing it, the last steps before the send, carried past the MaxElapsed
+// deadline, closing the attempt's body. Caller cancellation wins over the
+// budget cause.
+func (rt *roundTrip) retryBudgetSpent(ctx context.Context, r *http.Request) error {
+	if rt.attempt == 1 || rt.authReplayPending || time.Now().Before(rt.deadline) {
+		return nil
+	}
+	closeAttemptBody(rt.req, r)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	return rt.budgetSpent(ctx, "while preparing the retry", nil)
 }
 
 // paceContext bounds one attempt's token and limiter waits. An ordinary retry

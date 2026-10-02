@@ -493,3 +493,70 @@ func TestBufferedPolicyReadSkippedOnceTheBudgetIsSpent(t *testing.T) {
 		require.Zero(t, body.closed.Load(), "the body is the caller's to close")
 	})
 }
+
+// TestRetryBudgetCoversSigning: rewinding a retry's body and signing it are
+// the last steps before the send, so a signer that runs past MaxElapsed ends
+// the call there, with the prepared body closed and no second attempt sent. A
+// caller cancelling meanwhile gets its own context.Canceled.
+func TestRetryBudgetCoversSigning(t *testing.T) {
+	t.Parallel()
+
+	const budget = 100 * time.Millisecond
+	for _, tc := range []struct {
+		name    string
+		cancel  bool
+		wantErr error
+	}{
+		{name: "signer overruns the budget", wantErr: context.DeadlineExceeded},
+		{name: "caller cancels while signing", cancel: true, wantErr: context.Canceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				var hits, signs, originalClosed, copiesClosed atomic.Int32
+				transport := NewRetryTransport(RetryConfig{
+					Base: rtFunc(func(r *http.Request) (*http.Response, error) {
+						hits.Add(1)
+						_, _ = io.Copy(io.Discard, r.Body)
+						_ = r.Body.Close()
+
+						return rtResponse(r, http.StatusServiceUnavailable, "busy"), nil
+					}),
+					Sign: func(*http.Request) error {
+						if signs.Add(1) > 1 {
+							if tc.cancel {
+								cancel()
+							}
+							time.Sleep(2 * budget)
+						}
+
+						return nil
+					},
+					BaseDelay:  10 * time.Millisecond,
+					MaxDelay:   10 * time.Millisecond,
+					MaxElapsed: budget,
+					Logger:     rtDiscardLogger(),
+				})
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example/data", nil)
+				require.NoError(t, err)
+				req.Body = &countedReadCloser{Reader: strings.NewReader("body"), closed: &originalClosed}
+				req.GetBody = func() (io.ReadCloser, error) {
+					return &countedReadCloser{Reader: strings.NewReader("body"), closed: &copiesClosed}, nil
+				}
+
+				resp, err := transport.RoundTrip(req)
+				require.Nil(t, resp)
+				require.ErrorIs(t, err, tc.wantErr)
+				if tc.cancel {
+					require.NotErrorIs(t, err, context.DeadlineExceeded)
+				}
+				require.EqualValues(t, 1, hits.Load(), "no attempt is sent past the budget")
+				require.EqualValues(t, 2, copiesClosed.Load(), "the sent copy and the refused one are both closed")
+				require.EqualValues(t, 1, originalClosed.Load(), "the caller's body is closed exactly once")
+			})
+		})
+	}
+}
