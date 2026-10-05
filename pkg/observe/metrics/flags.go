@@ -21,7 +21,29 @@ const (
 	OtelMetricsPrefixFlag                             = "otel-metrics-prefix"
 )
 
-func AddFlags(flags *flag.FlagSet) {
+// FlagsOption customizes the flags registered by [AddFlags].
+type FlagsOption func(*flagsConfig)
+
+type flagsConfig struct {
+	defaultPrefix string
+}
+
+// WithDefaultPrefix sets the default of --otel-metrics-prefix. The command
+// line and the OTEL_METRICS_PREFIX environment variable still take
+// precedence, and [NoPrefix] turns the namespace off. The prefix is validated
+// by [ParsePrefix] when the metrics module starts.
+func WithDefaultPrefix(prefix string) FlagsOption {
+	return func(cfg *flagsConfig) {
+		cfg.defaultPrefix = prefix
+	}
+}
+
+func AddFlags(flags *flag.FlagSet, opts ...FlagsOption) {
+	var cfg flagsConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	observe.AddFlags(flags)
 
 	flags.Duration(OtelMetricsExporterPushIntervalFlag, 10*time.Second, "OpenTelemetry metrics exporter push interval")
@@ -33,7 +55,7 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.Bool(OtelMetricsExporterOTLPInsecureFlag, false, "OpenTelemetry metrics grpc insecure")
 	flags.Bool(OtelMetricsKeepInMemoryFlag, false, "Allow to keep metrics in memory")
 	flags.String(OtelMetricsNamingFlag, string(DefaultNaming), "Naming convention of metrics created through the injected meter provider (otel|prom); the global provider is not renamed")
-	flags.String(OtelMetricsPrefixFlag, "", "Namespace prepended to metrics created through the injected meter provider, e.g. formance.ledger (empty or none disables it)")
+	flags.String(OtelMetricsPrefixFlag, cfg.defaultPrefix, "Namespace prepended to metrics created through the injected meter provider, e.g. formance.ledger (empty or none disables it)")
 }
 
 func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
