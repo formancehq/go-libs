@@ -39,10 +39,20 @@ func ProvideRuntimeMetricsOption(v any, annotations ...fx.Annotation) fx.Option 
 }
 
 func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
+	if _, err := metrics.ParsePrefix(cfg.Prefix); err != nil {
+		return fx.Error(err)
+	}
+
 	options := make([]fx.Option, 0)
 	options = append(options,
 		fx.Supply(cfg),
-		fx.Provide(func(mp *sdkmetric.MeterProvider) metric.MeterProvider { return mp }),
+		// Only the injected provider is prefixed: the global provider set
+		// below stays the raw SDK one, so the runtime, host, otelhttp and
+		// otelgrpc instrumentation reading it keep their semantic-convention
+		// names.
+		fx.Provide(func(mp *sdkmetric.MeterProvider) (metric.MeterProvider, error) {
+			return metrics.NewPrefixedMeterProvider(mp, cfg.Prefix)
+		}),
 		fx.Provide(fx.Annotate(func(options ...sdkmetric.Option) *sdkmetric.MeterProvider {
 			// Histograms use Base2ExponentialHistogram rather than the SDK's
 			// default explicit-bucket aggregation: higher resolution, cheaper

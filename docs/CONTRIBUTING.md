@@ -7,6 +7,8 @@ Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the project structure an
 zap stack emits, and what changes for a service moving onto it — `pkg/service`
 still builds the logrus logger, which keeps its own shape until a service
 migrates or opts in.
+[METRICS.md](./METRICS.md) covers the namespace prefix for a service's own
+metrics.
 
 ## Dependency rules checklist
 

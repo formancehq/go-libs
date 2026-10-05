@@ -18,6 +18,11 @@ type ModuleConfig struct {
 	PushInterval       time.Duration
 	ResourceAttributes []string
 	KeepInMemory       bool
+
+	// Prefix namespaces the instruments created through the injected
+	// metric.MeterProvider; see NewPrefixedMeterProvider. The zero value
+	// keeps the upstream names.
+	Prefix string
 }
 
 type OTLPConfig struct {
