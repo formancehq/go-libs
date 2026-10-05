@@ -10,13 +10,11 @@ import (
 	"github.com/formancehq/go-libs/v5/pkg/service"
 )
 
-func TestConfigFromFlagsNamingDefaultsToIdentity(t *testing.T) {
+func TestConfigFromFlagsPrefixDefaultsToNone(t *testing.T) {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	metrics.AddFlags(flags)
 
-	cfg := metrics.ConfigFromFlags(flags)
-	require.Equal(t, metrics.NamingOTel, cfg.Naming)
-	require.Empty(t, cfg.Prefix)
+	require.Empty(t, metrics.ConfigFromFlags(flags).Prefix)
 }
 
 func TestAddFlagsDefaultPrefix(t *testing.T) {
@@ -57,16 +55,4 @@ func TestDefaultPrefixPrecedence(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
-}
-
-func TestConfigFromFlagsNaming(t *testing.T) {
-	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	metrics.AddFlags(flags)
-
-	require.NoError(t, flags.Set(metrics.OtelMetricsNamingFlag, "prom"))
-	require.NoError(t, flags.Set(metrics.OtelMetricsPrefixFlag, "acme.svc"))
-
-	cfg := metrics.ConfigFromFlags(flags)
-	require.Equal(t, metrics.NamingProm, cfg.Naming)
-	require.Equal(t, "acme.svc", cfg.Prefix)
 }

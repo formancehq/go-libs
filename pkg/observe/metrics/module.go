@@ -19,10 +19,9 @@ type ModuleConfig struct {
 	ResourceAttributes []string
 	KeepInMemory       bool
 
-	// Naming and Prefix rename the instruments created through the injected
-	// metric.MeterProvider; see NewRenamingMeterProvider. The zero values
-	// keep the upstream names.
-	Naming Naming
+	// Prefix namespaces the instruments created through the injected
+	// metric.MeterProvider; see NewPrefixedMeterProvider. The zero value
+	// keeps the upstream names.
 	Prefix string
 }
 

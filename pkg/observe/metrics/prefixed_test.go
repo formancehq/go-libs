@@ -13,10 +13,10 @@ import (
 	"github.com/formancehq/go-libs/v5/pkg/observe/metrics"
 )
 
-// collectInstrumentNames wraps a fresh SDK provider with the given policy,
+// collectInstrumentNames wraps a fresh SDK provider with the given prefix,
 // lets register create instruments through it and returns the names the SDK
 // exports.
-func collectInstrumentNames(t *testing.T, naming metrics.Naming, prefix string, register func(otelmetric.MeterProvider)) []string {
+func collectInstrumentNames(t *testing.T, prefix string, register func(otelmetric.MeterProvider)) []string {
 	t.Helper()
 
 	reader := sdkmetric.NewManualReader()
@@ -25,7 +25,7 @@ func collectInstrumentNames(t *testing.T, naming metrics.Naming, prefix string, 
 		_ = provider.Shutdown(context.Background())
 	})
 
-	mp, err := metrics.NewRenamingMeterProvider(provider, naming, prefix)
+	mp, err := metrics.NewPrefixedMeterProvider(provider, prefix)
 	require.NoError(t, err)
 	register(mp)
 
@@ -57,7 +57,7 @@ func registerSampleInstruments(t *testing.T) func(otelmetric.MeterProvider) {
 	}
 }
 
-func TestNewRenamingMeterProviderIdentityReturnsInner(t *testing.T) {
+func TestNewPrefixedMeterProviderWithoutPrefixReturnsInner(t *testing.T) {
 	t.Parallel()
 
 	inner := sdkmetric.NewMeterProvider()
@@ -66,15 +66,13 @@ func TestNewRenamingMeterProviderIdentityReturnsInner(t *testing.T) {
 	})
 
 	for _, prefix := range []string{"", metrics.NoPrefix} {
-		for _, naming := range []metrics.Naming{"", metrics.NamingOTel} {
-			mp, err := metrics.NewRenamingMeterProvider(inner, naming, prefix)
-			require.NoError(t, err)
-			require.Same(t, inner, mp)
-		}
+		mp, err := metrics.NewPrefixedMeterProvider(inner, prefix)
+		require.NoError(t, err)
+		require.Same(t, inner, mp)
 	}
 }
 
-func TestNewRenamingMeterProviderRejectsInvalidPolicy(t *testing.T) {
+func TestNewPrefixedMeterProviderRejectsInvalidPrefix(t *testing.T) {
 	t.Parallel()
 
 	inner := sdkmetric.NewMeterProvider()
@@ -82,17 +80,14 @@ func TestNewRenamingMeterProviderRejectsInvalidPolicy(t *testing.T) {
 		_ = inner.Shutdown(context.Background())
 	})
 
-	_, err := metrics.NewRenamingMeterProvider(inner, "prometheus", "")
-	require.Error(t, err)
-
-	_, err = metrics.NewRenamingMeterProvider(inner, metrics.NamingOTel, "acme..payments")
-	require.Error(t, err)
+	_, err := metrics.NewPrefixedMeterProvider(inner, "acme..payments")
+	require.ErrorContains(t, err, "invalid metrics prefix")
 }
 
-func TestRenamingOTelNamingWithoutPrefixPreservesNames(t *testing.T) {
+func TestPrefixedMeterWithoutPrefixPreservesNames(t *testing.T) {
 	t.Parallel()
 
-	names := collectInstrumentNames(t, metrics.NamingOTel, "", registerSampleInstruments(t))
+	names := collectInstrumentNames(t, metrics.NoPrefix, registerSampleInstruments(t))
 
 	require.ElementsMatch(t, []string{
 		"admission.preload.total",
@@ -101,10 +96,10 @@ func TestRenamingOTelNamingWithoutPrefixPreservesNames(t *testing.T) {
 	}, names)
 }
 
-func TestRenamingOTelNamingPrefixesEveryInstrument(t *testing.T) {
+func TestPrefixedMeterPrefixesEveryInstrument(t *testing.T) {
 	t.Parallel()
 
-	names := collectInstrumentNames(t, metrics.NamingOTel, "formance.ledger", registerSampleInstruments(t))
+	names := collectInstrumentNames(t, "formance.ledger", registerSampleInstruments(t))
 
 	require.ElementsMatch(t, []string{
 		"formance.ledger.admission.preload.total",
@@ -113,34 +108,10 @@ func TestRenamingOTelNamingPrefixesEveryInstrument(t *testing.T) {
 	}, names)
 }
 
-func TestRenamingPromNamingPrefixesEveryInstrument(t *testing.T) {
+func TestPrefixedMeterCoversEveryInstrumentKind(t *testing.T) {
 	t.Parallel()
 
-	names := collectInstrumentNames(t, metrics.NamingProm, "formance.ledger", registerSampleInstruments(t))
-
-	require.ElementsMatch(t, []string{
-		"formance_ledger_admission_preload_total",
-		"formance_ledger_wal_append_save_duration",
-		"formance_ledger_raft_fsm_logs_appended",
-	}, names)
-}
-
-func TestRenamingPromNamingWithoutPrefixOnlyReplacesDots(t *testing.T) {
-	t.Parallel()
-
-	names := collectInstrumentNames(t, metrics.NamingProm, metrics.NoPrefix, registerSampleInstruments(t))
-
-	require.ElementsMatch(t, []string{
-		"admission_preload_total",
-		"wal_append_save_duration",
-		"raft_fsm_logs_appended",
-	}, names)
-}
-
-func TestRenamingCoversEveryInstrumentKind(t *testing.T) {
-	t.Parallel()
-
-	names := collectInstrumentNames(t, metrics.NamingProm, "acme.payments", func(mp otelmetric.MeterProvider) {
+	names := collectInstrumentNames(t, "acme.payments", func(mp otelmetric.MeterProvider) {
 		m := mp.Meter("kinds")
 		ctx := context.Background()
 
@@ -203,48 +174,16 @@ func TestRenamingCoversEveryInstrumentKind(t *testing.T) {
 
 	require.Len(t, names, 14)
 	for _, n := range names {
-		require.True(t, strings.HasPrefix(n, "acme_payments_"), "instrument %q is not prefixed", n)
-		require.NotContains(t, n, ".", "instrument %q still contains a dot", n)
+		require.True(t, strings.HasPrefix(n, "acme.payments."), "instrument %q is not prefixed", n)
 	}
 }
 
-func TestTransformName(t *testing.T) {
+func TestPrefixedName(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "cache.size", metrics.TransformName("cache.size", metrics.NamingOTel, ""))
-	require.Equal(t, "cache.size", metrics.TransformName("cache.size", metrics.NamingOTel, metrics.NoPrefix))
-	require.Equal(t, "acme.cache.size", metrics.TransformName("cache.size", metrics.NamingOTel, "acme"))
-	require.Equal(t, "cache_size", metrics.TransformName("cache.size", metrics.NamingProm, ""))
-	require.Equal(t, "acme_svc_cache_size", metrics.TransformName("cache.size", metrics.NamingProm, "acme.svc"))
-}
-
-func TestParseNaming(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		in   string
-		want metrics.Naming
-		err  bool
-	}{
-		{in: "otel", want: metrics.NamingOTel},
-		{in: "prom", want: metrics.NamingProm},
-		{in: "", want: metrics.DefaultNaming},
-		{in: "prometheus", err: true},
-		{in: "OTEL", err: true},
-	}
-	for _, tc := range tests {
-		t.Run(tc.in, func(t *testing.T) {
-			t.Parallel()
-			got, err := metrics.ParseNaming(tc.in)
-			if tc.err {
-				require.Error(t, err)
-
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tc.want, got)
-		})
-	}
+	require.Equal(t, "cache.size", metrics.PrefixedName("cache.size", ""))
+	require.Equal(t, "cache.size", metrics.PrefixedName("cache.size", metrics.NoPrefix))
+	require.Equal(t, "acme.svc.cache.size", metrics.PrefixedName("cache.size", "acme.svc"))
 }
 
 func TestParsePrefix(t *testing.T) {

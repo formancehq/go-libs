@@ -39,9 +39,6 @@ func ProvideRuntimeMetricsOption(v any, annotations ...fx.Annotation) fx.Option 
 }
 
 func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
-	if _, err := metrics.ParseNaming(string(cfg.Naming)); err != nil {
-		return fx.Error(err)
-	}
 	if _, err := metrics.ParsePrefix(cfg.Prefix); err != nil {
 		return fx.Error(err)
 	}
@@ -49,12 +46,12 @@ func MetricsModule(cfg metrics.ModuleConfig) fx.Option {
 	options := make([]fx.Option, 0)
 	options = append(options,
 		fx.Supply(cfg),
-		// Only the injected provider is renamed: the global provider set
+		// Only the injected provider is prefixed: the global provider set
 		// below stays the raw SDK one, so the runtime, host, otelhttp and
 		// otelgrpc instrumentation reading it keep their semantic-convention
 		// names.
 		fx.Provide(func(mp *sdkmetric.MeterProvider) (metric.MeterProvider, error) {
-			return metrics.NewRenamingMeterProvider(mp, cfg.Naming, cfg.Prefix)
+			return metrics.NewPrefixedMeterProvider(mp, cfg.Prefix)
 		}),
 		fx.Provide(fx.Annotate(func(options ...sdkmetric.Option) *sdkmetric.MeterProvider {
 			// Histograms use Base2ExponentialHistogram rather than the SDK's

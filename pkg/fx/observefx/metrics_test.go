@@ -105,12 +105,11 @@ func TestMetricsModuleUsesExponentialHistograms(t *testing.T) {
 	t.Fatal("test.histogram not found in exported metrics")
 }
 
-// TestMetricsModuleRenamesOnlyInjectedProvider pins the integration point of
-// the naming policy: instruments created through the injected
-// metric.MeterProvider are renamed, while the global provider, used by the
-// runtime, host, otelhttp and otelgrpc instrumentation, keeps
-// semantic-convention names untouched.
-func TestMetricsModuleRenamesOnlyInjectedProvider(t *testing.T) {
+// TestMetricsModulePrefixesOnlyInjectedProvider pins the integration point of
+// the prefix: instruments created through the injected metric.MeterProvider
+// are prefixed, while the global provider, used by the runtime, host, otelhttp
+// and otelgrpc instrumentation, keeps semantic-convention names untouched.
+func TestMetricsModulePrefixesOnlyInjectedProvider(t *testing.T) {
 	var (
 		exporter      *metrics.InMemoryExporter
 		meterProvider *sdkmetric.MeterProvider
@@ -118,10 +117,9 @@ func TestMetricsModuleRenamesOnlyInjectedProvider(t *testing.T) {
 	)
 
 	app := fxtest.New(t,
-		observefx.ResourceModule(observe.Config{ServiceName: "renaming-test"}),
+		observefx.ResourceModule(observe.Config{ServiceName: "prefix-test"}),
 		observefx.MetricsModule(metrics.ModuleConfig{
 			KeepInMemory: true,
-			Naming:       metrics.NamingProm,
 			Prefix:       "acme.payments",
 		}),
 		fx.Populate(&exporter, &meterProvider, &injected),
@@ -149,26 +147,15 @@ func TestMetricsModuleRenamesOnlyInjectedProvider(t *testing.T) {
 		}
 	}
 
-	require.True(t, names["acme_payments_admission_preload_total"], "injected instrument not renamed: %v", names)
-	require.True(t, names["http.server.request.body.size"], "global instrument renamed: %v", names)
+	require.True(t, names["acme.payments.admission.preload.total"], "injected instrument not prefixed: %v", names)
+	require.True(t, names["http.server.request.body.size"], "global instrument prefixed: %v", names)
 }
 
-func TestMetricsModuleRejectsInvalidNamingPolicy(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		cfg  metrics.ModuleConfig
-		err  string
-	}{
-		{name: "naming", cfg: metrics.ModuleConfig{Naming: "prometheus"}, err: "invalid metrics naming"},
-		{name: "prefix", cfg: metrics.ModuleConfig{Prefix: "acme-payments"}, err: "invalid metrics prefix"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			err := fx.New(
-				observefx.ResourceModule(observe.Config{ServiceName: "renaming-test"}),
-				observefx.MetricsModule(tc.cfg),
-				fx.NopLogger,
-			).Err()
-			require.ErrorContains(t, err, tc.err)
-		})
-	}
+func TestMetricsModuleRejectsInvalidPrefix(t *testing.T) {
+	err := fx.New(
+		observefx.ResourceModule(observe.Config{ServiceName: "prefix-test"}),
+		observefx.MetricsModule(metrics.ModuleConfig{Prefix: "acme-payments"}),
+		fx.NopLogger,
+	).Err()
+	require.ErrorContains(t, err, "invalid metrics prefix")
 }

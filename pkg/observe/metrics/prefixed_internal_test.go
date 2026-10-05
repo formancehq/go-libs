@@ -11,14 +11,14 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// TestRenamingMeterOverridesEveryConstructor fails when an OpenTelemetry
-// upgrade adds an instrument constructor to metric.Meter that renamingMeter
+// TestPrefixedMeterOverridesEveryConstructor fails when an OpenTelemetry
+// upgrade adds an instrument constructor to metric.Meter that prefixedMeter
 // does not override. The embedded metric.Meter would otherwise forward it
-// silently, and instruments created with it would escape the naming policy.
-func TestRenamingMeterOverridesEveryConstructor(t *testing.T) {
+// silently, and instruments created with it would escape the prefix.
+func TestPrefixedMeterOverridesEveryConstructor(t *testing.T) {
 	t.Parallel()
 
-	file, err := parser.ParseFile(token.NewFileSet(), "renaming.go", nil, 0)
+	file, err := parser.ParseFile(token.NewFileSet(), "prefixed.go", nil, 0)
 	require.NoError(t, err)
 
 	overridden := map[string]bool{}
@@ -31,7 +31,7 @@ func TestRenamingMeterOverridesEveryConstructor(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if ident, ok := star.X.(*ast.Ident); ok && ident.Name == "renamingMeter" {
+		if ident, ok := star.X.(*ast.Ident); ok && ident.Name == "prefixedMeter" {
 			overridden[fn.Name.Name] = true
 		}
 	}
@@ -45,7 +45,7 @@ func TestRenamingMeterOverridesEveryConstructor(t *testing.T) {
 			continue
 		}
 		constructors++
-		require.True(t, overridden[method.Name], "renamingMeter does not override metric.Meter.%s", method.Name)
+		require.True(t, overridden[method.Name], "prefixedMeter does not override metric.Meter.%s", method.Name)
 	}
 	require.NotZero(t, constructors)
 }

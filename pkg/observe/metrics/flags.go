@@ -17,7 +17,6 @@ const (
 	OtelMetricsExporterOTLPModeFlag                   = "otel-metrics-exporter-otlp-mode"
 	OtelMetricsExporterOTLPEndpointFlag               = "otel-metrics-exporter-otlp-endpoint"
 	OtelMetricsExporterOTLPInsecureFlag               = "otel-metrics-exporter-otlp-insecure"
-	OtelMetricsNamingFlag                             = "otel-metrics-naming"
 	OtelMetricsPrefixFlag                             = "otel-metrics-prefix"
 )
 
@@ -54,8 +53,7 @@ func AddFlags(flags *flag.FlagSet, opts ...FlagsOption) {
 	flags.String(OtelMetricsExporterOTLPEndpointFlag, "", "OpenTelemetry metrics grpc endpoint")
 	flags.Bool(OtelMetricsExporterOTLPInsecureFlag, false, "OpenTelemetry metrics grpc insecure")
 	flags.Bool(OtelMetricsKeepInMemoryFlag, false, "Allow to keep metrics in memory")
-	flags.String(OtelMetricsNamingFlag, string(DefaultNaming), "Naming convention of metrics created through the injected meter provider (otel|prom); the global provider is not renamed")
-	flags.String(OtelMetricsPrefixFlag, cfg.defaultPrefix, "Namespace prepended to metrics created through the injected meter provider, e.g. formance.ledger (empty or none disables it)")
+	flags.String(OtelMetricsPrefixFlag, cfg.defaultPrefix, "Namespace prepended to metrics created through the injected meter provider, e.g. formance.ledger (empty or none disables it); the global provider is not prefixed")
 }
 
 func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
@@ -67,7 +65,6 @@ func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
 	otlpMode, _ := flags.GetString(OtelMetricsExporterOTLPModeFlag)
 	otlpEndpoint, _ := flags.GetString(OtelMetricsExporterOTLPEndpointFlag)
 	otlpInsecure, _ := flags.GetBool(OtelMetricsExporterOTLPInsecureFlag)
-	naming, _ := flags.GetString(OtelMetricsNamingFlag)
 	prefix, _ := flags.GetString(OtelMetricsPrefixFlag)
 
 	return ModuleConfig{
@@ -81,7 +78,6 @@ func ConfigFromFlags(flags *flag.FlagSet) ModuleConfig {
 		MinimumReadMemStatsInterval: minReadMemStats,
 		PushInterval:                pushInterval,
 		KeepInMemory:                keepInMemory,
-		Naming:                      Naming(naming),
 		Prefix:                      prefix,
 	}
 }

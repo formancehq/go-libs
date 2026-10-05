@@ -26,7 +26,7 @@ go-libs/
     ├── observe/                     # Observability
     │   ├── log/                     #   Logger interface + adapters (zap, logr, logrus) -- see docs/LOGGING.md
     │   ├── traces/                  #   Tracer provider (OTLP gRPC/HTTP, stdout)
-    │   ├── metrics/                 #   Meter provider (OTLP, in-memory), naming and prefix -- see docs/METRICS.md
+    │   ├── metrics/                 #   Meter provider (OTLP, in-memory), namespace prefix -- see docs/METRICS.md
     │   ├── redact/                  #   Credential redaction for logged headers, URLs, bodies
     │   ├── resource.go              #   Shared OTLP resource builder
     │   └── profiling/               #   pprof debug server
