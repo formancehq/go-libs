@@ -104,3 +104,71 @@ func TestMetricsModuleUsesExponentialHistograms(t *testing.T) {
 
 	t.Fatal("test.histogram not found in exported metrics")
 }
+
+// TestMetricsModuleRenamesOnlyInjectedProvider pins the integration point of
+// the naming policy: instruments created through the injected
+// metric.MeterProvider are renamed, while the global provider, used by the
+// runtime, host, otelhttp and otelgrpc instrumentation, keeps
+// semantic-convention names untouched.
+func TestMetricsModuleRenamesOnlyInjectedProvider(t *testing.T) {
+	var (
+		exporter      *metrics.InMemoryExporter
+		meterProvider *sdkmetric.MeterProvider
+		injected      otelmetric.MeterProvider
+	)
+
+	app := fxtest.New(t,
+		observefx.ResourceModule(observe.Config{ServiceName: "renaming-test"}),
+		observefx.MetricsModule(metrics.ModuleConfig{
+			KeepInMemory: true,
+			Naming:       metrics.NamingProm,
+			Prefix:       "acme.payments",
+		}),
+		fx.Populate(&exporter, &meterProvider, &injected),
+		fx.NopLogger,
+	)
+	app.RequireStart()
+	defer app.RequireStop()
+
+	require.Same(t, meterProvider, otel.GetMeterProvider())
+
+	own, err := injected.Meter("admission").Int64Counter("admission.preload.total")
+	require.NoError(t, err)
+	own.Add(context.Background(), 1)
+
+	semconv, err := otel.GetMeterProvider().Meter("go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp").Int64Counter("http.server.request.body.size")
+	require.NoError(t, err)
+	semconv.Add(context.Background(), 1)
+
+	require.NoError(t, meterProvider.ForceFlush(context.Background()))
+
+	names := map[string]bool{}
+	for _, sm := range exporter.GetMetrics().ScopeMetrics {
+		for _, m := range sm.Metrics {
+			names[m.Name] = true
+		}
+	}
+
+	require.True(t, names["acme_payments_admission_preload_total"], "injected instrument not renamed: %v", names)
+	require.True(t, names["http.server.request.body.size"], "global instrument renamed: %v", names)
+}
+
+func TestMetricsModuleRejectsInvalidNamingPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  metrics.ModuleConfig
+		err  string
+	}{
+		{name: "naming", cfg: metrics.ModuleConfig{Naming: "prometheus"}, err: "invalid metrics naming"},
+		{name: "prefix", cfg: metrics.ModuleConfig{Prefix: "acme-payments"}, err: "invalid metrics prefix"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := fx.New(
+				observefx.ResourceModule(observe.Config{ServiceName: "renaming-test"}),
+				observefx.MetricsModule(tc.cfg),
+				fx.NopLogger,
+			).Err()
+			require.ErrorContains(t, err, tc.err)
+		})
+	}
+}
