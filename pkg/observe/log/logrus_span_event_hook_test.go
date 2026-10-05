@@ -78,3 +78,36 @@ func TestSpanEventHookSkipsLevelsBelowWarn(t *testing.T) {
 		t.Fatalf("warn must not set error status")
 	}
 }
+
+func TestSpanEventHookRecordsArrayFields(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
+
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	SetHooks(logger, true)
+
+	type point struct{ X int }
+	ctx, span := tracer.Start(context.Background(), "op")
+	logger.WithContext(ctx).WithFields(logrus.Fields{
+		"ids":    [2]string{"a", "b"},
+		"counts": [3]int{1, 2, 3},
+		"points": [1]point{{X: 1}},
+	}).Warn("careful")
+	span.End()
+
+	events := recorder.Ended()[0].Events()
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	got := attribute.NewSet(events[0].Attributes...)
+	for _, want := range []attribute.KeyValue{
+		attribute.StringSlice("ids", []string{"a", "b"}),
+		attribute.IntSlice("counts", []int{1, 2, 3}),
+		attribute.String("points", `[{"X":1}]`),
+	} {
+		if v, ok := got.Value(want.Key); !ok || v != want.Value {
+			t.Errorf("attribute %s = %v (present %v), want %v", want.Key, v.Emit(), ok, want.Value.Emit())
+		}
+	}
+}

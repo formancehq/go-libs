@@ -133,7 +133,11 @@ func spanAttribute(key string, value any) attribute.KeyValue {
 
 	switch rv.Kind() {
 	case reflect.Array:
-		rv = rv.Slice(0, rv.Len())
+		// reflect.ValueOf returns an unaddressable array, which Slice panics
+		// on; copy it into an addressable one first.
+		addressable := reflect.New(rv.Type()).Elem()
+		addressable.Set(rv)
+		rv = addressable.Slice(0, addressable.Len())
 		fallthrough
 	case reflect.Slice:
 		// Converting rather than asserting keeps named slice types such as
