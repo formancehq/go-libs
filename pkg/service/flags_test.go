@@ -1,8 +1,10 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -134,8 +136,18 @@ func TestBindEnvToFlagSetWithErrorRejectsMalformedTypedValues(t *testing.T) {
 			require.Error(t, err)
 			require.ErrorContains(t, err, tt.envVar)
 			require.ErrorContains(t, err, "--"+tt.flagName)
-			require.ErrorContains(t, err, tt.value)
-			require.ErrorContains(t, err, tt.errorMatch)
+			require.NotContains(t, err.Error(), tt.value)
+			require.ErrorContains(t, err, "invalid value")
+			var binding *EnvironmentBindingError
+			require.ErrorAs(t, err, &binding)
+			require.Equal(t, tt.envVar, binding.EnvironmentVariable)
+			require.Equal(t, tt.flagName, binding.FlagName)
+			var parserError *strconv.NumError
+			require.ErrorAs(t, err, &parserError)
+			require.ErrorIs(t, err, strconv.ErrSyntax)
+			require.True(t, errors.Is(binding, parserError))
+			require.ErrorContains(t, parserError, tt.errorMatch)
+			require.NotContains(t, fmt.Sprintf("%+v", err), tt.value)
 		})
 	}
 }

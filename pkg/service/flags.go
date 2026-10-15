@@ -9,6 +9,24 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// EnvironmentBindingError identifies a rejected environment setting without
+// including its value in the diagnostic. The original parser error remains
+// available through errors.As/errors.Is; callers must not log an unwrapped
+// parser error because it may include the rejected value.
+type EnvironmentBindingError struct {
+	EnvironmentVariable string
+	FlagName            string
+	cause               error
+}
+
+func (e *EnvironmentBindingError) Error() string {
+	return fmt.Sprintf("binding environment variable %s to flag --%s: invalid value", e.EnvironmentVariable, e.FlagName)
+}
+
+func (e *EnvironmentBindingError) Unwrap() error {
+	return e.cause
+}
+
 // BindEnvToCommand binds environment variables to every flag registered on cmd
 // and its descendants.
 //
@@ -102,7 +120,7 @@ func bindEnvToFlag(set *pflag.FlagSet, flag *pflag.Flag) error {
 	}
 
 	if err := set.Set(flag.Name, value); err != nil {
-		return fmt.Errorf("binding environment variable %s to flag --%s: %w", envVar, flag.Name, err)
+		return &EnvironmentBindingError{EnvironmentVariable: envVar, FlagName: flag.Name, cause: err}
 	}
 
 	return nil
