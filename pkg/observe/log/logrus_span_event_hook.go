@@ -167,5 +167,7 @@ func spanAttribute(key string, value any) attribute.KeyValue {
 	if b, err := json.Marshal(value); b != nil && err == nil {
 		return attribute.String(key, string(b))
 	}
-	return attribute.String(key, fmt.Sprint(value))
+	// Not fmt.Sprint: it has no cycle detection, so a self-referencing slice
+	// or map would recurse until the process dies of a stack overflow.
+	return attribute.String(key, fmt.Sprintf("<unserializable %T>", value))
 }

@@ -111,3 +111,41 @@ func TestSpanEventHookRecordsArrayFields(t *testing.T) {
 		}
 	}
 }
+
+func TestSpanEventHookBoundsUnserializableFields(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
+
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	// The text formatter formats fields with fmt itself and would overflow on
+	// a cycle regardless of the hook; the JSON one reports the error instead.
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	SetHooks(logger, true)
+
+	cyclicSlice := make([]any, 1)
+	cyclicSlice[0] = cyclicSlice
+	cyclicMap := map[string]any{}
+	cyclicMap["self"] = cyclicMap
+
+	ctx, span := tracer.Start(context.Background(), "op")
+	logger.WithContext(ctx).WithFields(logrus.Fields{
+		"slice": cyclicSlice,
+		"map":   cyclicMap,
+	}).Error("failed")
+	span.End()
+
+	events := recorder.Ended()[0].Events()
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	got := attribute.NewSet(events[0].Attributes...)
+	for _, want := range []attribute.KeyValue{
+		attribute.String("slice", "<unserializable []interface {}>"),
+		attribute.String("map", "<unserializable map[string]interface {}>"),
+	} {
+		if v, ok := got.Value(want.Key); !ok || v != want.Value {
+			t.Errorf("attribute %s = %v (present %v), want %v", want.Key, v.Emit(), ok, want.Value.Emit())
+		}
+	}
+}
