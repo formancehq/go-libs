@@ -288,8 +288,58 @@ event queues remain caller-owned. HandleFrame returns FrameResult to report
 confirmation, activity or requested reconnect; it does not transfer decoding or
 provider authority into the transport.
 
-SupervisorMonitor provides coherent frame accounting and public performance
-snapshots. FrameJob consumes an existing observe/job descriptor; opening a socket
+SupervisorMonitor retains coherent physical frame accounting and instruments
+its owned measurements through the application OTel meter provider. FrameJob consumes an existing observe/job descriptor; opening a socket
 never runs under a frame job. Byte admission uses the existing weighted semaphore
 with 64 KiB charges and a separate item bound. No generic worker/event-queue
 framework or second connection interface is introduced.
+### WebSocket connection ownership
+
+Keep one reader active to service control frames and run Ping concurrently.
+An expired or cancelled active Read closes the underlying connection; reconnect
+instead of treating it as a recoverable per-read timeout. A reader paused for
+local admission cannot service pongs, so callers must coordinate heartbeat
+failure policy with backpressure. Close ends the connection and releases the
+read loop; the owner cancels and joins its work before starting another session.
+
+### Supervisor failure and memory contracts
+
+Only a confirmed established session contributes to the stable-session retry reset;
+failed setup and reconnect callbacks do not. Retry logs include a fixed message,
+attempt and error type, never arbitrary setup/URL/error text. Callers that need
+additional diagnostics retain their own credential-safe logging boundary.
+
+Frame callbacks remain serial but must return when their context is cancelled.
+Read/ping failures and confirmation/watchdog expiry can cancel a cooperative
+callback independently; callback, reader and heartbeat work is joined before retry.
+A non-cooperative callback can still block shutdown and is outside this contract.
+Local reader admission waits suspend heartbeat deadlines and provider-activity
+elapsed time; resuming admission gives the heartbeat its timeout again. This does
+not cancel an in-progress control write or classify local overload as peer failure.
+
+FrameQueueBytes bounds the admitted queue only. One complete frame returned by
+Read may wait for admission outside that budget, and one admitted frame can be in
+the active handler. For the bundled connection, additional payload allowance is
+at most ReadLimit plus min(FrameQueueBytes, ReadLimit), beyond the admitted queue.
+Custom connections must enforce their own read limit. This is not a total heap
+bound. Item/byte admission and chunk charges themselves are unchanged.
+
+### OTel session measurements
+
+NewSupervisorMonitor accepts WithSupervisorMeterProvider and WithSupervisorName.
+Use the application's injected provider for prefix/view policy; nil uses the global
+provider. No SDK provider or recorder is constructed. Stage/channel dimensions are
+fixed; names must be bounded static roles, never tenant/account/URL/error values.
+Counters aggregate monitors sharing dimensions; last-value gauges describe the
+last observed session for those dimensions, so concurrent sessions need distinct
+bounded names when their individual values must be displayed.
+
+Frames read/handled/abandoned and bytes are counters, handling durations are seconds
+histograms, and owned depth/in-flight/high-water values are explicit gauges. Raw
+Snapshot is operational state for lifecycle/conservation checks, not a metric
+collection or rolling/percentile interface. Local views collect from the same SDK
+provider using ForceFlush then the existing in-memory exporter, or an application
+ManualReader. Exporter ForceFlush alone does not collect. Collection failure,
+freshness and unavailable-versus-observed-zero handling belong to the local view.
+Histogram estimates and collected intervals must not be labelled as exact retained
+sample percentiles or the withdrawn recorder's exact 10/60-second windows.

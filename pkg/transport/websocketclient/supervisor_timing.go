@@ -5,7 +5,11 @@ import (
 	"time"
 )
 
-// DefaultFrameQueueBytes bounds retained raw frame payloads, not total heap.
+// DefaultFrameQueueBytes bounds admitted queue payload bytes. A pending Read
+// can retain one additional complete frame (up to ReadLimit), and the serial
+// handler can retain one admitted frame (up to min(FrameQueueBytes, ReadLimit)).
+// It is not a bound on all pending payloads or Go heap. Custom Conn implementations
+// must enforce their own read limit for an overall retained-byte bound.
 const DefaultFrameQueueBytes = 32 << 20
 const budgetChunk = 64 << 10
 
