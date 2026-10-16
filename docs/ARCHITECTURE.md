@@ -285,3 +285,8 @@ instead of treating it as a recoverable per-read timeout. A reader paused for
 local admission cannot service pongs, so callers must coordinate heartbeat
 failure policy with backpressure. Close ends the connection and releases the
 read loop; the owner cancels and joins its work before starting another session.
+
+## Credential and structured capture redaction
+
+[REDACTION.md](./REDACTION.md) describes configured-value masking on the existing
+redaction primitives and byte-preserving JSON/form capture refusal rules.
