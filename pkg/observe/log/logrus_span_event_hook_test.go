@@ -87,12 +87,10 @@ func TestSpanEventHookRecordsArrayFields(t *testing.T) {
 	logger.SetOutput(io.Discard)
 	SetHooks(logger, true)
 
-	type point struct{ X int }
 	ctx, span := tracer.Start(context.Background(), "op")
 	logger.WithContext(ctx).WithFields(logrus.Fields{
 		"ids":    [2]string{"a", "b"},
 		"counts": [3]int{1, 2, 3},
-		"points": [1]point{{X: 1}},
 	}).Warn("careful")
 	span.End()
 
@@ -104,7 +102,6 @@ func TestSpanEventHookRecordsArrayFields(t *testing.T) {
 	for _, want := range []attribute.KeyValue{
 		attribute.StringSlice("ids", []string{"a", "b"}),
 		attribute.IntSlice("counts", []int{1, 2, 3}),
-		attribute.String("points", `[{"X":1}]`),
 	} {
 		if v, ok := got.Value(want.Key); !ok || v != want.Value {
 			t.Errorf("attribute %s = %v (present %v), want %v", want.Key, v.Emit(), ok, want.Value.Emit())
@@ -123,15 +120,12 @@ func TestSpanEventHookBoundsUnserializableFields(t *testing.T) {
 	logger.SetFormatter(&logrus.JSONFormatter{})
 	SetHooks(logger, true)
 
-	cyclicSlice := make([]any, 1)
-	cyclicSlice[0] = cyclicSlice
 	cyclicMap := map[string]any{}
 	cyclicMap["self"] = cyclicMap
 
 	ctx, span := tracer.Start(context.Background(), "op")
 	logger.WithContext(ctx).WithFields(logrus.Fields{
-		"slice": cyclicSlice,
-		"map":   cyclicMap,
+		"map": cyclicMap,
 	}).Error("failed")
 	span.End()
 
@@ -141,11 +135,49 @@ func TestSpanEventHookBoundsUnserializableFields(t *testing.T) {
 	}
 	got := attribute.NewSet(events[0].Attributes...)
 	for _, want := range []attribute.KeyValue{
-		attribute.String("slice", "<unserializable []interface {}>"),
 		attribute.String("map", "<unserializable map[string]interface {}>"),
 	} {
 		if v, ok := got.Value(want.Key); !ok || v != want.Value {
 			t.Errorf("attribute %s = %v (present %v), want %v", want.Key, v.Emit(), ok, want.Value.Emit())
+		}
+	}
+}
+
+type maskedSecret string
+
+func (maskedSecret) String() string { return "[REDACTED]" }
+
+func TestSpanEventHookOmitsUnsupportedSliceFields(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tracer := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test")
+
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	// See TestSpanEventHookBoundsUnserializableFields for the cycle.
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	SetHooks(logger, true)
+
+	type point struct{ X int }
+	cyclicSlice := make([]any, 1)
+	cyclicSlice[0] = cyclicSlice
+
+	ctx, span := tracer.Start(context.Background(), "op")
+	logger.WithContext(ctx).WithFields(logrus.Fields{
+		// JSON would emit the raw value and bypass the masking String().
+		"values": []any{maskedSecret("SYNTHETIC_TEST_VALUE")},
+		"points": [1]point{{X: 1}},
+		"cyclic": cyclicSlice,
+	}).Error("failed")
+	span.End()
+
+	events := recorder.Ended()[0].Events()
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	got := attribute.NewSet(events[0].Attributes...)
+	for _, key := range []attribute.Key{"values", "points", "cyclic"} {
+		if v, _ := got.Value(key); v.Type() != attribute.INVALID {
+			t.Errorf("attribute %s = %v, want omitted", key, v.Emit())
 		}
 	}
 }

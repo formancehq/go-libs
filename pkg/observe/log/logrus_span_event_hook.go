@@ -154,6 +154,9 @@ func spanAttribute(key string, value any) attribute.KeyValue {
 		case t.ConvertibleTo(reflect.TypeFor[[]string]()):
 			return attribute.StringSlice(key, rv.Convert(reflect.TypeFor[[]string]()).Interface().([]string))
 		}
+		// Other element types are omitted, as otellogrus did: JSON would
+		// bypass a fmt.Stringer that masks an element, e.g. a redacted secret.
+		return attribute.KeyValue{Key: attribute.Key(key)}
 	case reflect.Bool:
 		return attribute.Bool(key, rv.Bool())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
