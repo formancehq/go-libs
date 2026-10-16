@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+
+	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 // maxBearerStabilityChecks bounds the token re-reads across limiter waits: a
@@ -149,12 +151,15 @@ func (rt *roundTrip) remintBearer(ctx, authBudget context.Context) (outcome stri
 
 	fields := map[string]any{
 		"method":  rt.req.Method,
-		"host":    rt.req.URL.Host,
+		"host":    redact.MaskValues(rt.req.URL.Host),
 		"attempt": rt.attempt,
 		"outcome": outcome,
 	}
+	if rt.t.cfg.LogPath && !rt.t.cfg.PathIsCredential {
+		fields["path"] = redact.Path(rt.req.URL.EscapedPath())
+	}
 	if refreshErr != nil {
-		for k, v := range bearerRefreshFailureFields(refreshErr) {
+		for k, v := range BearerRefreshFailureFields(refreshErr) {
 			fields[k] = v
 		}
 	}
@@ -179,12 +184,12 @@ func bearerReplaySpent(req *http.Request) bool {
 	return false
 }
 
-// bearerRefreshFailureFields turns an untrusted token-source error into a
+// BearerRefreshFailureFields turns an untrusted token-source error into a
 // small, credential-safe diagnostic vocabulary. Arbitrary error text is never
 // logged: a BearerTokenSource has no contract that its Error string is safe.
 // The status of an OAuth2 token-endpoint rejection is enough to tell it from
 // transport, deadline, cancellation and response-validation failures.
-func bearerRefreshFailureFields(err error) map[string]any {
+func BearerRefreshFailureFields(err error) map[string]any {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return map[string]any{"error_kind": "deadline"}
@@ -197,6 +202,15 @@ func bearerRefreshFailureFields(err error) map[string]any {
 		return map[string]any{
 			"error_kind":            "token_endpoint_response",
 			"token_endpoint_status": retrieveErr.Response.StatusCode,
+		}
+	}
+	// A token source may use its own bounded HTTP error representation. Inspect
+	// its status capability rather than its diagnostic text or response body.
+	var responseErr interface{ HTTPStatusCode() int }
+	if errors.As(err, &responseErr) {
+		return map[string]any{
+			"error_kind":            "token_endpoint_response",
+			"token_endpoint_status": responseErr.HTTPStatusCode(),
 		}
 	}
 	var networkErr interface{ Timeout() bool }

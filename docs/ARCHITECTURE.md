@@ -349,3 +349,46 @@ unchanged. Consumers must qualify failed-start cleanup and ownership before
 adoption. The correction's compatibility classification requires maintainer
 review; the default-off HTTP options alone do not establish same-major
 compatibility for this shared listener change.
+
+## Token refresh diagnostics
+
+`transport/httpclient.BearerRefreshFailureFields(err)` produces the bounded
+`error_kind` vocabulary used by bearer recovery logs. Context deadline and
+cancellation take precedence. Token endpoint errors may expose
+`HTTPStatusCode() int`; `oauth2.RetrieveError` remains supported. The result
+contains only the error kind and optional integer `token_endpoint_status`.
+The classifier never renders error messages, response bodies, URLs or tokens.
+It reports diagnostics only: it does not authorize replay, select retry policy,
+or turn a status into a permanent credential verdict. Transport timeout-capable
+errors and invalid-token responses retain their existing categories.
+
+
+## Completed HTTP attempt diagnostics
+
+`httpclient.RetryConfig.OnAttempt` receives each completed wire attempt before
+retry-policy evaluation and limiter feedback. It receives the actual attempt
+request context and 1-based wire count, including bearer recovery. It does not
+grant retries, change signing order, or render errors. Observers own admission
+and must preserve request/response bytes and errors and respect cancellation.
+HTTP 101 response bodies remain untouched by snapshotting, preserving their
+bidirectional stream and close ownership.
+
+`SnapshotResponseBody` provides a bounded window plus an over-limit sentinel
+byte while restoring every byte and pending read error for the response owner.
+The owner still closes the body; the observer owns its time budget.
+
+`RetryConfig.Debug` composes the shared diagnostic transport. `DebugConfig.Logger`
+overrides the context logger, and `MetadataOnly` emits structured request/status
+and header fields without reading application bodies. Error diagnostics use the
+closed bearer diagnostic categories and never arbitrary error text. Body preview
+behavior remains unchanged unless the new mode is selected.
+
+Debug-level `PathIsCredential` protection is combined with retry-level protection
+using OR; either setting keeps credential paths hidden.
+
+`PathIsCredential` renders only the origin in debug diagnostics and default-base
+client spans. Retry/recovery logs remain host-only by default; `LogPath` adds a
+shape-redacted path only when the path is not declared a credential. All use the
+shared configured-value masking state. Caller-supplied base transports continue
+to own their own tracing. A pending bearer replay that expires while pacing
+records budget exhaustion once while preserving the wait's original error.
