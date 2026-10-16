@@ -134,10 +134,14 @@ func Capture(ctx context.Context, logger logging.Logger, record Record) {
 	digest := sha256.Sum256(redacted)
 	encoded := base64.StdEncoding.EncodeToString(redacted)
 
-	chunks := max(1, (len(encoded)+chunkBytes-1)/chunkBytes)
+	chunks := len(encoded) / chunkBytes
+	if len(encoded)%chunkBytes != 0 {
+		chunks++
+	}
+	chunks = max(1, chunks)
 	for index := range chunks {
 		start := index * chunkBytes
-		end := min(start+chunkBytes, len(encoded))
+		end := start + min(chunkBytes, len(encoded)-start)
 		chunk := ""
 		if start < len(encoded) {
 			chunk = encoded[start:end]
