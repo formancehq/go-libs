@@ -67,7 +67,7 @@ func TestExactEnvironmentCollections(t *testing.T) {
 
 func TestExactEnvironmentFailuresAreSecretSafe(t *testing.T) {
 	for _, kind := range []string{"int", "bool", "slice", "array", "custom"} {
-		for _, input := range []string{"", "synthetic-secret", "null", `[null]`, `[1]`, `[true]`, `[{}]`, `[[]]`, `["secret",null]`, `["secret"] trailing`} {
+		for _, input := range []string{"", "[", `  ["synthetic-secret"`, "synthetic-secret", "null", `[null]`, `[1]`, `[true]`, `[{}]`, `[[]]`, `["secret",null]`, `["secret"] trailing`} {
 			t.Run(kind+input, func(t *testing.T) {
 				t.Setenv("QUALIFICATION_VALUE", input)
 				flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
@@ -310,6 +310,94 @@ func TestExactEnvironmentLosslessCollectionRetrieval(t *testing.T) {
 				require.Equal(t, tc.exact, slice.GetSlice())
 				require.Equal(t, tc.exact, *pointer)
 			})
+		}
+	}
+}
+
+func TestExactEnvironmentRequiredCollection(t *testing.T) {
+	for _, kind := range []string{"slice", "array"} {
+		for _, inherited := range []bool{false, true} {
+			for _, tc := range []struct {
+				name    string
+				input   string
+				present bool
+				want    []string
+				invalid bool
+			}{
+				{name: "empty-array", input: `[]`, present: true, want: []string{}},
+				{name: "sole-empty", input: `[""]`, present: true, want: []string{""}},
+				{name: "items", input: `["one,two","line\r\nnext"]`, present: true, want: []string{"one,two", "line\r\nnext"}},
+				{name: "malformed-prefix", input: `[`, present: true, invalid: true},
+				{name: "absent"},
+			} {
+				t.Run(fmt.Sprintf("%s/inherited=%t/%s", kind, inherited, tc.name), func(t *testing.T) {
+					t.Setenv("QUALIFICATION_ITEMS", tc.input)
+					if !tc.present {
+						require.NoError(t, os.Unsetenv("QUALIFICATION_ITEMS"))
+					}
+					root := &cobra.Command{Use: "root", SilenceUsage: true, SilenceErrors: true}
+					run := &cobra.Command{Use: "run"}
+					flags := run.Flags()
+					if inherited {
+						flags = root.PersistentFlags()
+					}
+					var pointer *[]string
+					if kind == "slice" {
+						pointer = flags.StringSlice("qualification-items", nil, "")
+					} else {
+						pointer = flags.StringArray("qualification-items", nil, "")
+					}
+					if inherited {
+						require.NoError(t, root.MarkPersistentFlagRequired("qualification-items"))
+					} else {
+						require.NoError(t, run.MarkFlagRequired("qualification-items"))
+					}
+					validated := false
+					ran := false
+					originalArgs := func(cmd *cobra.Command, args []string) error {
+						validated = true
+						require.Equal(t, tc.present, cmd.Flags().Changed("qualification-items"))
+						return cobra.NoArgs(cmd, args)
+					}
+					run.Args = func(cmd *cobra.Command, args []string) error {
+						if err := BindEnvToSelectedCommandExact(cmd); err != nil {
+							return err
+						}
+						return originalArgs(cmd, args)
+					}
+					run.RunE = func(cmd *cobra.Command, _ []string) error {
+						ran = true
+						require.True(t, validated)
+						require.NoError(t, cmd.ValidateRequiredFlags())
+						require.Equal(t, tc.want, *pointer)
+						require.Equal(t, tc.want, cmd.Flag("qualification-items").Value.(pflag.SliceValue).GetSlice())
+						require.True(t, cmd.Flags().Changed("qualification-items"))
+						require.Equal(t, 1, cmd.Flags().NFlag())
+						var visited []string
+						cmd.Flags().Visit(func(f *pflag.Flag) { visited = append(visited, f.Name) })
+						require.Equal(t, []string{"qualification-items"}, visited)
+						return nil
+					}
+					root.AddCommand(run)
+					root.SetArgs([]string{"run"})
+					err := root.Execute()
+					switch {
+					case tc.invalid:
+						require.ErrorIs(t, err, ErrInvalidEnvironmentValue)
+						require.False(t, validated)
+						require.False(t, ran)
+						require.False(t, run.Flags().Changed("qualification-items"))
+						require.Zero(t, run.Flags().NFlag())
+					case !tc.present:
+						require.ErrorContains(t, err, `required flag(s) "qualification-items" not set`)
+						require.True(t, validated)
+						require.False(t, ran)
+					default:
+						require.NoError(t, err)
+						require.True(t, ran)
+					}
+				})
+			}
 		}
 	}
 }
