@@ -27,7 +27,6 @@ go-libs/
     │   ├── log/                     #   Logger interface + adapters (zap, logr, logrus) -- see docs/LOGGING.md
     │   ├── traces/                  #   Tracer provider (OTLP gRPC/HTTP, stdout)
     │   ├── metrics/                 #   Meter provider (OTLP, in-memory), namespace prefix -- see docs/METRICS.md
-    │   ├── performance/             #   Bounded process-local stage diagnostics -- see docs/PERFORMANCE.md
     │   ├── redact/                  #   Credential redaction for logged headers, URLs, bodies
     │   ├── resource.go              #   Shared OTLP resource builder
     │   └── profiling/               #   pprof debug server
@@ -258,3 +257,12 @@ names remain stable independently of the package name.
 Protocol authentication frames, subscriptions, reconnect policy, watchdogs,
 queues, message interpretation and payload capture are caller responsibilities.
 There is no FX, CLI, provider or storage dependency in this package.
+
+### WebSocket connection ownership
+
+Keep one reader active to service control frames and run Ping concurrently.
+An expired or cancelled active Read closes the underlying connection; reconnect
+instead of treating it as a recoverable per-read timeout. A reader paused for
+local admission cannot service pongs, so callers must coordinate heartbeat
+failure policy with backpressure. Close ends the connection and releases the
+read loop; the owner cancels and joins its work before starting another session.
