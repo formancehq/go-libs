@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -163,5 +164,68 @@ func TestBearerReplayWaitBudgetExhaustionIsRecorded(t *testing.T) {
 	}
 	if exhausted != 1 {
 		t.Fatalf("exhausted=%d want 1", exhausted)
+	}
+}
+
+func TestDebugConfigCredentialPathProtectionIsMonotonic(t *testing.T) {
+	for _, metadataOnly := range []bool{false, true} {
+		t.Run(fmt.Sprint(metadataOnly), func(t *testing.T) {
+			var logs bytes.Buffer
+			logger := logging.NewZapStack(&logs, logging.ToZapLevel(logging.DebugLevel), logging.ZapStackOptions{JSONFormatting: true})
+			client := NewRetryClient(RetryConfig{Logger: logger, Debug: &DebugConfig{MetadataOnly: metadataOnly, PathIsCredential: true}, Base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}, Request: req}, nil
+			})})
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.test/wordcredential", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			if strings.Contains(logs.String(), "wordcredential") || !strings.Contains(logs.String(), "https://example.test") {
+				t.Fatal("debug credential-path protection lost")
+			}
+		})
+	}
+}
+
+func TestBearerReplayAnticipatoryLimiterBudgetExhaustionIsRecorded(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
+	calls := 0
+	client := NewRetryClient(RetryConfig{Logger: logging.NopZap(), Bearer: &fakeBearerSource{current: "old", replacement: "new"}, Limiter: NewTokenBucket(0.001, 1), MaxElapsed: time.Second, MeterProvider: mp, Base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: 401, Body: io.NopCloser(strings.NewReader("rejected")), Request: req}, nil
+	})})
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.test/resource", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if !errors.Is(err, context.DeadlineExceeded) || calls != 1 {
+		t.Fatalf("calls=%d err=%v", calls, err)
+	}
+	var result metricdata.ResourceMetrics
+	if err := reader.Collect(t.Context(), &result); err != nil {
+		t.Fatal(err)
+	}
+	var exhausted int64
+	for _, scope := range result.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name == metricRetryExhausted {
+				for _, point := range metric.Data.(metricdata.Sum[int64]).DataPoints {
+					exhausted += point.Value
+				}
+			}
+		}
+	}
+	if exhausted != 1 {
+		t.Fatalf("exhausted=%d want1", exhausted)
 	}
 }

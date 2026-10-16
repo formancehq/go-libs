@@ -58,3 +58,19 @@ func (b *snapshotFailBody) Read(p []byte) (int, error) {
 	return copy(p, "abc"), b.err
 }
 func (b *snapshotFailBody) Close() error { b.closed++; return nil }
+
+func TestSnapshotResponseBodyLeavesUpgradeStreamUntouched(t *testing.T) {
+	body := &snapshotUpgradeBody{}
+	response := &http.Response{StatusCode: http.StatusSwitchingProtocols, Body: body}
+	head, err := SnapshotResponseBody(response, 3)
+	if err != nil || head != nil || response.Body != body || body.read || body.closed != 0 {
+		t.Fatalf("upgrade changed: head=%q err=%v body=%T read=%t closed=%d", head, err, response.Body, body.read, body.closed)
+	}
+	if _, ok := response.Body.(io.ReadWriteCloser); !ok {
+		t.Fatal("upgrade writer lost")
+	}
+}
+
+type snapshotUpgradeBody struct{ snapshotFailBody }
+
+func (*snapshotUpgradeBody) Write(p []byte) (int, error) { return len(p), nil }

@@ -187,7 +187,7 @@ func NewRetryTransport(cfg RetryConfig) *RetryTransport {
 		if diagnostic.Logger == nil {
 			diagnostic.Logger = cfg.Logger
 		}
-		diagnostic.PathIsCredential = cfg.PathIsCredential
+		diagnostic.PathIsCredential = diagnostic.PathIsCredential || cfg.PathIsCredential
 		cfg.Base = NewDebugHTTPTransportWithConfig(cfg.Base, diagnostic)
 	}
 	if cfg.Policy == nil {
@@ -400,7 +400,7 @@ func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, er
 		return nil, rt.budgetSpent(ctx, "while pacing the retry", err)
 	}
 	if err != nil {
-		if rt.authReplayPending && authBudget.Err() != nil && ctx.Err() == nil {
+		if rt.authReplayPending && ctx.Err() == nil && (authBudget.Err() != nil || errors.Is(err, context.DeadlineExceeded)) {
 			rt.t.metrics.observeExhausted(ctx, rt.req, causeBudget)
 		}
 		return nil, err

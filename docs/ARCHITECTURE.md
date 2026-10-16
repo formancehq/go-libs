@@ -265,6 +265,9 @@ retry-policy evaluation and limiter feedback. It receives the actual attempt
 request context and 1-based wire count, including bearer recovery. It does not
 grant retries, change signing order, or render errors. Observers own admission
 and must preserve request/response bytes and errors and respect cancellation.
+HTTP 101 response bodies remain untouched by snapshotting, preserving their
+bidirectional stream and close ownership.
+
 `SnapshotResponseBody` provides a bounded window plus an over-limit sentinel
 byte while restoring every byte and pending read error for the response owner.
 The owner still closes the body; the observer owns its time budget.
@@ -274,6 +277,9 @@ overrides the context logger, and `MetadataOnly` emits structured request/status
 and header fields without reading application bodies. Error diagnostics use the
 closed bearer diagnostic categories and never arbitrary error text. Body preview
 behavior remains unchanged unless the new mode is selected.
+
+Debug-level `PathIsCredential` protection is combined with retry-level protection
+using OR; either setting keeps credential paths hidden.
 
 `PathIsCredential` renders only the origin in debug diagnostics and default-base
 client spans. Retry/recovery logs remain host-only by default; `LogPath` adds a
