@@ -239,3 +239,15 @@ calling the optional `grpcserver.WithServeErrorHandler` callback. The callback
 can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
+
+### Webhook receiver consumer policies
+
+`pkg/transport/webhook.Config` optionally accepts additional method handlers,
+response rendering, delivery-error status classification, bounded-body observation
+and request-context preparation. The existing HEAD/POST gate, verification order,
+503 delivery failures and response bytes remain the defaults. Method extensions
+cannot override HEAD or POST, and delivery-error classification cannot accept a
+failed delivery with a successful status. The observer sees at most MaxBody+1
+bytes and never bypasses body admission or verification. Capture and redaction
+remain the observer's responsibility. Middleware can retain span lifecycle
+ownership with `UseRequestSpan`, preventing duplicate delivery spans.
