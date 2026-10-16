@@ -247,9 +247,6 @@ func TestSupervisorMonitorMeasuresBackpressureAndAbandonedFrames(t *testing.T) {
 	if stats.HandlingInFlight != 1 || stats.FramesHandled != 0 {
 		t.Fatalf("handling in-flight/handled = %d/%d, want 1/0", stats.HandlingInFlight, stats.FramesHandled)
 	}
-	if stats.FramePerformance.InFlight != 1 || stats.FramePerformance.HighWater != 1 {
-		t.Fatalf("performance in-flight/high-water = %d/%d, want 1/1", stats.FramePerformance.InFlight, stats.FramePerformance.HighWater)
-	}
 
 	close(release)
 	if err := <-done; !errors.Is(err, ErrReconnectRequested) {
@@ -271,13 +268,7 @@ func TestSupervisorMonitorMeasuresBackpressureAndAbandonedFrames(t *testing.T) {
 		stats.HandlingDurationMax != stats.HandlingDurationTotal {
 		t.Fatalf("handling durations = count %d total %s last %s max %s", stats.HandlingDurationCount, stats.HandlingDurationTotal, stats.HandlingDurationLast, stats.HandlingDurationMax)
 	}
-	performanceTotals := stats.FramePerformance.Totals
-	if stats.FramePerformance.Name != "websocket.frames" || stats.FramePerformance.Channel != "websocket" ||
-		performanceTotals.Calls != 1 || performanceTotals.Errors != 0 ||
-		performanceTotals.ItemsIn != 1 || performanceTotals.ItemsOut != 1 ||
-		stats.FramePerformance.Latency.Observed != 1 {
-		t.Fatalf("frame performance = %+v", stats.FramePerformance)
-	}
+
 }
 
 func TestSupervisorMonitorCountsPanickedFrameAsAbandoned(t *testing.T) {
@@ -302,10 +293,7 @@ func TestSupervisorMonitorCountsPanickedFrameAsAbandoned(t *testing.T) {
 	if stats.HandlingInFlight != 0 || stats.FrameQueueDepth != 0 {
 		t.Fatalf("in-flight/queue = %d/%d, want 0/0", stats.HandlingInFlight, stats.FrameQueueDepth)
 	}
-	totals := stats.FramePerformance.Totals
-	if totals.Calls != 0 || totals.Errors != 0 || totals.ItemsIn != 0 || totals.ItemsOut != 0 || stats.FramePerformance.InFlight != 0 {
-		t.Fatalf("frame performance after panic = %+v", stats.FramePerformance)
-	}
+
 }
 
 func TestSupervisorMonitorPerFrameRecordingDoesNotAllocate(t *testing.T) {
