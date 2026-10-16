@@ -33,6 +33,10 @@ original representation, including whitespace, number spelling and escapes.
 Configured values match semantic decoded string contents, including equivalent
 Unicode/slash escapes; only changed strings are re-encoded. This capture path
 never applies diagnostic escape normalization or bare-value substitution.
+If named diagnostic masking leaves invalid JSON (for example by consuming an
+escape before an embedded quote), capture refuses it before scanning configured
+strings. A valid input never permits an invalid intermediate representation to
+reach that scanner.
 
 `Form(data)` similarly validates URL-encoded form data before redacting.
 Credential-named values and configured values are masked. Untouched pairs retain

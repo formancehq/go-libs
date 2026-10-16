@@ -51,7 +51,13 @@ func JSON(data []byte) ([]byte, bool) {
 		}
 	}
 
-	out := redactConfiguredJSONStrings(redactNamedValues(data, false))
+	out := redactNamedValues(data, false)
+	// Diagnostic patterns can consume an escape before a quote. The semantic
+	// string scanner below requires valid JSON, so refuse that intermediate form.
+	if !json.Valid(out) {
+		return nil, false
+	}
+	out = redactConfiguredJSONStrings(out)
 	if !json.Valid(out) {
 		return nil, false
 	}

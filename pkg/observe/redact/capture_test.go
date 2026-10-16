@@ -186,3 +186,59 @@ func TestUnconfiguredHeaderValuesRetainExistingSemantics(t *testing.T) {
 		t.Fatal("configured masking mutated header")
 	}
 }
+
+func TestCaptureJSONRefusesInvalidNamedStageBeforeConfiguredScan(t *testing.T) {
+	for _, configured := range []bool{false, true} {
+		name := "unconfigured"
+		if configured {
+			name = "configured"
+		}
+		t.Run(name, func(t *testing.T) {
+			ConfigureValues(nil)
+			if configured {
+				ConfigureValues([]string{"configured-example-value"})
+			}
+			t.Cleanup(func() { ConfigureValues(nil) })
+			for _, input := range []string{
+				`{"note":"token=abc\"rest"}`,
+				`{"note":"token=abc\""}`,
+				`{"note":"token=abc\\\"rest"}`,
+			} {
+				t.Run(input, func(t *testing.T) {
+					data := []byte(input)
+					original := bytes.Clone(data)
+					if !json.Valid(data) {
+						t.Fatal("regression input must be valid JSON")
+					}
+					defer func() {
+						if recovered := recover(); recovered != nil {
+							t.Errorf("valid JSON panicked during redaction: %v", recovered)
+						}
+					}()
+					got, ok := JSON(data)
+					if ok || got != nil {
+						t.Errorf("invalid named-stage output must fail closed: %q, %v", got, ok)
+					}
+					if !bytes.Equal(data, original) {
+						t.Error("capture mutated original input")
+					}
+				})
+			}
+			got, ok := JSON([]byte(`{"note":"token=abc\\"}`))
+			if !ok || string(got) != `{"note":"token=[REDACTED]"}` {
+				t.Errorf("safe escaped ending should retain credential masking: %q, %v", got, ok)
+			}
+			for _, input := range []string{
+				`{"note":"ordinary\"rest"}`,
+				`{"note":"ordinary\""}`,
+				`{"note":"ordinary\\\"rest"}`,
+				`{"note":"ordinary\\"}`,
+			} {
+				got, ok := JSON([]byte(input))
+				if !ok || string(got) != input {
+					t.Errorf("unrelated escaped string changed: %q, %v", got, ok)
+				}
+			}
+		})
+	}
+}
