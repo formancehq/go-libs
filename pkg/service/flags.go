@@ -11,9 +11,10 @@ import (
 
 // EnvironmentBindingError identifies a rejected environment setting without
 // including its value in the diagnostic unless debug mode is enabled.
-// The original parser error remains available through errors.As/errors.Is;
-// callers must not log an unwrapped
-// parser error because it may include the rejected value.
+// Legacy binders preserve the original parser error through errors.As/errors.Is;
+// callers must not log an unwrapped legacy parser error, which can include the
+// rejected value. Exact binders discard the parser cause and wrap only
+// ErrInvalidEnvironmentValue; debug mode does not disclose their input.
 type EnvironmentBindingError struct {
 	EnvironmentVariable string
 	FlagName            string
@@ -92,13 +93,21 @@ func BindEnvToFlagSetWithError(set *pflag.FlagSet) error {
 }
 
 func bindEnvToFlagSet(set *pflag.FlagSet, failFast bool) error {
+	err := bindEnvToFlagSetUsing(set, failFast, bindEnvToFlag)
+	if !failFast {
+		return nil
+	}
+	return err
+}
+
+func bindEnvToFlagSetUsing(set *pflag.FlagSet, failFast bool, bind func(*pflag.FlagSet, *pflag.Flag) error) error {
 	var bindingErr error
 	set.VisitAll(func(flag *pflag.Flag) {
-		if bindingErr != nil || flag.Changed {
+		if (bindingErr != nil && failFast) || flag.Changed {
 			return
 		}
-		if err := bindEnvToFlag(set, flag); err != nil {
-			if failFast {
+		if err := bind(set, flag); err != nil {
+			if bindingErr == nil {
 				bindingErr = err
 			}
 
