@@ -284,6 +284,21 @@ its owned measurements through the application OTel meter provider. FrameJob con
 never runs under a frame job. Byte admission uses the existing weighted semaphore
 with 64 KiB charges and a separate item bound. No generic worker/event-queue
 framework or second connection interface is introduced.
+
+### Bounded decoded WebSocket work
+
+`websocketclient.EventQueue` owns non-blocking bounded FIFO admission, close/drain,
+reset discard and coherent queue accounting. Callers select drop or coalesce for
+item saturation; encoded-byte rejection is always a drop. `KeyedBuffer` owns
+insertion ordering, replacement-in-place, bounded oldest eviction and drains.
+Both retain encoded-payload bounds without claiming total heap measurement.
+`Event.Origin` and keyed origins use immutable OpenTelemetry span contexts.
+
+Generic correlation uses `observe/traces.AddLinks` for valid deduplicated origins
+and `RecordSpanError` for no-stacktrace error/status recording. Application span
+names/attributes, root selection, capture policy, provider recovery and generation
+fences remain with callers. Broker listeners and a linked list do not supply these
+bounded in-process semantics; no second generic framework is introduced.
 ### WebSocket connection ownership
 
 Keep one reader active to service control frames and run Ping concurrently.
@@ -335,17 +350,28 @@ freshness and unavailable-versus-observed-zero handling belong to the local view
 Histogram estimates and collected intervals must not be labelled as exact retained
 sample percentiles or the withdrawn recorder's exact 10/60-second windows.
 
-### Bounded decoded WebSocket work
+### Recorder-free collection measurements
 
-`websocketclient.EventQueue` owns non-blocking bounded FIFO admission, close/drain,
-reset discard and coherent queue accounting. Callers select drop or coalesce for
-item saturation; encoded-byte rejection is always a drop. `KeyedBuffer` owns
-insertion ordering, replacement-in-place, bounded oldest eviction and drains.
-Both retain encoded-payload bounds without claiming total heap measurement.
-`Event.Origin` and keyed origins use immutable OpenTelemetry span contexts.
+EventQueueSnapshot.Queue is native QueueStats, owned by the bounded collection:
+availability, physical depth/capacity/bytes, operation counts and oldest age. It
+has no stage schema, recorder or performance-package dependency. Its semantics
+remain queue state, not metric collection or a replacement diagnostic API.
 
-Generic correlation uses `observe/traces.AddLinks` for valid deduplicated origins
-and `RecordSpanError` for no-stacktrace error/status recording. Application span
-names/attributes, root selection, capture policy, provider recovery and generation
-fences remain with callers. Broker listeners and a linked list do not supply these
-bounded in-process semantics; no second generic framework is introduced.
+Collection constructors accept WithCollectionMeterProvider and WithCollectionName.
+They create no SDK provider or reader. Fixed stage/channel dimensions identify
+WebSocket events/buffers; names are bounded declared roles. Counters use item units
+and monotonic native-operation deltas, gauges expose depth/capacity, retained bytes,
+byte capacity, high water and the oldest enqueue's Unix nanosecond timestamp (zero
+when empty). The timestamp is an owned observation from which a local display can
+compute current residence age, not an unrefreshed age gauge or inferred provider
+latency. Constructed empty collections explicitly record zero. Shared dimensions
+aggregate counters; gauges are last-value observations, so use distinct bounded
+names for individually displayed concurrent collections.
+
+All metrics use the same application provider and its injected prefix/views. A
+local exporter snapshot requires SDK-provider ForceFlush, not exporter ForceFlush.
+The collecting application owns deadlines, freshness/error/unavailable state and
+display models. No exact 10/60-second windows or nearest-rank samples are restored.
+Admission, byte accounting, coalesce/drop outcomes, replacement age/order, close/
+drain and reset behavior remain independent of telemetry; instrumentation failure
+disables measurements rather than changing transport or collection outcomes.
