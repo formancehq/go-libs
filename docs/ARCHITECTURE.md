@@ -269,15 +269,6 @@ Protocol authentication frames, subscriptions, reconnect policy, watchdogs,
 queues, message interpretation and payload capture are caller responsibilities.
 There is no FX, CLI, provider or storage dependency in this package.
 
-### WebSocket connection ownership
-
-Keep one reader active to service control frames and run Ping concurrently.
-An expired or cancelled active Read closes the underlying connection; reconnect
-instead of treating it as a recoverable per-read timeout. A reader paused for
-local admission cannot service pongs, so callers must coordinate heartbeat
-failure policy with backpressure. Close ends the connection and releases the
-read loop; the owner cancels and joins its work before starting another session.
-
 ### WebSocket session supervision
 
 `pkg/transport/websocketclient.Supervisor` owns one reconnecting transport

@@ -192,6 +192,8 @@ func (s Supervisor) runSession(parent context.Context, attempt int) (established
 			select {
 			case jobs <- frame:
 			case <-ctx.Done():
+				// Ownership never reached the worker, so balance the started frame here.
+				attemptMonitor.handlingAborted(ctx)
 				return 0, context.Cause(ctx)
 			}
 		case outcome := <-results:
