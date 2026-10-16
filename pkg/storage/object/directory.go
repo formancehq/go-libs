@@ -13,11 +13,22 @@ import (
 	"strings"
 )
 
-// Directory keeps an os.Root open so renames cannot switch the configured root.
-// Close releases that descriptor; callers must stop concurrent use first.
+// Directory confines file access to a configured root. OpenDirectory pins its
+// identity until Close; NewDirectory opens the configured path per operation.
 type Directory struct {
 	root   *os.Root
 	limits Limits
+	path   string
+}
+
+// NewDirectory preserves path-based composition without retaining a descriptor.
+// Each operation opens and closes its root; use OpenDirectory to pin a root identity.
+func NewDirectory(root string, bounds Limits) (*Directory, error) {
+	l, err := limits(bounds)
+	if err != nil {
+		return nil, err
+	}
+	return &Directory{path: filepath.Clean(root), limits: l}, nil
 }
 
 func OpenDirectory(root string, bounds Limits) (*Directory, error) {
@@ -31,7 +42,12 @@ func OpenDirectory(root string, bounds Limits) (*Directory, error) {
 	}
 	return &Directory{root: r, limits: l}, nil
 }
-func (d *Directory) Close() error { return d.root.Close() }
+func (d *Directory) Close() error {
+	if d.root == nil {
+		return nil
+	}
+	return d.root.Close()
+}
 func validKey(key string) bool {
 	return key != "" && fs.ValidPath(key) && key != "." && !strings.Contains(key, `\`)
 }
@@ -42,8 +58,13 @@ func metadata(key string, info fs.FileInfo) Metadata {
 	return Metadata{Key: key, Size: info.Size(), LastModified: info.ModTime().UTC(), Revision: revision(info)}
 }
 func (d *Directory) Stat(ctx context.Context, key string) (Metadata, error) {
-	if err := ctx.Err(); err != nil {
-		return Metadata{}, err
+	if d.root == nil {
+		opened, err := OpenDirectory(d.path, d.limits)
+		if err != nil {
+			return Metadata{}, err
+		}
+		defer func() { _ = opened.Close() }()
+		return opened.Stat(ctx, key)
 	}
 	if err := ctx.Err(); err != nil {
 		return Metadata{}, err
@@ -61,6 +82,14 @@ func (d *Directory) Stat(ctx context.Context, key string) (Metadata, error) {
 	return metadata(key, info), nil
 }
 func (d *Directory) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
+	if d.root == nil {
+		opened, err := OpenDirectory(d.path, d.limits)
+		if err != nil {
+			return ReadResult{}, err
+		}
+		defer func() { _ = opened.Close() }()
+		return opened.Read(ctx, req)
+	}
 	if err := ctx.Err(); err != nil {
 		return ReadResult{}, err
 	}
@@ -125,6 +154,14 @@ func (d *Directory) Read(ctx context.Context, req ReadRequest) (ReadResult, erro
 // Each call is bounded; concurrent mutations may change enumeration positions.
 // Symlinks are skipped; all opens remain constrained by os.Root.
 func (d *Directory) ListPage(ctx context.Context, req ListRequest) (Page, error) {
+	if d.root == nil {
+		opened, err := OpenDirectory(d.path, d.limits)
+		if err != nil {
+			return Page{}, err
+		}
+		defer func() { _ = opened.Close() }()
+		return opened.ListPage(ctx, req)
+	}
 	if err := ctx.Err(); err != nil {
 		return Page{}, err
 	}

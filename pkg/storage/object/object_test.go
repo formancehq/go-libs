@@ -2,7 +2,9 @@ package object
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -15,6 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+
+	"github.com/formancehq/go-libs/v5/pkg/storage"
 )
 
 func TestDirectorySafety(t *testing.T) {
@@ -252,7 +256,7 @@ func TestS3ClassificationsPreserveCause(t *testing.T) {
 	for _, tc := range []struct {
 		code     string
 		sentinel error
-	}{{"PreconditionFailed", ErrRevisionChanged}, {"NoSuchKey", os.ErrNotExist}, {"InvalidAccessKeyId", ErrCredentials}, {"AccessDenied", ErrPermission}} {
+	}{{"PreconditionFailed", ErrRevisionChanged}, {"NoSuchKey", os.ErrNotExist}, {"InvalidAccessKeyId", storage.ErrCredentials}, {"AccessDenied", storage.ErrPermission}} {
 		original := &smithy.GenericAPIError{Code: tc.code}
 		wrapped := storageError(original)
 		if !errors.Is(wrapped, tc.sentinel) || !errors.Is(wrapped, original) {
@@ -367,6 +371,100 @@ func TestDirectoryRetainsRootAcrossRenameAndFiltersNestedKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := directory.ListPage(ctx, ListRequest{Limit: 1}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+}
+
+func TestLazyDirectoryFollowsConfiguredPathAndClosesOperations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "later")
+	bucket, err := NewDirectory(path, Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bucket.Stat(t.Context(), "item"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "item"), []byte("one"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := bucket.Read(t.Context(), ReadRequest{Key: "item"})
+	if err != nil || string(first.Data) != "one" {
+		t.Fatalf("%+v %v", first, err)
+	}
+	if err := os.Rename(path, path+"-old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "item"), []byte("two"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := bucket.Read(t.Context(), ReadRequest{Key: "item"})
+	if err != nil || string(second.Data) != "two" {
+		t.Fatalf("%+v %v", second, err)
+	}
+	if err := bucket.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListAllCannotRaiseConfiguredAggregateBounds(t *testing.T) {
+	calls := 0
+	client := fakeS3{list: func(in *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+		calls++
+		return &s3.ListObjectsV2Output{Contents: []types.Object{{Key: aws.String("item"), Size: aws.Int64(1), LastModified: aws.Time(time.Unix(1, 0))}}, IsTruncated: aws.Bool(true), NextContinuationToken: aws.String(fmt.Sprint(calls))}, nil
+	}}
+	for _, bound := range []Limits{{MaxObjects: 2}, {MaxPages: 2}} {
+		calls = 0
+		bucket, err := NewS3(client, "bucket", bound)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := ListAll(t.Context(), bucket, "", Limits{})
+		if !errors.Is(err, ErrListingLimit) || got != nil || calls != 2 {
+			t.Fatalf("bounds %+v: got=%v err=%v calls=%d", bound, got, err, calls)
+		}
+	}
+}
+
+func TestDirectoryChunkedListingPreservesWireMetadataAndUTC(t *testing.T) {
+	root := t.TempDir()
+	modified := time.Date(2001, 2, 3, 4, 5, 6, 7, time.FixedZone("offset", 3600))
+	for i := range 300 {
+		file := filepath.Join(root, fmt.Sprintf("item-%03d", i))
+		if err := os.WriteFile(file, []byte("abc"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(file, modified, modified); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bucket, err := NewDirectory(root, Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ListAll(t.Context(), bucket, "item-", Limits{})
+	if err != nil || len(got) != 300 {
+		t.Fatalf("%d %v", len(got), err)
+	}
+	for _, meta := range got {
+		if !meta.LastModified.Equal(modified) || meta.LastModified.Location() != time.UTC || meta.Size != 3 || meta.Revision != fmt.Sprintf("%d:3", modified.UnixNano()) {
+			t.Fatalf("metadata changed: %+v", meta)
+		}
+	}
+	raw, err := json.Marshal(got[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf(`{"key":%q,"lastModified":%q,"size":3,"revision":%q}`, got[0].Key, modified.UTC().Format(time.RFC3339Nano), got[0].Revision)
+	if string(raw) != want {
+		t.Fatalf("wire metadata changed: %s, want %s", raw, want)
+	}
+	if _, err := ListAll(t.Context(), bucket, "item-", Limits{MaxObjects: 299}); !errors.Is(err, ErrListingLimit) {
 		t.Fatal(err)
 	}
 }

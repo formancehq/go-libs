@@ -75,8 +75,13 @@ type ReadResult struct {
 	Complete bool
 }
 
-// Bucket is the complete read-only contract; optional interface assertions are
-// unnecessary. Implementations must enforce bounds before accumulating bodies.
+// Reader is the bounded read capability used by payload-only consumers.
+type Reader interface {
+	Read(context.Context, ReadRequest) (ReadResult, error)
+}
+
+// Bucket is the complete read-only contract. Implementations enforce bounds
+// before accumulating bodies.
 type Bucket interface {
 	ListPage(context.Context, ListRequest) (Page, error)
 	Stat(context.Context, string) (Metadata, error)
@@ -138,6 +143,31 @@ func ListAll(ctx context.Context, b Bucket, prefix string, bounds Limits) ([]Met
 	if b == nil {
 		return nil, ErrInvalid
 	}
+	// A caller can lower, but never raise, the concrete bucket's configured bounds.
+	var configured Limits
+	switch backend := b.(type) {
+	case *S3:
+		configured = backend.limits
+	case *Azure:
+		configured = backend.limits
+	case *Directory:
+		configured = backend.limits
+	}
+	if configured.MaxObjects > 0 {
+		l.MaxObjects = min(l.MaxObjects, configured.MaxObjects)
+		l.MaxPages = min(l.MaxPages, configured.MaxPages)
+	}
+	// Local whole listings need one traversal, not one root rewalk per page.
+	if directory, ok := b.(*Directory); ok {
+		page, err := directory.ListPage(ctx, ListRequest{Prefix: prefix, Limit: l.MaxObjects})
+		if err != nil {
+			return nil, err
+		}
+		if page.NextCursor != "" {
+			return nil, ErrListingLimit
+		}
+		return page.Objects, nil
+	}
 	out := []Metadata{}
 	cursor := ""
 	seen := map[string]bool{}
@@ -168,16 +198,23 @@ func ListAll(ctx context.Context, b Bucket, prefix string, bounds Limits) ([]Met
 	return nil, ErrListingLimit
 }
 
-// ReadCurrent pins the read to exact metadata and rejects changed generations.
+// ReadCurrent reads exact metadata and applies its revision condition when present.
+// Consumers that require generation validators must reject absent revisions.
 func ReadCurrent(ctx context.Context, b Bucket, key string, maxBytes int64) (Metadata, []byte, error) {
-	if maxBytes <= 0 || b == nil {
+	if err := ctx.Err(); err != nil {
+		return Metadata{}, nil, err
+	}
+	if maxBytes <= 0 || b == nil || key == "" {
 		return Metadata{}, nil, ErrInvalid
 	}
 	meta, err := b.Stat(ctx, key)
 	if err != nil {
 		return Metadata{}, nil, err
 	}
-	if meta.Key != key || meta.Size < 0 || meta.LastModified.IsZero() || meta.Revision == "" {
+	if err := ctx.Err(); err != nil {
+		return Metadata{}, nil, err
+	}
+	if meta.Key != key || meta.Size < 0 || meta.LastModified.IsZero() {
 		return Metadata{}, nil, ErrInvalid
 	}
 	if meta.Size > maxBytes {
@@ -186,6 +223,12 @@ func ReadCurrent(ctx context.Context, b Bucket, key string, maxBytes int64) (Met
 	result, err := b.Read(ctx, ReadRequest{Key: key, Revision: meta.Revision, MaxBytes: maxBytes})
 	if err != nil {
 		return Metadata{}, nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return Metadata{}, nil, err
+	}
+	if int64(len(result.Data)) > maxBytes {
+		return Metadata{}, nil, ErrTooLarge
 	}
 	if !result.Complete || int64(len(result.Data)) != meta.Size {
 		return Metadata{}, nil, ErrRevisionChanged

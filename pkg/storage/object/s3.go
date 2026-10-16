@@ -15,6 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
+
+	"github.com/formancehq/go-libs/v5/pkg/storage"
 )
 
 // S3Client is implemented directly by the AWS SDK client. Client configuration,
@@ -45,7 +47,7 @@ func (s *S3) ListPage(ctx context.Context, req ListRequest) (Page, error) {
 	if err := ctx.Err(); err != nil {
 		return Page{}, err
 	}
-	if req.Limit <= 0 {
+	if req.Limit <= 0 || req.Limit > 1000 {
 		return Page{}, ErrInvalid
 	}
 	req.Limit = min(req.Limit, s.limits.MaxObjects, 1000)
@@ -87,7 +89,7 @@ func (s *S3) Stat(ctx context.Context, key string) (Metadata, error) {
 	}
 	raw, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
 	if err != nil {
-		return Metadata{}, storageError(err)
+		return Metadata{}, err
 	}
 	if raw == nil || raw.ContentLength == nil || *raw.ContentLength < 0 || raw.LastModified == nil {
 		return Metadata{}, ErrInvalid
@@ -170,11 +172,6 @@ func readResponse(ctx context.Context, body io.Reader, length int64, contentRang
 	return ReadResult{Data: data, Complete: complete}, nil
 }
 
-var (
-	ErrCredentials = errors.New("object: credentials rejected")
-	ErrPermission  = errors.New("object: access denied")
-)
-
 func storageError(err error) error {
 	if api, ok := errors.AsType[smithy.APIError](err); ok {
 		switch api.ErrorCode() {
@@ -182,10 +179,10 @@ func storageError(err error) error {
 			return errors.Join(ErrRevisionChanged, err)
 		case "NoSuchKey", "NotFound":
 			return errors.Join(os.ErrNotExist, err)
-		case "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "InvalidToken", "Unauthorized":
-			return errors.Join(ErrCredentials, err)
+		case "InvalidAccessKeyId", "SignatureDoesNotMatch", "Unauthorized":
+			return errors.Join(storage.ErrCredentials, err)
 		case "AccessDenied":
-			return errors.Join(ErrPermission, err)
+			return errors.Join(storage.ErrPermission, err)
 		}
 	}
 	if status, ok := errors.AsType[interface {
@@ -197,10 +194,6 @@ func storageError(err error) error {
 			return errors.Join(ErrRevisionChanged, err)
 		case http.StatusNotFound:
 			return errors.Join(os.ErrNotExist, err)
-		case http.StatusUnauthorized:
-			return errors.Join(ErrCredentials, err)
-		case http.StatusForbidden:
-			return errors.Join(ErrPermission, err)
 		}
 	}
 	return err

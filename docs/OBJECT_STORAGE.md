@@ -3,7 +3,8 @@
 `pkg/storage/object` supplies read-only access through `Bucket.ListPage`,
 `Bucket.Stat` and `Bucket.Read`. `NewS3` takes an AWS SDK client and bucket name;
 `NewAzure` takes an Azure Blob SDK client and container name. `OpenDirectory`
-keeps an `os.Root` descriptor until `Close`. These constructors accept `Limits`;
+keeps an `os.Root` descriptor until `Close`; `NewDirectory` opens and closes the
+configured root path for each operation. These constructors accept `Limits`;
 zero fields select defaults of 256 MiB per object, one million listed objects,
 and ten thousand pages for `ListAll`. Negative limits are invalid.
 
@@ -23,8 +24,8 @@ retain the underlying SDK cause along with neutral size, permission, credential
 and revision verdicts for consumer policy.
 
 `ReadCurrent` reads exact metadata and that conditional generation, then checks
-body size. It requires a revision and does not fall back to an unconditional
-read. Directory revisions identify size and modification time; they do not
+body size. It applies the revision when present; consumers requiring a named
+generation must reject metadata without a validator. Directory revisions identify size and modification time; they do not
 constitute a content digest. Applications needing detection of same-size,
 same-time edits must retain an independent digest. Reads additionally compare
 file identity and metadata before and after reading. Escaping keys, special
@@ -37,3 +38,9 @@ failed listing returns no partial inventory. `Page.ServerTime` is only a single,
 uncached provider Date header; missing or cached dates remain unavailable.
 Neither cloud listings nor local pagination assert snapshot consistency or
 modification-time ordering. Consumers own checkpoint and discovery policy.
+
+S3 marks definitive credential and permission error codes with the SDK-independent
+`storage.ErrCredentials` and `storage.ErrPermission` sentinels. Refreshable token,
+clock-skew and unknown errors remain unmarked. Bodiless S3 metadata failures and
+Azure authorization errors retain the SDK error without adding terminal verdicts.
+Applications retain their own retry and stop decisions.

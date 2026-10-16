@@ -36,7 +36,7 @@ func (a *Azure) ListPage(ctx context.Context, req ListRequest) (Page, error) {
 	if err := ctx.Err(); err != nil {
 		return Page{}, err
 	}
-	if req.Limit <= 0 {
+	if req.Limit <= 0 || req.Limit > 5000 {
 		return Page{}, ErrInvalid
 	}
 	req.Limit = min(req.Limit, a.limits.MaxObjects, 5000)
@@ -126,19 +126,11 @@ func (a *Azure) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
 }
 func azureError(err error) error {
 	if response, ok := errors.AsType[*azcore.ResponseError](err); ok {
-		switch response.ErrorCode {
-		case "AuthenticationFailed", "InvalidAuthenticationInfo":
-			return errors.Join(ErrCredentials, err)
-		}
 		switch response.StatusCode {
 		case http.StatusPreconditionFailed:
 			return errors.Join(ErrRevisionChanged, err)
 		case http.StatusNotFound:
 			return errors.Join(os.ErrNotExist, err)
-		case http.StatusUnauthorized:
-			return errors.Join(ErrCredentials, err)
-		case http.StatusForbidden:
-			return errors.Join(ErrPermission, err)
 		}
 	}
 	return err

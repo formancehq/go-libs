@@ -3,6 +3,7 @@ package object
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+
+	"github.com/formancehq/go-libs/v5/pkg/storage"
 )
 
 type testTransport func(*http.Request) (*http.Response, error)
@@ -112,11 +115,22 @@ func TestAzureMalformedListingAndCachedClock(t *testing.T) {
 		code   string
 		status int
 		want   error
-	}{{"AuthenticationFailed", 403, ErrCredentials}, {"AuthorizationPermissionMismatch", 403, ErrPermission}, {"ConditionNotMet", 412, ErrRevisionChanged}} {
+	}{{"ConditionNotMet", 412, ErrRevisionChanged}} {
 		cause := &azcore.ResponseError{ErrorCode: tc.code, StatusCode: tc.status}
 		err := azureError(cause)
 		if !errors.Is(err, tc.want) || !errors.Is(err, cause) {
 			t.Fatalf("lost classification %s", tc.code)
+		}
+	}
+}
+
+// Authorization failures stay SDK errors: callers retain their retry/stop policy.
+func TestAzureAuthorizationDoesNotInventTerminalVerdicts(t *testing.T) {
+	for _, code := range []string{"AuthenticationFailed", "InvalidAuthenticationInfo", "AuthorizationPermissionMismatch"} {
+		cause := &azcore.ResponseError{ErrorCode: code, StatusCode: http.StatusForbidden}
+		got := azureError(cause)
+		if got != cause || errors.Is(got, storage.ErrCredentials) || errors.Is(got, storage.ErrPermission) {
+			t.Fatalf("changed authorization policy for %s: %v", code, got)
 		}
 	}
 }
@@ -149,5 +163,47 @@ func TestAzureCancellationAndConstructorBounds(t *testing.T) {
 	}
 	if _, err := NewAzure(client, "container", Limits{MaxPages: -1}); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
+	}
+}
+
+func TestAzureAggregateBudgetsAndContinuation(t *testing.T) {
+	for _, kind := range []string{"complete", "repeated", "objects", "pages", "empty pages"} {
+		t.Run(kind, func(t *testing.T) {
+			calls := 0
+			client := azureClient(t, func(r *http.Request) (*http.Response, error) {
+				calls++
+				marker := fmt.Sprintf("m%d", calls)
+				if kind == "repeated" {
+					marker = "same"
+				}
+				if kind == "complete" && calls == 2 {
+					marker = ""
+				}
+				items := `<Blob><Name>item</Name><Properties><Content-Length>1</Content-Length><Last-Modified>Fri, 16 Oct 2026 10:00:00 GMT</Last-Modified><Etag>"v1"</Etag></Properties></Blob>`
+				if kind == "empty pages" {
+					items = ""
+				}
+				body := `<EnumerationResults><Blobs>` + items + `</Blobs><NextMarker>` + marker + `</NextMarker></EnumerationResults>`
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/xml"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+			})
+			bounds := Limits{MaxPages: 2}
+			if kind == "objects" {
+				bounds = Limits{MaxObjects: 2}
+			}
+			bucket, err := NewAzure(client, "container", bounds)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ListAll(t.Context(), bucket, "", Limits{})
+			if kind == "complete" {
+				if err != nil || len(got) != 2 || calls != 2 {
+					t.Fatalf("%+v %v %d", got, err, calls)
+				}
+				return
+			}
+			if !errors.Is(err, ErrListingLimit) || got != nil || calls != 2 {
+				t.Fatalf("partial inventory: %+v %v %d", got, err, calls)
+			}
+		})
 	}
 }
