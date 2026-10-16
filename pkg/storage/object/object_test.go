@@ -329,3 +329,44 @@ func TestMissingBucketAndExactListingCeiling(t *testing.T) {
 		t.Fatalf("%v %v", got, err)
 	}
 }
+
+func TestDirectoryRetainsRootAcrossRenameAndFiltersNestedKeys(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	if err := os.MkdirAll(filepath.Join(root, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested", "item"), []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	directory, err := OpenDirectory(root, Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = directory.Close() }()
+	page, err := directory.ListPage(t.Context(), ListRequest{Prefix: "nested/", Limit: 2})
+	if err != nil || len(page.Objects) != 1 || page.Objects[0].Key != "nested/item" {
+		t.Fatalf("%+v %v", page, err)
+	}
+	if err := os.Rename(root, filepath.Join(base, "retained")); err != nil {
+		t.Skip("platform cannot rename an open root")
+	}
+	if err := os.MkdirAll(filepath.Join(root, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested", "item"), []byte("replacement"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := directory.Read(t.Context(), ReadRequest{Key: "nested/item"})
+	if err != nil || string(result.Data) != "original" {
+		t.Fatalf("configured root switched: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := directory.Stat(ctx, "nested/item"); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if _, err := directory.ListPage(ctx, ListRequest{Limit: 1}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+}

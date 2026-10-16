@@ -71,7 +71,14 @@ func (d *Directory) Read(ctx context.Context, req ReadRequest) (ReadResult, erro
 	if !validKey(req.Key) {
 		return ReadResult{}, ErrInvalid
 	}
-	f, err := d.root.Open(filepath.FromSlash(req.Key))
+	admitted, err := d.root.Stat(filepath.FromSlash(req.Key))
+	if err != nil {
+		return ReadResult{}, err
+	}
+	if !admitted.Mode().IsRegular() {
+		return ReadResult{}, ErrInvalid
+	}
+	f, err := openRead(d.root, filepath.FromSlash(req.Key))
 	if err != nil {
 		return ReadResult{}, err
 	}
@@ -82,6 +89,9 @@ func (d *Directory) Read(ctx context.Context, req ReadRequest) (ReadResult, erro
 	}
 	if !before.Mode().IsRegular() {
 		return ReadResult{}, ErrInvalid
+	}
+	if !os.SameFile(admitted, before) {
+		return ReadResult{}, ErrRevisionChanged
 	}
 	if req.Revision != "" && req.Revision != revision(before) {
 		return ReadResult{}, ErrRevisionChanged
@@ -137,11 +147,18 @@ func (d *Directory) ListPage(ctx context.Context, req ListRequest) (Page, error)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		f, err := d.root.Open(filepath.FromSlash(dir))
+		f, err := openRead(d.root, filepath.FromSlash(dir))
 		if err != nil {
 			return err
 		}
 		defer func() { _ = f.Close() }()
+		info, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return ErrInvalid
+		}
 		for {
 			entries, readErr := f.ReadDir(256)
 			for _, entry := range entries {

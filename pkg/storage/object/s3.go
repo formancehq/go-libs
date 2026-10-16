@@ -182,7 +182,7 @@ func storageError(err error) error {
 			return errors.Join(ErrRevisionChanged, err)
 		case "NoSuchKey", "NotFound":
 			return errors.Join(os.ErrNotExist, err)
-		case "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "InvalidToken":
+		case "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "InvalidToken", "Unauthorized":
 			return errors.Join(ErrCredentials, err)
 		case "AccessDenied":
 			return errors.Join(ErrPermission, err)
