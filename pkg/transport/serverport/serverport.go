@@ -64,12 +64,20 @@ type Server struct {
 }
 
 func (s *Server) Listen(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if s.Listener == nil {
 		if s.Address == "" {
 			return errors.New("either address or listener must be provided")
 		}
-		listener, err := net.Listen("tcp", s.Address)
+		var config net.ListenConfig
+		listener, err := config.Listen(ctx, "tcp", s.Address)
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			_ = listener.Close()
 			return err
 		}
 		s.Listener = listener

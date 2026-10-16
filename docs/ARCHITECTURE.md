@@ -238,3 +238,22 @@ calling the optional `grpcserver.WithServeErrorHandler` callback. The callback
 can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
+
+## HTTP hook shutdown and serving failures
+
+`pkg/transport/httpserver.NewHook` accepts `WithCloseOnShutdownError()` to close
+active connections when graceful shutdown fails. `OnStop` returns the original
+shutdown error. Without this option, the existing graceful-only behavior stays
+unchanged. Hijacked connections remain the caller's responsibility, as with
+`net/http.Server.Close`.
+
+`WithServeErrorHandler(func(error))` observes unexpected Serve failures after
+logging. Normal shutdown and listen failures do not invoke it. The callback
+runs on the serving goroutine and must return promptly without waiting for
+`OnStop`; an application can request its own lifecycle shutdown there.
+
+The shared `serverport.Server.Listen` also honors startup cancellation. It uses
+`net.ListenConfig.Listen`, refuses an already-cancelled context before opening
+or advertising a socket, and releases a newly-created listener when cancellation
+is observed before publication. A supplied listener remains caller-owned when
+startup is refused. Both HTTP and gRPC hooks consume this same boundary.
