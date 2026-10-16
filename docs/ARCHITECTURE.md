@@ -16,6 +16,7 @@ go-libs/
     ├── types/                       # Leaf packages (zero internal dependency)
     │   ├── pointer/                 #   Pointer creation/dereference helpers
     │   ├── time/                    #   Time wrapper with JSON serialization
+    │   ├── jsonvalue/                #   Single-document exact-number JSON decoding
     │   ├── currency/                #   Currency types and formatting
     │   ├── metadata/                #   Generic metadata map
     │   └── collections/             #   Generic slice, map, linked list utilities
@@ -239,3 +240,8 @@ calling the optional `grpcserver.WithServeErrorHandler` callback. The callback
 can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
+
+## JSON document decoding
+
+[JSON.md](./JSON.md) describes the single-document, exact-number decoder and its
+separation from existing query, test-response and metadata APIs.
