@@ -189,7 +189,11 @@ func (s Supervisor) runSession(parent context.Context, attempt int) (established
 			attemptMonitor.handlingStarted(ctx)
 			frameSlots <- struct{}{}
 			receiving = nil
-			jobs <- frame
+			select {
+			case jobs <- frame:
+			case <-ctx.Done():
+				return 0, context.Cause(ctx)
+			}
 		case outcome := <-results:
 			if outcome.panicked {
 				panic(outcome.panicValue)
