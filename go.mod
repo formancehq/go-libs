@@ -32,6 +32,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/grafana/otel-profiling-go v0.6.0
+	github.com/grafana/pyroscope-go v1.4.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/invopop/jsonschema v0.13.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
@@ -147,6 +148,7 @@ require (
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/pprof v0.0.0-20260302011040-a15ffb7f9dcc // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.11 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
