@@ -3,6 +3,7 @@ package httpserver
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -50,7 +51,7 @@ func TestStartServerServeErrorDoesNotPanic(t *testing.T) {
 
 	server := serverport.NewServer(serverPortDiscr, serverport.WithListener(listener))
 
-	stop, err := startServer(ctx, server, http.NewServeMux())
+	stop, err := startServer(ctx, server, http.NewServeMux(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = stop(context.Background())
@@ -79,7 +80,7 @@ func TestStartServerGracefulShutdownDoesNotLogError(t *testing.T) {
 
 	server := serverport.NewServer(serverPortDiscr, serverport.WithListener(listener))
 
-	stop, err := startServer(ctx, server, http.NewServeMux())
+	stop, err := startServer(ctx, server, http.NewServeMux(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stop(context.Background()))
@@ -107,12 +108,12 @@ func TestStartServerSetsDefaultTimeouts(t *testing.T) {
 		logging.TestingContext(),
 		server,
 		http.NewServeMux(),
-		func(server *http.Server) {
+		&ServerOptions{httpServerOpts: []func(*http.Server){func(server *http.Server) {
 			configured.readHeaderTimeout = server.ReadHeaderTimeout
 			configured.readTimeout = server.ReadTimeout
 			configured.writeTimeout = server.WriteTimeout
 			configured.idleTimeout = server.IdleTimeout
-		},
+		}}},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -138,10 +139,10 @@ func TestStartServerAllowsReadTimeoutOverride(t *testing.T) {
 		logging.TestingContext(),
 		server,
 		http.NewServeMux(),
-		func(server *http.Server) {
+		&ServerOptions{httpServerOpts: []func(*http.Server){func(server *http.Server) {
 			server.ReadTimeout = time.Minute
 			configured = server.ReadTimeout
-		},
+		}}},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -149,4 +150,119 @@ func TestStartServerAllowsReadTimeoutOverride(t *testing.T) {
 	})
 
 	require.Equal(t, time.Minute, configured)
+}
+
+func TestHookShutdownFailureClosesOnlyWhenRequested(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprint(force), func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			entered, disconnected, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				close(entered)
+				select {
+				case <-r.Context().Done():
+					close(disconnected)
+				case <-release:
+				}
+			})
+			options := []ServerOptionModifier{WithListener(listener)}
+			if force {
+				options = append(options, WithCloseOnShutdownError())
+			}
+			hook := NewHook(handler, options...)
+			require.NoError(t, hook.OnStart(logging.TestingContext()))
+			t.Cleanup(func() { close(release); _ = hook.OnStop(context.Background()) })
+			requestCtx, cancelRequest := context.WithCancel(t.Context())
+			defer cancelRequest()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				req, _ := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://"+listener.Addr().String(), nil)
+				resp, err := http.DefaultClient.Do(req)
+				if err == nil {
+					_ = resp.Body.Close()
+				}
+			}()
+			<-entered
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			require.ErrorIs(t, hook.OnStop(ctx), context.Canceled)
+			if force {
+				select {
+				case <-disconnected:
+				case <-time.After(time.Second):
+					t.Fatal("active connection survived forced close")
+				}
+			} else {
+				select {
+				case <-disconnected:
+					t.Fatal("default unexpectedly forced active connection closed")
+				default:
+				}
+			}
+			cancelRequest()
+			<-done
+		})
+	}
+}
+
+func TestHookServeFailureCallbackAndNormalStop(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	failures := make(chan error, 1)
+	hook := NewHook(http.NewServeMux(), WithListener(listener), WithServeErrorHandler(func(err error) { failures <- err }))
+	require.NoError(t, hook.OnStart(logging.TestingContext()))
+	require.NoError(t, listener.Close())
+	select {
+	case err := <-failures:
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("missing Serve failure callback")
+	}
+	require.NoError(t, hook.OnStop(t.Context()))
+	normal := NewHook(http.NewServeMux(), WithAddress("127.0.0.1:0"), WithServeErrorHandler(func(err error) { failures <- err }))
+	require.NoError(t, normal.OnStart(logging.TestingContext()))
+	require.NoError(t, normal.OnStop(t.Context()))
+	select {
+	case err := <-failures:
+		t.Fatalf("normal stop reported failure: %v", err)
+	default:
+	}
+}
+
+func TestHookCanceledHostnameStartNeverListens(t *testing.T) {
+	// This preserves the context-aware listener boundary when a host adopts NewHook.
+	ctx, cancel := context.WithCancel(ContextWithServerInfo(logging.TestingContext()))
+	cancel()
+	hook := NewHook(http.NewServeMux(), WithAddress("localhost:0"))
+	err := hook.OnStart(ctx)
+	t.Cleanup(func() { _ = hook.OnStop(context.Background()) })
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, serverport.Address(ctx, serverPortDiscr))
+	select {
+	case <-serverport.Started(ctx, serverPortDiscr):
+		t.Fatal("canceled hook advertised a listener")
+	default:
+	}
+}
+
+func TestCanceledHookStartLeavesSuppliedListenerCallerOwned(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	ctx, cancel := context.WithCancel(ContextWithServerInfo(logging.TestingContext()))
+	cancel()
+	hook := NewHook(http.NewServeMux(), WithListener(listener))
+	require.ErrorIs(t, hook.OnStart(ctx), context.Canceled)
+	require.NoError(t, hook.OnStop(t.Context()))
+	require.Empty(t, serverport.Address(ctx, serverPortDiscr))
+	select {
+	case <-serverport.Started(ctx, serverPortDiscr):
+		t.Fatal("failed start published listener")
+	default:
+	}
+	conn, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
+	require.NoError(t, err)
+	_ = conn.Close()
 }
