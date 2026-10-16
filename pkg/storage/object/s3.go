@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 
@@ -51,7 +53,7 @@ func (s *S3) ListPage(ctx context.Context, req ListRequest) (Page, error) {
 		return Page{}, ErrInvalid
 	}
 	req.Limit = min(req.Limit, s.limits.MaxObjects, 1000)
-	in := &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), Prefix: aws.String(req.Prefix), MaxKeys: aws.Int32(int32(req.Limit))}
+	in := &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), Prefix: aws.String(req.Prefix), MaxKeys: aws.Int32(int32(req.Limit)), EncodingType: types.EncodingTypeUrl}
 	if req.Cursor != "" {
 		in.ContinuationToken = aws.String(req.Cursor)
 	}
@@ -63,11 +65,21 @@ func (s *S3) ListPage(ctx context.Context, req ListRequest) (Page, error) {
 		return Page{}, ErrInvalid
 	}
 	out := Page{}
+	if raw.EncodingType != "" && raw.EncodingType != types.EncodingTypeUrl {
+		return Page{}, ErrInvalid
+	}
 	for _, item := range raw.Contents {
 		if item.Key == nil || *item.Key == "" || item.Size == nil || *item.Size < 0 || item.LastModified == nil {
 			return Page{}, ErrInvalid
 		}
-		out.Objects = append(out.Objects, Metadata{Key: aws.ToString(item.Key), Size: aws.ToInt64(item.Size), LastModified: aws.ToTime(item.LastModified).UTC(), Revision: aws.ToString(item.ETag)})
+		key := aws.ToString(item.Key)
+		if raw.EncodingType == types.EncodingTypeUrl {
+			key, err = url.PathUnescape(key)
+			if err != nil || key == "" {
+				return Page{}, ErrInvalid
+			}
+		}
+		out.Objects = append(out.Objects, Metadata{Key: key, Size: aws.ToInt64(item.Size), LastModified: aws.ToTime(item.LastModified).UTC(), Revision: aws.ToString(item.ETag)})
 	}
 	if aws.ToBool(raw.IsTruncated) {
 		out.NextCursor = aws.ToString(raw.NextContinuationToken)

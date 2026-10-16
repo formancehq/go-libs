@@ -8,6 +8,11 @@ configured root path for each operation. These constructors accept `Limits`;
 zero fields select defaults of 256 MiB per object, one million listed objects,
 and ten thousand pages for `ListAll`. Negative limits are invalid.
 
+S3 listing requests URL-encoded keys and decodes them exactly once when the
+response declares URL encoding. This preserves control characters, literal plus
+and percent characters, and Unicode through subsequent reads. Continuation
+tokens remain opaque and are never decoded.
+
 Compose credentials and SDK endpoints outside the bucket. AWS
 `iam.LoadConfig(ctx, Options, ...SDKOptions)` retains the SDK default credential
 chain when no static credentials are supplied and rejects partial static pairs.

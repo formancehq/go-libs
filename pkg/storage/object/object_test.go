@@ -433,7 +433,7 @@ func TestListAllCannotRaiseConfiguredAggregateBounds(t *testing.T) {
 
 func TestDirectoryChunkedListingPreservesWireMetadataAndUTC(t *testing.T) {
 	root := t.TempDir()
-	modified := time.Date(2001, 2, 3, 4, 5, 6, 7, time.FixedZone("offset", 3600))
+	modified := time.Date(2001, 2, 3, 4, 5, 6, 0, time.FixedZone("offset", 3600))
 	for i := range 300 {
 		file := filepath.Join(root, fmt.Sprintf("item-%03d", i))
 		if err := os.WriteFile(file, []byte("abc"), 0600); err != nil {
