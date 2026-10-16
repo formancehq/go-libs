@@ -64,8 +64,37 @@ export ENDPOINTS='["one,two","three four",""]'
 non-string items, malformed JSON and CSV/space-delimited lists are rejected.
 Successful bindings set `Changed` and participate in `Visit` and `NFlag`, like
 `FlagSet.Set`. A subsequent binding skips those flags. Binding is not transactional;
-earlier successful flags remain bound if a later flag fails. Configure and execute
+successful flags remain bound if another flag fails. Configure and execute
 command instances serially; pflag command configuration is not concurrency safe.
+
+### Binding policy controls
+
+The binders accept variadic `EnvironmentBindingOption` values. The default policy
+above remains strict. Options apply only to that call and leave legacy APIs unchanged:
+
+| Option | Behavior |
+| --- | --- |
+| `WithIgnoredEmptyEnvironmentValues()` | Ignore present empty environment variables for every flag type. Whitespace-only values remain configured values. |
+| `WithJSONOrDelimitedEnvironmentCollections()` | If the first non-whitespace character is `[`, decode a JSON array using `encoding/json`'s `[]string` behavior, including `null` items as empty strings. Invalid JSON never falls back. Otherwise replace ASCII spaces with commas for `stringSlice` and use pflag CSV parsing; `stringArray` accepts the full unmodified value as one item. |
+| `WithContinuedEnvironmentBinding()` | Attempt remaining flags after an invalid value, then return the first binding error. Useful when later flags configure diagnostics. A returned error must still prevent startup. |
+
+For example, retain exact nonempty scalar strings while accepting JSON and
+traditional collection forms, ignoring empty settings, and completing diagnostic
+configuration even when another setting is invalid:
+
+```go
+err := service.BindEnvToSelectedCommandExact(selected,
+    service.WithIgnoredEmptyEnvironmentValues(),
+    service.WithJSONOrDelimitedEnvironmentCollections(),
+    service.WithContinuedEnvironmentBinding(),
+)
+```
+
+The options are independent. The collection option alone does not ignore empty
+variables: an empty `stringSlice` clears the collection, while an empty
+`stringArray` supplies one empty item. Both remain subject to CLI precedence.
+Scalars are never trimmed, and bare `DEBUG` remains ignored in every policy.
+The continuation option does not aggregate, log, or expose parser causes.
 
 ### Lossless collection retrieval
 

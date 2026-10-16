@@ -315,89 +315,290 @@ func TestExactEnvironmentLosslessCollectionRetrieval(t *testing.T) {
 }
 
 func TestExactEnvironmentRequiredCollection(t *testing.T) {
-	for _, kind := range []string{"slice", "array"} {
-		for _, inherited := range []bool{false, true} {
+	for _, compatible := range []bool{false, true} {
+		options := []EnvironmentBindingOption{}
+		if compatible {
+			options = append(options, WithIgnoredEmptyEnvironmentValues(), WithJSONOrDelimitedEnvironmentCollections(), WithContinuedEnvironmentBinding())
+		}
+		t.Run(fmt.Sprintf("compatible=%t", compatible), func(t *testing.T) {
+			for _, kind := range []string{"slice", "array"} {
+				for _, inherited := range []bool{false, true} {
+					for _, tc := range []struct {
+						name    string
+						input   string
+						present bool
+						want    []string
+						invalid bool
+					}{
+						{name: "empty-array", input: `[]`, present: true, want: []string{}},
+						{name: "sole-empty", input: `[""]`, present: true, want: []string{""}},
+						{name: "items", input: `["one,two","line\r\nnext"]`, present: true, want: []string{"one,two", "line\r\nnext"}},
+						{name: "malformed-prefix", input: `[`, present: true, invalid: true},
+						{name: "absent"},
+					} {
+						t.Run(fmt.Sprintf("%s/inherited=%t/%s", kind, inherited, tc.name), func(t *testing.T) {
+							t.Setenv("QUALIFICATION_ITEMS", tc.input)
+							if !tc.present {
+								require.NoError(t, os.Unsetenv("QUALIFICATION_ITEMS"))
+							}
+							root := &cobra.Command{Use: "root", SilenceUsage: true, SilenceErrors: true}
+							run := &cobra.Command{Use: "run"}
+							flags := run.Flags()
+							if inherited {
+								flags = root.PersistentFlags()
+							}
+							var pointer *[]string
+							if kind == "slice" {
+								pointer = flags.StringSlice("qualification-items", nil, "")
+							} else {
+								pointer = flags.StringArray("qualification-items", nil, "")
+							}
+							if inherited {
+								require.NoError(t, root.MarkPersistentFlagRequired("qualification-items"))
+							} else {
+								require.NoError(t, run.MarkFlagRequired("qualification-items"))
+							}
+							validated := false
+							ran := false
+							originalArgs := func(cmd *cobra.Command, args []string) error {
+								validated = true
+								require.Equal(t, tc.present, cmd.Flags().Changed("qualification-items"))
+								return cobra.NoArgs(cmd, args)
+							}
+							run.Args = func(cmd *cobra.Command, args []string) error {
+								if err := BindEnvToSelectedCommandExact(cmd, options...); err != nil {
+									return err
+								}
+								return originalArgs(cmd, args)
+							}
+							run.RunE = func(cmd *cobra.Command, _ []string) error {
+								ran = true
+								require.True(t, validated)
+								require.NoError(t, cmd.ValidateRequiredFlags())
+								require.Equal(t, tc.want, *pointer)
+								require.Equal(t, tc.want, cmd.Flag("qualification-items").Value.(pflag.SliceValue).GetSlice())
+								require.True(t, cmd.Flags().Changed("qualification-items"))
+								require.Equal(t, 1, cmd.Flags().NFlag())
+								var visited []string
+								cmd.Flags().Visit(func(f *pflag.Flag) { visited = append(visited, f.Name) })
+								require.Equal(t, []string{"qualification-items"}, visited)
+								return nil
+							}
+							root.AddCommand(run)
+							root.SetArgs([]string{"run"})
+							err := root.Execute()
+							switch {
+							case tc.invalid:
+								require.ErrorIs(t, err, ErrInvalidEnvironmentValue)
+								require.False(t, validated)
+								require.False(t, ran)
+								require.False(t, run.Flags().Changed("qualification-items"))
+								require.Zero(t, run.Flags().NFlag())
+							case !tc.present:
+								require.ErrorContains(t, err, `required flag(s) "qualification-items" not set`)
+								require.True(t, validated)
+								require.False(t, ran)
+							default:
+								require.NoError(t, err)
+								require.True(t, ran)
+							}
+						})
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestEnvironmentCompatibilityInputMatrix(t *testing.T) {
+	// Frozen input/output cases: expectations are literal, not calculated with a
+	// second implementation of the binder. Both options are needed for this policy.
+	for _, binder := range []string{"flag-set", "selected-command"} {
+		for _, kind := range []string{"slice", "array"} {
 			for _, tc := range []struct {
-				name    string
-				input   string
-				present bool
-				want    []string
-				invalid bool
+				name, input  string
+				slice, array []string
+				invalid      bool
 			}{
-				{name: "empty-array", input: `[]`, present: true, want: []string{}},
-				{name: "sole-empty", input: `[""]`, present: true, want: []string{""}},
-				{name: "items", input: `["one,two","line\r\nnext"]`, present: true, want: []string{"one,two", "line\r\nnext"}},
-				{name: "malformed-prefix", input: `[`, present: true, invalid: true},
-				{name: "absent"},
+				{name: "empty-ignored", input: "", slice: []string{"default"}, array: []string{"default"}},
+				{name: "csv", input: "first,second", slice: []string{"first", "second"}, array: []string{"first,second"}},
+				{name: "space", input: "first second", slice: []string{"first", "second"}, array: []string{"first second"}},
+				{name: "surrounding-spaces", input: " first ", slice: []string{"", "first", ""}, array: []string{" first "}},
+				{name: "comma-space", input: "first, second", slice: []string{"first", "", "second"}, array: []string{"first, second"}},
+				{name: "tab", input: "first\tsecond", slice: []string{"first\tsecond"}, array: []string{"first\tsecond"}},
+				{name: "json-empty", input: `[]`, slice: []string{}, array: []string{}},
+				{name: "json-sole-empty", input: `[""]`, slice: []string{""}, array: []string{""}},
+				{name: "json-items", input: `["first,second"," a ","line\r\nnext"]`, slice: []string{"first,second", " a ", "line\r\nnext"}, array: []string{"first,second", " a ", "line\r\nnext"}},
+				{name: "json-null", input: `[null]`, slice: []string{""}, array: []string{""}},
+				{name: "json-mixed-null", input: " \t[\"a\",null]\n", slice: []string{"a", ""}, array: []string{"a", ""}},
+				{name: "literal-null", input: `null`, slice: []string{"null"}, array: []string{"null"}},
+				{name: "literal-object", input: `{}`, slice: []string{"{}"}, array: []string{"{}"}},
+				{name: "csv-quoted-empty", input: `""`, slice: []string{""}, array: []string{`""`}},
+				{name: "malformed-prefix", input: `[`, invalid: true},
+				{name: "incomplete-json", input: ` ["synthetic-secret"`, invalid: true},
+				{name: "json-number", input: `[1]`, invalid: true},
+				{name: "malformed-csv", input: `"synthetic-secret`, invalid: kind == "slice", array: []string{`"synthetic-secret`}},
 			} {
-				t.Run(fmt.Sprintf("%s/inherited=%t/%s", kind, inherited, tc.name), func(t *testing.T) {
+				t.Run(binder+"/"+kind+"/"+tc.name, func(t *testing.T) {
 					t.Setenv("QUALIFICATION_ITEMS", tc.input)
-					if !tc.present {
-						require.NoError(t, os.Unsetenv("QUALIFICATION_ITEMS"))
-					}
-					root := &cobra.Command{Use: "root", SilenceUsage: true, SilenceErrors: true}
-					run := &cobra.Command{Use: "run"}
+					root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
+					run := &cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {}}
 					flags := run.Flags()
-					if inherited {
-						flags = root.PersistentFlags()
-					}
+					flags.Bool(DebugFlag, true, "")
 					var pointer *[]string
 					if kind == "slice" {
-						pointer = flags.StringSlice("qualification-items", nil, "")
+						pointer = flags.StringSlice("qualification-items", []string{"default"}, "")
 					} else {
-						pointer = flags.StringArray("qualification-items", nil, "")
+						pointer = flags.StringArray("qualification-items", []string{"default"}, "")
 					}
-					if inherited {
-						require.NoError(t, root.MarkPersistentFlagRequired("qualification-items"))
+					options := []EnvironmentBindingOption{WithIgnoredEmptyEnvironmentValues(), WithJSONOrDelimitedEnvironmentCollections()}
+					var err error
+					if binder == "flag-set" {
+						err = BindEnvToFlagSetExact(flags, options...)
 					} else {
-						require.NoError(t, run.MarkFlagRequired("qualification-items"))
-					}
-					validated := false
-					ran := false
-					originalArgs := func(cmd *cobra.Command, args []string) error {
-						validated = true
-						require.Equal(t, tc.present, cmd.Flags().Changed("qualification-items"))
-						return cobra.NoArgs(cmd, args)
-					}
-					run.Args = func(cmd *cobra.Command, args []string) error {
-						if err := BindEnvToSelectedCommandExact(cmd); err != nil {
-							return err
+						run.Args = func(cmd *cobra.Command, args []string) error {
+							if err := BindEnvToSelectedCommandExact(cmd, options...); err != nil {
+								return err
+							}
+							return cobra.NoArgs(cmd, args)
 						}
-						return originalArgs(cmd, args)
+						root.AddCommand(run)
+						root.SetArgs([]string{"run"})
+						err = root.Execute()
 					}
-					run.RunE = func(cmd *cobra.Command, _ []string) error {
-						ran = true
-						require.True(t, validated)
-						require.NoError(t, cmd.ValidateRequiredFlags())
-						require.Equal(t, tc.want, *pointer)
-						require.Equal(t, tc.want, cmd.Flag("qualification-items").Value.(pflag.SliceValue).GetSlice())
-						require.True(t, cmd.Flags().Changed("qualification-items"))
-						require.Equal(t, 1, cmd.Flags().NFlag())
-						var visited []string
-						cmd.Flags().Visit(func(f *pflag.Flag) { visited = append(visited, f.Name) })
-						require.Equal(t, []string{"qualification-items"}, visited)
-						return nil
-					}
-					root.AddCommand(run)
-					root.SetArgs([]string{"run"})
-					err := root.Execute()
-					switch {
-					case tc.invalid:
+					if tc.invalid {
 						require.ErrorIs(t, err, ErrInvalidEnvironmentValue)
-						require.False(t, validated)
-						require.False(t, ran)
-						require.False(t, run.Flags().Changed("qualification-items"))
-						require.Zero(t, run.Flags().NFlag())
-					case !tc.present:
-						require.ErrorContains(t, err, `required flag(s) "qualification-items" not set`)
-						require.True(t, validated)
-						require.False(t, ran)
-					default:
-						require.NoError(t, err)
-						require.True(t, ran)
+						require.False(t, flags.Changed("qualification-items"))
+						require.Zero(t, flags.NFlag())
+						require.NotContains(t, err.Error(), "synthetic-secret")
+						require.NotContains(t, errors.Unwrap(err).Error(), "synthetic-secret")
+						return
+					}
+					require.NoError(t, err)
+					want := tc.slice
+					if kind == "array" {
+						want = tc.array
+					}
+					require.Equal(t, want, *pointer)
+					require.Equal(t, want, flags.Lookup("qualification-items").Value.(pflag.SliceValue).GetSlice())
+					require.Equal(t, tc.input != "", flags.Changed("qualification-items"))
+					if tc.input == "" {
+						require.Zero(t, flags.NFlag())
+					} else {
+						require.Equal(t, 1, flags.NFlag())
 					}
 				})
 			}
 		}
 	}
+}
+
+func TestEnvironmentCompatibilityScalarPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, want string
+		changed           bool
+	}{
+		{"empty", "", "default", false},
+		{"whitespace", " \t\r\n ", " \t\r\n ", true},
+		{"surrounding-space", "  synthetic-token  ", "  synthetic-token  ", true},
+		{"literal-array", `["literal"]`, `["literal"]`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("QUALIFICATION_TOKEN", tc.input)
+			t.Setenv("QUALIFICATION_LIMIT", "")
+			t.Setenv("DEBUG", "true")
+			flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			token := flags.String("qualification-token", "default", "")
+			limit := flags.Int("qualification-limit", 42, "")
+			debug := flags.Bool(DebugFlag, false, "")
+			require.NoError(t, BindEnvToFlagSetExact(flags, WithIgnoredEmptyEnvironmentValues(), WithJSONOrDelimitedEnvironmentCollections()))
+			require.Equal(t, tc.want, *token)
+			require.Equal(t, tc.changed, flags.Changed("qualification-token"))
+			require.Equal(t, 42, *limit)
+			require.False(t, flags.Changed("qualification-limit"))
+			require.False(t, *debug)
+		})
+	}
+}
+
+func TestEnvironmentBindingOptionsAreIndependent(t *testing.T) {
+	t.Setenv("QUALIFICATION_ITEMS", "")
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	items := flags.StringSlice("qualification-items", []string{"default"}, "")
+	require.NoError(t, BindEnvToFlagSetExact(flags, WithIgnoredEmptyEnvironmentValues()))
+	require.Equal(t, []string{"default"}, *items)
+	t.Setenv("QUALIFICATION_ITEMS", "a b")
+	require.ErrorIs(t, BindEnvToFlagSetExact(flags, WithIgnoredEmptyEnvironmentValues()), ErrInvalidEnvironmentValue)
+	require.NoError(t, BindEnvToFlagSetExact(flags, WithJSONOrDelimitedEnvironmentCollections()))
+	require.Equal(t, []string{"a", "b"}, *items)
+
+	t.Setenv("QUALIFICATION_TOKEN", "")
+	other := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	token := other.String("qualification-token", "default", "")
+	require.NoError(t, BindEnvToFlagSetExact(other, WithJSONOrDelimitedEnvironmentCollections()))
+	require.Equal(t, "", *token)
+	require.True(t, other.Changed("qualification-token"))
+}
+
+func TestEnvironmentBindingContinuesWithSafeFirstError(t *testing.T) {
+	for _, continued := range []bool{false, true} {
+		t.Run(fmt.Sprintf("continued=%t", continued), func(t *testing.T) {
+			t.Setenv("QUALIFICATION_A_INVALID", "synthetic-secret")
+			t.Setenv("QUALIFICATION_B_VALUE", "diagnostic-config")
+			t.Setenv("QUALIFICATION_C_INVALID", "another-secret")
+			flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			flags.Int("qualification-a-invalid", 1, "")
+			value := flags.String("qualification-b-value", "default", "")
+			flags.Bool("qualification-c-invalid", false, "")
+			flags.Bool(DebugFlag, true, "")
+			options := []EnvironmentBindingOption{WithIgnoredEmptyEnvironmentValues(), WithJSONOrDelimitedEnvironmentCollections()}
+			if continued {
+				options = append(options, WithContinuedEnvironmentBinding())
+			}
+			err := BindEnvToFlagSetExact(flags, options...)
+			binding, ok := errors.AsType[*EnvironmentBindingError](err)
+			require.True(t, ok)
+			require.Equal(t, "qualification-a-invalid", binding.FlagName)
+			require.ErrorIs(t, err, ErrInvalidEnvironmentValue)
+			require.NotContains(t, err.Error(), "synthetic-secret")
+			require.NotContains(t, errors.Unwrap(err).Error(), "synthetic-secret")
+			require.NotContains(t, err.Error(), "another-secret")
+			require.Equal(t, continued, flags.Changed("qualification-b-value"))
+			if continued {
+				require.Equal(t, "diagnostic-config", *value)
+			} else {
+				require.Equal(t, "default", *value)
+			}
+		})
+	}
+}
+
+func TestEnvironmentCompatibilityCLIAndSelectedScope(t *testing.T) {
+	t.Setenv("QUALIFICATION_ITEMS", `["synthetic-secret"`)
+	t.Setenv("QUALIFICATION_UNUSED", "invalid")
+	t.Setenv("QUALIFICATION_SHARED", "  exact  ")
+	root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
+	shared := root.PersistentFlags().String("qualification-shared", "default", "")
+	run := &cobra.Command{Use: "run"}
+	pointer := run.Flags().StringSlice("qualification-items", nil, "")
+	unused := &cobra.Command{Use: "unused"}
+	unused.Flags().Int("qualification-unused", 1, "")
+	validated := false
+	run.Args = func(cmd *cobra.Command, args []string) error {
+		if err := BindEnvToSelectedCommandExact(cmd, WithIgnoredEmptyEnvironmentValues(), WithJSONOrDelimitedEnvironmentCollections(), WithContinuedEnvironmentBinding()); err != nil {
+			return err
+		}
+		require.Equal(t, "  exact  ", *shared)
+		validated = true
+		return cobra.NoArgs(cmd, args)
+	}
+	ran := false
+	run.Run = func(*cobra.Command, []string) { ran = true }
+	root.AddCommand(run, unused)
+	root.SetArgs([]string{"run", "--qualification-items=cli"})
+	require.NoError(t, root.Execute())
+	require.True(t, validated)
+	require.True(t, ran)
+	require.Equal(t, []string{"cli"}, *pointer)
+	require.False(t, unused.Flags().Changed("qualification-unused"))
 }

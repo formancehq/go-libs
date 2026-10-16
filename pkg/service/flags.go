@@ -93,17 +93,21 @@ func BindEnvToFlagSetWithError(set *pflag.FlagSet) error {
 }
 
 func bindEnvToFlagSet(set *pflag.FlagSet, failFast bool) error {
-	return bindEnvToFlagSetUsing(set, failFast, bindEnvToFlag)
+	err := bindEnvToFlagSetUsing(set, failFast, bindEnvToFlag)
+	if !failFast {
+		return nil
+	}
+	return err
 }
 
 func bindEnvToFlagSetUsing(set *pflag.FlagSet, failFast bool, bind func(*pflag.FlagSet, *pflag.Flag) error) error {
 	var bindingErr error
 	set.VisitAll(func(flag *pflag.Flag) {
-		if bindingErr != nil || flag.Changed {
+		if (bindingErr != nil && failFast) || flag.Changed {
 			return
 		}
 		if err := bind(set, flag); err != nil {
-			if failFast {
+			if bindingErr == nil {
 				bindingErr = err
 			}
 
