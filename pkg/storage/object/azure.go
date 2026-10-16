@@ -52,7 +52,7 @@ func (a *Azure) ListPage(ctx context.Context, req ListRequest) (Page, error) {
 	}
 	out := Page{ServerTime: serverTime(raw)}
 	for _, item := range page.Segment.BlobItems {
-		if item == nil || item.Name == nil || *item.Name == "" || item.Properties == nil || item.Properties.ContentLength == nil || item.Properties.LastModified == nil {
+		if item == nil || item.Name == nil || *item.Name == "" || item.Properties == nil || item.Properties.ContentLength == nil || *item.Properties.ContentLength < 0 || item.Properties.LastModified == nil {
 			return Page{}, ErrInvalid
 		}
 		m := Metadata{Key: *item.Name, Size: *item.Properties.ContentLength, LastModified: item.Properties.LastModified.UTC()}
@@ -83,7 +83,7 @@ func (a *Azure) Stat(ctx context.Context, key string) (Metadata, error) {
 	if err != nil {
 		return Metadata{}, azureError(err)
 	}
-	if raw.ContentLength == nil || raw.LastModified == nil || raw.ETag == nil {
+	if raw.ContentLength == nil || *raw.ContentLength < 0 || raw.LastModified == nil || raw.ETag == nil {
 		return Metadata{}, ErrInvalid
 	}
 	return Metadata{Key: key, Size: *raw.ContentLength, LastModified: raw.LastModified.UTC(), Revision: string(*raw.ETag)}, nil

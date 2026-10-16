@@ -89,7 +89,7 @@ func (s *S3) Stat(ctx context.Context, key string) (Metadata, error) {
 	if err != nil {
 		return Metadata{}, storageError(err)
 	}
-	if raw == nil || raw.ContentLength == nil || raw.LastModified == nil {
+	if raw == nil || raw.ContentLength == nil || *raw.ContentLength < 0 || raw.LastModified == nil {
 		return Metadata{}, ErrInvalid
 	}
 	return Metadata{Key: key, Size: *raw.ContentLength, LastModified: raw.LastModified.UTC(), Revision: aws.ToString(raw.ETag)}, nil
