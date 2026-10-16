@@ -238,3 +238,9 @@ calling the optional `grpcserver.WithServeErrorHandler` callback. The callback
 can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
+
+## Native continuous profiling
+
+[PYROSCOPE.md](./PYROSCOPE.md) describes the optional native SDK configuration and
+plain lifecycle hook. `pkg/fx/observefx.PyroscopeModule` composes it with existing
+trace correlation; pprof HTTP profiling remains separate.
