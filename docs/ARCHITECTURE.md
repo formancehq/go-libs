@@ -231,3 +231,10 @@ closes every transport, and returns only once `Serve` and every handler have
 returned, even when its context has already expired. A handler that ignores
 cancellation therefore holds the hook past the deadline; Fx still returns at
 the budget.
+
+
+An unexpected gRPC serving failure withdraws the configured health server before
+calling the optional `grpcserver.WithServeErrorHandler` callback. The callback
+can request application shutdown; it must return promptly and must not wait for
+`OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
+invoke the callback. Listener admission failures still return from `OnStart`.

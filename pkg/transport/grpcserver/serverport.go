@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"context"
+	"errors"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -32,7 +33,7 @@ func ContextWithServerInfo(ctx context.Context) context.Context {
 	return serverport.ContextWithServerInfo(ctx, serverPortDiscr)
 }
 
-func startServer(ctx context.Context, s *serverport.Server, serverOptions []grpc.ServerOption, setupOptions []func(*grpc.Server)) (func(ctx context.Context) error, error) {
+func startServer(ctx context.Context, s *serverport.Server, serverOptions []grpc.ServerOption, setupOptions []func(*grpc.Server), onServeError ...func(error)) (func(ctx context.Context) error, error) {
 
 	if err := s.Listen(ctx); err != nil {
 		return nil, err
@@ -45,8 +46,13 @@ func startServer(ctx context.Context, s *serverport.Server, serverOptions []grpc
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
-		if err := grpcServer.Serve(s.Listener); err != nil {
+		if err := grpcServer.Serve(s.Listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			logging.FromContext(ctx).Errorf("failed to serve: %v", err)
+			for _, notify := range onServeError {
+				if notify != nil {
+					notify(err)
+				}
+			}
 		}
 	}()
 
@@ -88,6 +94,7 @@ type ServerOptions struct {
 	grpcServerOpts    []grpc.ServerOption
 	grpcSetupOpts     []func(server *grpc.Server)
 	healthServer      *health.Server
+	onServeError      func(error)
 }
 
 type ServerOptionModifier func(server *ServerOptions)
@@ -123,6 +130,16 @@ func WithHealthServer(probe *health.Server) ServerOptionModifier {
 	}
 }
 
+// WithServeErrorHandler reports an unexpected Serve failure after health has
+// been withdrawn. The callback runs on the serving goroutine and must return
+// promptly: it may request application shutdown but must not wait for OnStop,
+// which waits for that goroutine. Normal shutdown does not invoke it.
+func WithServeErrorHandler(notify func(error)) ServerOptionModifier {
+	return func(options *ServerOptions) {
+		options.onServeError = notify
+	}
+}
+
 func NewHook(serverOptionsModifiers ...ServerOptionModifier) Hook {
 	var (
 		close func(ctx context.Context) error
@@ -152,6 +169,14 @@ func NewHook(serverOptionsModifiers ...ServerOptionModifier) Hook {
 				server,
 				options.grpcServerOpts,
 				options.grpcSetupOpts,
+				func(serveErr error) {
+					if probe != nil {
+						probe.Shutdown()
+					}
+					if options.onServeError != nil {
+						options.onServeError(serveErr)
+					}
+				},
 			)
 			if err != nil {
 				return err
