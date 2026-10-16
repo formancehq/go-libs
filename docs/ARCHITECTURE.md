@@ -252,3 +252,9 @@ unchanged. Hijacked connections remain the caller's responsibility, as with
 logging. Normal shutdown and listen failures do not invoke it. The callback
 runs on the serving goroutine and must return promptly without waiting for
 `OnStop`; an application can request its own lifecycle shutdown there.
+
+The shared `serverport.Server.Listen` also honors startup cancellation. It uses
+`net.ListenConfig.Listen`, refuses an already-cancelled context before opening
+or advertising a socket, and releases a newly-created listener when cancellation
+is observed before publication. A supplied listener remains caller-owned when
+startup is refused. Both HTTP and gRPC hooks consume this same boundary.

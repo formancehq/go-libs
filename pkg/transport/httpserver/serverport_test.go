@@ -230,3 +230,19 @@ func TestHookServeFailureCallbackAndNormalStop(t *testing.T) {
 	default:
 	}
 }
+
+func TestHookCanceledHostnameStartNeverListens(t *testing.T) {
+	// This preserves the context-aware listener boundary when a host adopts NewHook.
+	ctx, cancel := context.WithCancel(ContextWithServerInfo(logging.TestingContext()))
+	cancel()
+	hook := NewHook(http.NewServeMux(), WithAddress("localhost:0"))
+	err := hook.OnStart(ctx)
+	t.Cleanup(func() { _ = hook.OnStop(context.Background()) })
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, serverport.Address(ctx, serverPortDiscr))
+	select {
+	case <-serverport.Started(ctx, serverPortDiscr):
+		t.Fatal("canceled hook advertised a listener")
+	default:
+	}
+}

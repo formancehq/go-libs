@@ -73,3 +73,44 @@ func TestStartedServerCanBeCalledConcurrently(t *testing.T) {
 	}
 	require.Equal(t, listener.Addr().String(), Address(ctx, "test"))
 }
+
+func TestListenRejectsCanceledContextBeforePublishing(t *testing.T) {
+	for _, address := range []string{"localhost:0", "127.0.0.1:0"} {
+		t.Run(address, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(ContextWithServerInfo(t.Context(), "test"))
+			cancel()
+			server := NewServer("test", WithAddress(address))
+			err := server.Listen(ctx)
+			if server.Listener != nil {
+				t.Cleanup(func() { _ = server.Listener.Close() })
+			}
+			require.ErrorIs(t, err, context.Canceled)
+			require.Nil(t, server.Listener)
+			require.Empty(t, Address(ctx, "test"))
+			select {
+			case <-Started(ctx, "test"):
+				t.Fatal("canceled start published readiness")
+			default:
+			}
+		})
+	}
+}
+
+func TestCanceledListenPreservesCallerOwnedListener(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	ctx, cancel := context.WithCancel(ContextWithServerInfo(t.Context(), "test"))
+	cancel()
+	server := NewServer("test", WithListener(listener))
+	require.ErrorIs(t, server.Listen(ctx), context.Canceled)
+	require.Empty(t, Address(ctx, "test"))
+	select {
+	case <-Started(ctx, "test"):
+		t.Fatal("canceled start published readiness")
+	default:
+	}
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	require.NoError(t, err)
+	_ = conn.Close()
+}
