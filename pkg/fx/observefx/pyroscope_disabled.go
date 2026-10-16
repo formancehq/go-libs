@@ -3,8 +3,9 @@
 package observefx
 
 import (
-	"github.com/formancehq/go-libs/v5/pkg/observe/pyroscope"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v5/pkg/observe/pyroscope"
 )
 
 // PyroscopeModule is a no-op in builds without native profiling support.

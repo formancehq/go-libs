@@ -3,11 +3,13 @@
 package observefx_test
 
 import (
-	"github.com/formancehq/go-libs/v5/pkg/fx/observefx"
-	"github.com/formancehq/go-libs/v5/pkg/observe/pyroscope"
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
-	"testing"
+
+	"github.com/formancehq/go-libs/v5/pkg/fx/observefx"
+	"github.com/formancehq/go-libs/v5/pkg/observe/pyroscope"
 )
 
 func TestNativeProfilingBuildDisabledModuleIsNoop(t *testing.T) {

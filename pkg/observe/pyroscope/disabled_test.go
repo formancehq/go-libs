@@ -3,10 +3,12 @@
 package pyroscope_test
 
 import (
-	"github.com/formancehq/go-libs/v5/pkg/observe/pyroscope"
+	"testing"
+
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	"github.com/formancehq/go-libs/v5/pkg/observe/pyroscope"
 )
 
 func TestBuildDisabledDoesNotAdvertiseOrEnableNativeProfiling(t *testing.T) {
