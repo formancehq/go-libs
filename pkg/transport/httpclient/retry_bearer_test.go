@@ -765,8 +765,10 @@ func TestBearerRefreshIsObservableWithoutLeakingTokens(t *testing.T) {
 		Body:     []byte(`{"client_secret":"api-secret"}`),
 	})}, http.StatusUnauthorized)
 
+	run(&fakeBearerSource{current: "secret-custom", refreshErr: statusOnlyTokenError{status: http.StatusForbidden}}, http.StatusUnauthorized)
+
 	got := counts()
-	require.EqualValues(t, 3, got.total(metricBearerRefreshes), "bearer refresh metrics = %v", got[metricBearerRefreshes])
+	require.EqualValues(t, 4, got.total(metricBearerRefreshes), "bearer refresh metrics = %v", got[metricBearerRefreshes])
 	require.True(t, got.hasAttr(metricBearerRefreshes, attrBearerRefreshOutcome+"=succeeded"))
 	require.True(t, got.hasAttr(metricBearerRefreshes, attrBearerRefreshOutcome+"=failed"))
 	require.EqualValues(t, 1, got.total(metricRetryCount), "401 retry metrics = %v", got[metricRetryCount])
@@ -775,11 +777,11 @@ func TestBearerRefreshIsObservableWithoutLeakingTokens(t *testing.T) {
 	text := logs.String()
 	for _, want := range []string{
 		"re-mint attempted", "outcome=succeeded", "outcome=failed",
-		"error_kind=invalid_token_response", "error_kind=token_endpoint_response", "token_endpoint_status=401",
+		"error_kind=invalid_token_response", "error_kind=token_endpoint_response", "token_endpoint_status=401", "token_endpoint_status=403",
 	} {
 		require.Contains(t, text, want)
 	}
-	for _, secret := range []string{"secret-old", "secret-new", "secret-failed", "secret-api", "error-secret", "api-secret", "client_secret", "secret-path"} {
+	for _, secret := range []string{"secret-custom", "secret-old", "secret-new", "secret-failed", "secret-api", "error-secret", "api-secret", "client_secret", "secret-path"} {
 		require.NotContains(t, text, secret, "a credential leaked into the logs")
 	}
 }
