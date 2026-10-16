@@ -50,6 +50,9 @@ func (h *Hook) OnStart(ctx context.Context) error {
 	if !h.cfg.Enabled || h.stop != nil {
 		return nil
 	}
+	if h.cfg.UploadRate < 0 {
+		return errors.New("pyroscope: upload rate must not be negative")
+	}
 	scrub := h.cfg.scrubber()
 	h.scrub = scrub
 	h.logger.WithContext(ctx).WithFields(map[string]any{

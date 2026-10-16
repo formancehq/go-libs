@@ -35,7 +35,7 @@ func TestFlagValuesLenientCollectionsAndSecrets(t *testing.T) {
 		"--pyroscope-enabled", "--pyroscope-server-address=https://profiles.example.test", "--pyroscope-application-name=service",
 		"--pyroscope-auth-token=synthetic-token", "--pyroscope-basic-auth-user=synthetic-user", "--pyroscope-basic-auth-password=synthetic-password",
 		"--pyroscope-tenant-id=tenant", "--pyroscope-upload-rate=45s", "--pyroscope-mutex-profile-fraction=9", "--pyroscope-block-profile-rate=11",
-		"--pyroscope-disable-gc-runs", "--pyroscope-profile-types=cpu,unknown, INUSE_SPACE ", "--pyroscope-tags=bare, region = eu,key=a=b",
+		"--pyroscope-disable-gc-runs", "--pyroscope-profile-types=cpu,unknown, INUSE_SPACE ", "--pyroscope-tags=bare, region = eu,key=a=b,=empty,  =spaces",
 		"--otel-traces-provider-pyroscope-enabled", "--otel-traces-provider-pyroscope-all-spans",
 	}))
 	cfg := ConfigFromFlags(flags)
@@ -99,4 +99,16 @@ func TestDiagnosticScrubbing(t *testing.T) {
 	for _, message := range []string{fmt.Sprintf("%q", cfg.AuthToken), string(encoded)} {
 		require.NotContains(t, cfg.scrubber()(message), "synthetic-escaped")
 	}
+}
+
+func TestScrubberMasksRewrittenPathsAndAuthorizationComponents(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ServerAddress = "https://profiles.example.test/synthetickey0123456789?region=eu"
+	cfg.HTTPHeaders = map[string]string{"Authorization": "Bearer synthetic-header-token"}
+	rewritten := "https://profiles.example.test/synthetickey0123456789/ingest?name=example&from=1"
+	got := cfg.scrubber()(rewritten + " rejected synthetic-header-token")
+	require.NotContains(t, got, "synthetickey0123456789")
+	require.NotContains(t, got, "synthetic-header-token")
+	require.Contains(t, got, "profiles.example.test")
+	require.Equal(t, "Bearer synthetic-header-token", cfg.HTTPHeaders["Authorization"])
 }
