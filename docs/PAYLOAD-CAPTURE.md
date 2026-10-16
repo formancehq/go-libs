@@ -15,7 +15,11 @@ JSON and form content use `observe/redact` structured redaction. Plain text and
 untyped empty bodies require explicit trust declarations from the adapter.
 Malformed, unsupported, oversized or unsafe payloads emit metadata-only omission
 records; producer error text is never logged. Content-type parameters are stripped.
-Caller fields are cloned before adding capture metadata.
+Caller fields are cloned before adding capture metadata. The complete `payload.*`
+namespace is reserved: stale capture fields are removed from the clone for both
+success and omission records, without mutating caller context. Emitted media-type
+metadata masks configured credential values; content admission still uses the
+original media type.
 
 The engine redacts the complete admitted payload before SHA-256 hashing, base64
 encoding and 64 KiB encoded chunks. Chunk identity, order, counts and the digest

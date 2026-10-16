@@ -14,6 +14,7 @@ import (
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 	"github.com/formancehq/go-libs/v5/pkg/observe/payloadlog"
+	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 func jsonLogger(buffer *bytes.Buffer, level logging.Level) logging.Logger {
@@ -277,8 +278,16 @@ func TestCaptureRedactsPlainTextAndAcceptsEmptyPayload(t *testing.T) {
 			if len(logs) != 1 || logs[0]["payload.omitted_reason"] != nil {
 				t.Fatalf("payload not captured: %v", logs)
 			}
-			if strings.Contains(buffer.String(), "Bearer secret") {
-				t.Fatalf("plain-text credential leaked: %s", buffer.String())
+			decoded, err := base64.StdEncoding.DecodeString(logs[0]["payload.chunk"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if name == "empty" {
+				if len(decoded) != 0 {
+					t.Fatal("empty payload changed")
+				}
+			} else if strings.Contains(string(decoded), "secret") || !strings.Contains(string(decoded), redact.Marker) {
+				t.Fatal("decoded plain-text payload did not redact the credential")
 			}
 		})
 	}
@@ -363,6 +372,38 @@ func TestCaptureAdmissionAndFieldIsolation(t *testing.T) {
 			}
 			if len(fields) != 2 || fields["payload.capture_id"] != "caller" {
 				t.Fatal("capture mutated caller metadata")
+			}
+		})
+	}
+}
+
+func TestCaptureMasksConfiguredContentTypeAndReservesMetadata(t *testing.T) {
+	payloadlog.Configure(true, 0)
+	redact.ConfigureValues([]string{"configured-private-credential"})
+	t.Cleanup(func() { payloadlog.Configure(false, 0); redact.ConfigureValues(nil) })
+	for _, contentType := range []string{"application/configured-private-credential", "application/configured-private-credential+json"} {
+		t.Run(contentType, func(t *testing.T) {
+			fields := map[string]any{"payload.chunk": "stale-content", "payload.redacted": true, "payload.omitted_reason": "stale-reason", "payload.sha256": "stale-hash", "payload.chunk_count": 99, "caller": "retained"}
+			var out bytes.Buffer
+			produced := false
+			payloadlog.Capture(t.Context(), jsonLogger(&out, logging.DebugLevel), payloadlog.Record{ContentType: contentType, Limit: 1024, Fields: fields, Produce: func(int64) ([]byte, error) { produced = true; return []byte(`{}`), nil }})
+			records := lines(t, &out)
+			if len(records) != 1 {
+				t.Fatalf("records=%v", records)
+			}
+			got := records[0]
+			if strings.Contains(out.String(), "configured-private-credential") {
+				t.Fatal("content type credential leaked")
+			}
+			if got["caller"] != "retained" || fields["payload.chunk"] != "stale-content" || fields["payload.omitted_reason"] != "stale-reason" {
+				t.Fatal("caller field ownership changed")
+			}
+			if strings.HasSuffix(contentType, "+json") {
+				if !produced || got["payload.chunk"] != "e30=" || got["payload.omitted_reason"] != nil {
+					t.Fatalf("capture metadata collision: %v", got)
+				}
+			} else if produced || got["payload.chunk"] != nil || got["payload.redacted"] != nil || got["payload.sha256"] != nil || got["payload.chunk_count"] != nil || got["payload.omitted_reason"] != "unsupported_content" {
+				t.Fatalf("omission metadata collision: %v", got)
 			}
 		})
 	}

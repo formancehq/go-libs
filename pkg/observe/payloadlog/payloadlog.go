@@ -66,7 +66,8 @@ type Record struct {
 	// optional configured cap can only lower it.
 	Limit   int64
 	Produce Produce
-	Fields  map[string]any
+	// Fields supplies caller context; the payload.* namespace is reserved.
+	Fields map[string]any
 }
 
 // Enabled reports whether logger and the explicit operator gate both allow
@@ -250,6 +251,13 @@ func baseFields(record Record) map[string]any {
 	if fields == nil {
 		fields = make(map[string]any)
 	}
+	// Capture owns this namespace for both chunks and omissions. Caller
+	// context survives, but stale capture claims must not cross outcomes.
+	for key := range fields {
+		if strings.HasPrefix(key, "payload.") {
+			delete(fields, key)
+		}
+	}
 	fields["payload.transport"] = record.Transport
 	fields["payload.direction"] = record.Direction
 	fields["payload.operation"] = record.Operation
@@ -266,5 +274,5 @@ func safeContentType(value string) string {
 		return "invalid"
 	}
 
-	return mediaType
+	return string(golibsredact.Bytes([]byte(mediaType)))
 }
