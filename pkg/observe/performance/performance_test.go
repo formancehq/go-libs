@@ -2,6 +2,7 @@ package performance
 
 import (
 	"math"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -399,5 +400,67 @@ func assertFloat(t *testing.T, name string, got, want float64) {
 	t.Helper()
 	if math.Abs(got-want) > 1e-12 {
 		t.Errorf("%s = %f, want %f", name, got, want)
+	}
+}
+
+func TestRecordRejectsAggregateOverflowAtomically(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, time.October, 16, 10, 0, 0, 0, time.UTC)
+	for _, dimension := range []string{"calls", "errors", "in", "out", "transactions", "duration"} {
+		t.Run(dimension, func(t *testing.T) {
+			t.Parallel()
+			r := New(Config{LatencySampleLimit: 2})
+			s := Sample{At: base, Calls: 2}
+			overflow := Sample{At: base.Add(time.Second), Calls: 1, Duration: time.Second}
+			switch dimension {
+			case "calls":
+				s.Calls = ^uint64(0)
+			case "errors":
+				s.Errors = ^uint64(0)
+				overflow.Errors = 1
+			case "in":
+				s.ItemsIn = ^uint64(0)
+				overflow.ItemsIn = 1
+			case "out":
+				s.ItemsOut = ^uint64(0)
+				overflow.ItemsOut = 1
+			case "transactions":
+				s.Transactions = ^uint64(0)
+				overflow.Transactions = 1
+			case "duration":
+				s.Duration = time.Duration(1<<63 - 1)
+			}
+			if !r.Record("stage", "channel", s) {
+				t.Fatal("maximum representable sample refused")
+			}
+			before := r.Snapshot(base.Add(3 * time.Second))
+			if r.Record("stage", "channel", overflow) {
+				t.Fatal("unrepresentable sample accepted")
+			}
+			after := r.Snapshot(base.Add(3 * time.Second))
+			if !reflect.DeepEqual(before, after) {
+				t.Fatalf("rejected sample mutated state: before=%+v after=%+v", before, after)
+			}
+		})
+	}
+}
+
+func TestRecordRejectsSampleCountOverflowAtomically(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, time.October, 16, 10, 0, 0, 0, time.UTC)
+	r := New(Config{LatencySampleLimit: 2})
+	s := r.Stage("stage", "channel")
+	if !s.Record(Sample{At: base}) {
+		t.Fatal("valid sample refused")
+	}
+	// Reaching this boundary through recording would take MaxUint64 calls.
+	s.totals.Samples = ^uint64(0)
+	s.latencyTotal = ^uint64(0)
+	before := r.Snapshot(base.Add(2 * time.Second))
+	if s.Record(Sample{At: base.Add(time.Second)}) {
+		t.Fatal("sample count overflow accepted")
+	}
+	if after := r.Snapshot(base.Add(2 * time.Second)); !reflect.DeepEqual(before, after) {
+		t.Fatal("rejection changed snapshot")
 	}
 }

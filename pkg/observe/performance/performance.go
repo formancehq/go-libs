@@ -218,7 +218,8 @@ func (r *Recorder) Stage(name, channel string) *Stage {
 }
 
 // Record is a convenience for callers that cannot retain a Stage handle. It
-// returns false for a zero timestamp or negative duration and records nothing.
+// returns false for a zero timestamp, negative duration or aggregate overflow
+// and records nothing.
 func (r *Recorder) Record(name, channel string, sample Sample) bool {
 	return r.Stage(name, channel).Record(sample)
 }
@@ -255,8 +256,9 @@ func (r *Recorder) Snapshot(now time.Time) Snapshot {
 	return result
 }
 
-// Record adds an aggregate sample. It returns false for a zero timestamp or a
-// negative duration and leaves the stage unchanged.
+// Record adds an aggregate sample. It returns false for a zero timestamp, a
+// negative duration, or an unrepresentable cumulative count or active duration,
+// and leaves the stage unchanged.
 func (s *Stage) Record(sample Sample) bool {
 	if sample.At.IsZero() || sample.Duration < 0 {
 		return false
@@ -274,6 +276,9 @@ func (s *Stage) Record(sample Sample) bool {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.totals.canAdd(counts) {
+		return false
+	}
 	s.totals.add(counts)
 	s.recordWindow(sample.At, counts)
 	s.recordLatency(sample.Duration)
@@ -442,4 +447,18 @@ func (c *Counts) add(other Counts) {
 	c.ItemsOut += other.ItemsOut
 	c.Transactions += other.Transactions
 	c.ActiveTime += other.ActiveTime
+}
+
+// Every rolling bucket and window is a subset of the accepted cumulative
+// observations, so checking the cumulative sums also bounds their additions.
+func (c Counts) canAdd(other Counts) bool {
+	const maxUint = ^uint64(0)
+	const maxDuration = time.Duration(1<<63 - 1)
+	return maxUint-c.Samples >= other.Samples &&
+		maxUint-c.Calls >= other.Calls &&
+		maxUint-c.Errors >= other.Errors &&
+		maxUint-c.ItemsIn >= other.ItemsIn &&
+		maxUint-c.ItemsOut >= other.ItemsOut &&
+		maxUint-c.Transactions >= other.Transactions &&
+		maxDuration-c.ActiveTime >= other.ActiveTime
 }
