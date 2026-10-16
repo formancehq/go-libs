@@ -257,3 +257,31 @@ for composed S3/Azure clients and rooted local directories. Credential and CLI
 configuration stays at composition. See [object storage](OBJECT_STORAGE.md) for
 limits, generation and enumeration semantics. AWS IAM also exposes a flag-free
 `Options`/`LoadConfig` API; its existing flag API remains compatible.
+
+## WebSocket client transport
+
+`pkg/transport/websocketclient` supplies a minimal `Conn`, `Dialer` and
+`NewDialer(scope)` backed by `github.com/coder/websocket v1.8.15`. It injects
+OpenTelemetry propagation headers into the handshake, bounds inbound messages
+(including fragmented messages) to `ReadLimit` (32 MiB), writes text messages,
+and exposes context-aware read, write and ping with normal close semantics.
+It does not log URLs, headers or frames.
+
+The constructor creates `wsx.dial.attempts` and `wsx.dial.duration` instruments
+once, recording only the closed `outcome=ok|error` dimension. Explicit scopes
+are preserved; an empty scope uses the package's public `DefaultMetricsScope`.
+Instrumentation failure never prevents a connection attempt. These metric
+names remain stable independently of the package name.
+
+Protocol authentication frames, subscriptions, reconnect policy, watchdogs,
+queues, message interpretation and payload capture are caller responsibilities.
+There is no FX, CLI, provider or storage dependency in this package.
+
+### WebSocket connection ownership
+
+Keep one reader active to service control frames and run Ping concurrently.
+An expired or cancelled active Read closes the underlying connection; reconnect
+instead of treating it as a recoverable per-read timeout. A reader paused for
+local admission cannot service pongs, so callers must coordinate heartbeat
+failure policy with backpressure. Close ends the connection and releases the
+read loop; the owner cancels and joins its work before starting another session.
