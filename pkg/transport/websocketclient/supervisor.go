@@ -32,8 +32,10 @@ type FrameResult struct {
 // performs provider setup, dialing, subscription writes, and recovery, then
 // transfers ownership of the returned connection to the Supervisor.
 type Supervisor struct {
-	Logger      logging.Logger
-	Open        func(context.Context, int) (Conn, error)
+	Logger logging.Logger
+	Open   func(context.Context, int) (Conn, error)
+	// HandleFrame is serial and must return promptly when its context is cancelled.
+	// Transport failures cancel it independently; owned work is joined before retry.
 	HandleFrame func(context.Context, []byte) FrameResult
 
 	OnConnected     func(context.Context)
@@ -69,8 +71,7 @@ func (s Supervisor) Run(ctx context.Context) {
 
 	attempt := 0
 	for ctx.Err() == nil {
-		started := time.Now()
-		err := s.runAttempt(ctx, attempt)
+		establishedFor, err := s.runSession(ctx, attempt)
 		if s.SetDisconnected != nil {
 			s.SetDisconnected()
 		}
@@ -80,11 +81,11 @@ func (s Supervisor) Run(ctx context.Context) {
 		if s.OnReconnect != nil {
 			s.OnReconnect(ctx)
 		}
-		if time.Since(started) > stableAfter {
+		if establishedFor > stableAfter {
 			attempt = 0
 		}
 		if err != nil {
-			logger.WithContext(ctx).WithFields(map[string]any{"attempt": attempt, "error": err}).Error("ws connection ended; reconnecting")
+			logger.WithContext(ctx).WithFields(map[string]any{"attempt": attempt, "error.type": fmt.Sprintf("%T", err)}).Error("ws connection ended; reconnecting")
 		}
 
 		timer := time.NewTimer(backoff(attempt))
@@ -100,19 +101,26 @@ func (s Supervisor) Run(ctx context.Context) {
 }
 
 func (s Supervisor) runAttempt(parent context.Context, attempt int) error {
+	_, err := s.runSession(parent, attempt)
+	return err
+}
+
+func (s Supervisor) runSession(parent context.Context, attempt int) (establishedFor time.Duration, resultErr error) {
 	if s.Open == nil || s.HandleFrame == nil {
-		return errors.New("wsx: supervisor requires Open and HandleFrame")
+		return 0, errors.New("wsx: supervisor requires Open and HandleFrame")
 	}
 
 	ctx, cancel := context.WithCancel(parent)
 	conn, err := s.Open(ctx, attempt)
 	if err != nil {
 		cancel()
-		return err
+		return 0, err
 	}
 
 	now := time.Now()
 	lastActivity := now
+	pauses := &admissionPause{}
+	lastPause := time.Duration(0)
 	if s.OnActivity != nil {
 		s.OnActivity(now)
 	}
@@ -130,16 +138,30 @@ func (s Supervisor) runAttempt(parent context.Context, attempt int) error {
 	attemptMonitor := s.Monitor.attempt()
 	readErr := make(chan error, 1)
 	var readWG sync.WaitGroup
-	readWG.Go(func() { readFrames(ctx, conn, frames, frameSlots, readErr, attemptMonitor, budget, limit) })
+	jobs := make(chan []byte)
+	results := make(chan frameOutcome, 1)
+	readWG.Go(func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case frame := <-jobs:
+				results <- runFrame(ctx, s.FrameJob, s.HandleFrame, frame, attemptMonitor)
+			}
+		}
+	})
+	readWG.Go(func() { readFrames(ctx, conn, frames, frameSlots, readErr, attemptMonitor, budget, limit, pauses) })
 	defer func() {
 		cancel()
 		_ = conn.Close()
 		readWG.Wait()
-		attemptMonitor.attemptEnded()
+		attemptMonitor.attemptEnded(ctx)
 	}()
 
 	pingErr := make(chan error, 1)
-	go pingConnection(ctx, conn, durationOr(s.PingInterval, 15*time.Second), durationOr(s.PingTimeout, 10*time.Second), pingErr)
+	readWG.Go(func() {
+		pingConnection(ctx, conn, durationOr(s.PingInterval, 15*time.Second), durationOr(s.PingTimeout, 10*time.Second), pingErr, pauses)
+	})
 
 	subscription := time.NewTimer(durationOr(s.SubscribeTimeout, 20*time.Second))
 	defer stopTimer(subscription)
@@ -147,22 +169,36 @@ func (s Supervisor) runAttempt(parent context.Context, attempt int) error {
 	watchdog := time.NewTicker(watchdogTick(durationOr(s.WatchdogWindow, 30*time.Second)))
 	defer watchdog.Stop()
 	confirmed := false
+	defer func() {
+		if confirmed {
+			establishedFor = time.Since(now)
+		}
+	}()
+	var receiving <-chan []byte = frames
 
 	for {
 		select {
 		case <-ctx.Done():
-			return context.Cause(ctx)
+			return 0, context.Cause(ctx)
 		case err := <-readErr:
-			return fmt.Errorf("ws read: %w", err)
+			return 0, fmt.Errorf("ws read: %w", err)
 		case err := <-pingErr:
-			return fmt.Errorf("ws ping: %w", err)
-		case frame := <-frames:
+			return 0, fmt.Errorf("ws ping: %w", err)
+		case frame := <-receiving:
 			budget.Release(int64((len(frame) + budgetChunk - 1) / budgetChunk))
-			attemptMonitor.handlingStarted()
+			attemptMonitor.handlingStarted(ctx)
 			frameSlots <- struct{}{}
-			result := handleFrame(ctx, s.FrameJob, s.HandleFrame, frame, attemptMonitor)
+			receiving = nil
+			jobs <- frame
+		case outcome := <-results:
+			if outcome.panicked {
+				panic(outcome.panicValue)
+			}
+			receiving = frames
+			result := outcome.result
 			if result.Activity {
 				lastActivity = time.Now()
+				lastPause = pauses.elapsed()
 				if s.OnActivity != nil {
 					s.OnActivity(lastActivity)
 				}
@@ -176,13 +212,13 @@ func (s Supervisor) runAttempt(parent context.Context, attempt int) error {
 				}
 			}
 			if result.Reconnect {
-				return ErrReconnectRequested
+				return 0, ErrReconnectRequested
 			}
 		case <-subscriptionC:
-			return ErrSubscriptionTimeout
+			return 0, ErrSubscriptionTimeout
 		case <-watchdog.C:
-			if time.Since(lastActivity) > durationOr(s.WatchdogWindow, 30*time.Second) {
-				return ErrWatchdog
+			if time.Since(lastActivity)-(pauses.elapsed()-lastPause) > durationOr(s.WatchdogWindow, 30*time.Second) {
+				return 0, ErrWatchdog
 			}
 		}
 	}
@@ -199,10 +235,10 @@ func handleFrame(
 	completed := false
 	defer func() {
 		if completed {
-			monitor.handlingFinished(started, len(frame))
+			monitor.handlingFinished(started, len(frame), ctx)
 			return
 		}
-		monitor.handlingAborted()
+		monitor.handlingAborted(ctx)
 	}()
 	if frameJob.Name == "" {
 		result = handle(ctx, frame)
@@ -227,10 +263,21 @@ func readFrames(
 	monitor *supervisorAttemptMonitor,
 	budget *semaphore.Weighted,
 	limit int,
+	pauseStates ...*admissionPause,
 ) {
+	pauses := firstPause(pauseStates)
 	for {
 		select {
 		case <-frameSlots:
+		default:
+			pauses.start()
+			select {
+			case <-frameSlots:
+			case <-ctx.Done():
+				pauses.stop()
+				return
+			}
+			pauses.stop()
 		case <-ctx.Done():
 			return
 		}
@@ -245,13 +292,17 @@ func readFrames(
 
 			return
 		}
-		monitor.frameRead(len(frame))
+		monitor.frameRead(len(frame), ctx)
 		charge := int64((len(frame) + budgetChunk - 1) / budgetChunk)
 		var admissionErr error
 		if len(frame) > limit || charge > int64(max(1, limit/budgetChunk)) {
 			admissionErr = errors.New("WebSocket frame exceeds queue byte budget")
 		} else {
-			admissionErr = budget.Acquire(ctx, charge)
+			if !budget.TryAcquire(charge) {
+				pauses.start()
+				admissionErr = budget.Acquire(ctx, charge)
+				pauses.stop()
+			}
 		}
 		if admissionErr != nil {
 			frameSlots <- struct{}{}
@@ -271,7 +322,8 @@ func readFrames(
 	}
 }
 
-func pingConnection(ctx context.Context, conn Conn, interval, timeout time.Duration, pingErr chan<- error) {
+func pingConnection(ctx context.Context, conn Conn, interval, timeout time.Duration, pingErr chan<- error, pauseStates ...*admissionPause) {
+	pauses := firstPause(pauseStates)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -279,9 +331,10 @@ func pingConnection(ctx context.Context, conn Conn, interval, timeout time.Durat
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pingCtx, cancel := context.WithTimeout(ctx, timeout)
-			err := conn.Ping(pingCtx)
-			cancel()
+			if paused, _ := pauses.state(); paused {
+				continue
+			}
+			err := pingWithAdmission(ctx, conn, timeout, pauses)
 			if err != nil {
 				select {
 				case pingErr <- err:
@@ -315,6 +368,65 @@ func stopTimer(timer *time.Timer) {
 		select {
 		case <-timer.C:
 		default:
+		}
+	}
+}
+
+// frameOutcome carries callback panics back to the owner after cancellation and
+// cleanup; a callback is never abandoned in a detached goroutine.
+type frameOutcome struct {
+	result     FrameResult
+	panicValue any
+	panicked   bool
+}
+
+func runFrame(ctx context.Context, desc job.Desc, handle func(context.Context, []byte) FrameResult, frame []byte, monitor *supervisorAttemptMonitor) (out frameOutcome) {
+	completed := false
+	defer func() {
+		if !completed {
+			out.panicValue = recover()
+			out.panicked = true
+		}
+	}()
+	out.result = handleFrame(ctx, desc, handle, frame, monitor)
+	completed = true
+	return out
+}
+
+// A control-frame wait retains a cancellable context, but local admission pauses
+// suspend its deadline. Never cancel an in-progress control write just because
+// the reader paused; transport implementations may treat that as terminal.
+func pingWithAdmission(ctx context.Context, conn Conn, timeout time.Duration, pauses *admissionPause) error {
+	pingCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- conn.Ping(pingCtx) }()
+	timer := time.NewTimer(timeout)
+	defer stopTimer(timer)
+	for {
+		paused, changed := pauses.state()
+		if paused {
+			stopTimer(timer)
+		}
+		select {
+		case err := <-done:
+			return err
+		case <-ctx.Done():
+			cancel()
+			<-done
+			return context.Cause(ctx)
+		case <-timer.C:
+			if pausedNow, _ := pauses.state(); pausedNow {
+				continue
+			}
+			cancel()
+			<-done
+			return context.DeadlineExceeded
+		case <-changed:
+			if pausedNow, _ := pauses.state(); !pausedNow {
+				stopTimer(timer)
+				timer.Reset(timeout)
+			}
 		}
 	}
 }

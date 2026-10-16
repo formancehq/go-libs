@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync"
 	"time"
-
-	"github.com/formancehq/go-libs/v5/pkg/observe/performance"
 )
 
 // EventQueueOverflow defines the truthful outcome of a non-blocking enqueue
@@ -27,7 +25,7 @@ const (
 // RejectedClosed counts calls made after shutdown, separately from runtime
 // backpressure outcomes.
 type EventQueueSnapshot struct {
-	Queue          performance.QueueSnapshot
+	Queue          QueueStats
 	Coalesced      uint64
 	RejectedClosed uint64
 	Discarded      uint64
@@ -39,6 +37,7 @@ type EventQueueSnapshot struct {
 // wakes idle receivers without holding the dequeue lock; event processing
 // remains fully concurrent.
 type EventQueue[T any] struct {
+	metrics  *collectionMetrics
 	events   chan Event[T]
 	slots    chan struct{}
 	overflow EventQueueOverflow
@@ -63,12 +62,13 @@ type EventQueue[T any] struct {
 }
 
 // NewEventQueue constructs a queue with fixed capacity and overflow semantics.
-func NewEventQueue[T any](capacity int, overflow EventQueueOverflow) *EventQueue[T] {
+func NewEventQueue[T any](capacity int, overflow EventQueueOverflow, options ...CollectionOption) *EventQueue[T] {
 	if capacity < 0 {
 		capacity = 0
 	}
 
 	queue := &EventQueue[T]{
+		metrics:  newCollectionMetrics("events", options),
 		events:   make(chan Event[T], capacity),
 		slots:    make(chan struct{}, capacity),
 		overflow: overflow,
@@ -80,6 +80,7 @@ func NewEventQueue[T any](capacity int, overflow EventQueueOverflow) *EventQueue
 		queue.slots <- struct{}{}
 	}
 
+	queue.recordMetrics()
 	return queue
 }
 
@@ -89,6 +90,7 @@ func NewEventQueue[T any](capacity int, overflow EventQueueOverflow) *EventQueue
 func (q *EventQueue[T]) TryPush(event Event[T]) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	defer q.recordMetrics()
 	if q.closed {
 		q.rejectedClosed++
 
@@ -138,6 +140,7 @@ func (q *EventQueue[T]) Receive(ctx context.Context) (Event[T], bool) {
 			if ok {
 				q.removeHead()
 				q.dequeued++
+				q.recordMetrics()
 				if q.depth > 0 && !q.closed {
 					q.notify()
 				}
@@ -182,6 +185,7 @@ func (q *EventQueue[T]) removeHead() {
 func (q *EventQueue[T]) Drop() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	defer q.recordMetrics()
 	for q.depth > 0 {
 		<-q.events
 		q.removeHead()
@@ -194,6 +198,7 @@ func (q *EventQueue[T]) Drop() {
 func (q *EventQueue[T]) Close() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	defer q.recordMetrics()
 	if q.closed {
 		return
 	}
@@ -217,9 +222,7 @@ func (q *EventQueue[T]) Snapshot() EventQueueSnapshot {
 	}
 
 	return EventQueueSnapshot{
-		Queue: performance.QueueSnapshot{
-			Name:      "websocket.events",
-			Channel:   "websocket",
+		Queue: QueueStats{
 			Available: true,
 			Depth:     uint64(q.depth),                                    //nolint:gosec // admission and dequeue keep bounded depth nonnegative
 			Bytes:     uint64(q.bytes), ByteCapacity: uint64(q.byteLimit), //nolint:gosec // bounded channel depth is non-negative
@@ -234,4 +237,24 @@ func (q *EventQueue[T]) Snapshot() EventQueueSnapshot {
 		RejectedClosed: q.rejectedClosed,
 		Discarded:      q.discarded,
 	}
+}
+
+// QueueStats reports physical queue state owned by EventQueue. It is not a
+// recorder, stage schema, rolling-window metric or collection interface.
+type QueueStats struct {
+	Available                                       bool
+	Depth, Capacity, Bytes, ByteCapacity, HighWater uint64
+	Enqueued, Dequeued, Dropped                     uint64
+	OldestAge                                       time.Duration
+}
+
+func (q *EventQueue[T]) recordMetrics() {
+	if q.metrics == nil {
+		return
+	}
+	oldest := int64(0)
+	if q.depth > 0 && len(q.times) > 0 {
+		oldest = q.times[q.head].UnixNano()
+	}
+	q.metrics.record([8]uint64{q.enqueued, q.dequeued, q.dropped, q.coalesced, q.rejectedClosed, q.discarded}, [8]int64{int64(q.depth), int64(cap(q.events)), int64(q.bytes), int64(q.byteLimit), int64(q.highWater), oldest})
 }

@@ -14,6 +14,7 @@ import (
 // an existing key refreshes its value without moving it; pushing a new key at
 // capacity evicts the oldest entry.
 type KeyedBuffer[T any] struct {
+	metrics     *collectionMetrics
 	mu          sync.Mutex
 	capacity    int
 	byteLimit   int
@@ -56,22 +57,26 @@ type BufferStats struct {
 	OldestQueuedAge time.Duration
 }
 
-func NewKeyedBuffer[T any](capacity int) *KeyedBuffer[T] {
+func NewKeyedBuffer[T any](capacity int, options ...CollectionOption) *KeyedBuffer[T] {
 	if capacity <= 0 {
 		capacity = MaxBuffered
 	}
 
-	return &KeyedBuffer[T]{
+	buffer := &KeyedBuffer[T]{
+		metrics:     newCollectionMetrics("buffer", options),
 		capacity:    capacity,
 		byteLimit:   DefaultQueueBytes,
 		entries:     make(map[string]bufferEntry[T]),
 		clockOrigin: time.Now(),
 	}
+	buffer.recordMetrics()
+	return buffer
 }
 
 func (b *KeyedBuffer[T]) Push(key string, value T, links ...trace.SpanContext) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	defer b.recordMetrics()
 
 	b.pushed++
 	size, err := encodedSize(value)
@@ -141,6 +146,7 @@ func (b *KeyedBuffer[T]) Drain(ctx context.Context, limit int64) (values []T, ha
 	}
 	b.order = b.order[n:]
 	b.drained += uint64(n)
+	b.recordMetrics()
 	b.mu.Unlock()
 
 	traces.AddLinks(ctx, links...)
@@ -160,6 +166,7 @@ func (b *KeyedBuffer[T]) Len() int {
 func (b *KeyedBuffer[T]) Drop() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	defer b.recordMetrics()
 	b.discarded += uint64(len(b.entries))
 	clear(b.entries)
 	b.order = nil
@@ -197,4 +204,15 @@ func (b *KeyedBuffer[T]) Stats() BufferStats {
 	}
 
 	return stats
+}
+
+func (b *KeyedBuffer[T]) recordMetrics() {
+	if b.metrics == nil {
+		return
+	}
+	oldest := int64(0)
+	if len(b.order) > 0 {
+		oldest = b.clockOrigin.Add(b.entries[b.order[0]].queuedAtOffset).UnixNano()
+	}
+	b.metrics.record([8]uint64{b.pushed, b.inserted, b.replaced, b.drained, b.evicted, b.discarded, b.rejected}, [8]int64{int64(len(b.entries)), int64(b.capacity), int64(b.bytes), int64(b.byteLimit), int64(b.highWater), oldest})
 }

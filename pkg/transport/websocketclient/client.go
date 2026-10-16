@@ -15,7 +15,11 @@ import (
 )
 
 // Conn is a bounded duplex connection. Write sends text messages; Close uses
-// normal closure. Read, Write and Ping honor their contexts.
+// normal closure. Read, Write and Ping honor their contexts. Keep one reader
+// servicing control frames while Ping runs concurrently: Ping waits for that
+// reader to consume the pong. Suspending reads can therefore stall Ping even
+// when the peer is healthy. Cancelling or timing out an active Read is terminal
+// for this connection; callers must reconnect rather than reuse it.
 type Conn interface {
 	Read(ctx context.Context) ([]byte, error)
 	Write(ctx context.Context, b []byte) error
