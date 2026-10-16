@@ -1,5 +1,5 @@
-// Package jsonvalue decodes single JSON documents without losing number text
-// and reads values from dynamically typed JSON trees. It does not define schemas.
+// Package jsonvalue decodes single JSON documents without losing number text.
+// It does not define schemas.
 package jsonvalue
 
 import (
