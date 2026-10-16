@@ -1,12 +1,17 @@
 package webhook
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"math"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -52,6 +57,28 @@ type Delivery struct {
 
 // Config configures a receiver built by [NewReceiver].
 type Config struct {
+	// UseRequestSpan uses the existing request span instead of creating a delivery
+	// span. Its lifecycle belongs to the consumer middleware. Default is false.
+	UseRequestSpan bool
+	// MethodHandlers handles additional methods such as GET challenges. HEAD and
+	// POST cannot be overridden; nil preserves the default method gate.
+	MethodHandlers map[string]http.Handler
+	// Response writes the selected status. It owns the complete response, including
+	// headers and body. Nil preserves the default HTTP acknowledgement.
+	Response func(http.ResponseWriter, *http.Request, int)
+	// DeliveryErrorStatus may classify a delivery failure as a permanent 4xx
+	// rejection or retryable 5xx failure. Invalid results fall back to 503.
+	// It never runs for body or verification failures.
+	DeliveryErrorStatus func(error) int
+	// PrepareContext runs before method dispatch and delivery tracing. It may
+	// extract incoming trace context. Nil preserves the request context.
+	PrepareContext func(*http.Request) context.Context
+	// ObserveBody observes the bounded read before verification, including failures.
+	// When set, at most MaxBody+1 bytes are read even for a declared overrun;
+	// oversized bodies include the extra byte and a *http.MaxBytesError. The
+	// callback must not retain or mutate the bytes. Nil keeps early length rejection.
+	ObserveBody func(context.Context, *http.Request, []byte, error)
+
 	// MaxBody caps the request body in bytes. Zero applies [DefaultMaxBody];
 	// a negative value is rejected by NewReceiver. A larger body is answered
 	// with 413 and never truncated.
@@ -71,11 +98,19 @@ type Config struct {
 // NewReceiver returns an [http.Handler] that receives webhook deliveries as
 // described in the package documentation.
 func NewReceiver(cfg Config) (http.Handler, error) {
+	for method, handler := range cfg.MethodHandlers {
+		if method == http.MethodHead || method == http.MethodPost || method == "" || handler == nil {
+			return nil, errors.New("webhook: additional method must have a handler and cannot override HEAD or POST")
+		}
+	}
 	if cfg.Verifier == nil {
 		return nil, errors.New("webhook: Config.Verifier is required")
 	}
 	if cfg.Deliver == nil {
 		return nil, errors.New("webhook: Config.Deliver is required")
+	}
+	if cfg.ObserveBody != nil && cfg.MaxBody == math.MaxInt64 {
+		return nil, errors.New("webhook: observed MaxBody must leave room for one overrun byte")
 	}
 	if cfg.MaxBody < 0 {
 		return nil, errors.New("webhook: Config.MaxBody must not be negative")
@@ -84,7 +119,9 @@ func NewReceiver(cfg Config) (http.Handler, error) {
 		cfg.MaxBody = DefaultMaxBody
 	}
 
+	cfg.MethodHandlers = maps.Clone(cfg.MethodHandlers)
 	return &receiver{
+		cfg:      cfg,
 		maxBody:  cfg.MaxBody,
 		verifier: cfg.Verifier,
 		deliver:  cfg.Deliver,
@@ -92,27 +129,39 @@ func NewReceiver(cfg Config) (http.Handler, error) {
 }
 
 type receiver struct {
+	cfg      Config
 	maxBody  int64
 	verifier Verifier
 	deliver  func(ctx context.Context, d Delivery) error
 }
 
 const (
-	allowedMethods = http.MethodHead + ", " + http.MethodPost
-	spanName       = "webhook.delivery"
+	spanName = "webhook.delivery"
 )
 
 // ServeHTTP implements [http.Handler]. HEAD and rejected methods never touch
 // the request body; only a POST is a delivery and gets a span.
 func (rc *receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if rc.cfg.PrepareContext != nil {
+		r = r.WithContext(rc.cfg.PrepareContext(r))
+	}
 	switch r.Method {
 	case http.MethodPost:
 	case http.MethodHead:
-		w.WriteHeader(http.StatusOK)
+		rc.respond(w, r, http.StatusOK)
 
 		return
 	default:
-		w.Header().Set("Allow", allowedMethods)
+		if handler := rc.cfg.MethodHandlers[r.Method]; handler != nil {
+			handler.ServeHTTP(w, r)
+			return
+		}
+		if rc.cfg.Response != nil {
+			rc.respond(w, r, http.StatusMethodNotAllowed)
+			return
+		}
+		methods := slices.Sorted(maps.Keys(rc.cfg.MethodHandlers))
+		w.Header().Set("Allow", strings.Join(append([]string{http.MethodHead, http.MethodPost}, methods...), ", "))
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 
 		return
@@ -120,17 +169,16 @@ func (rc *receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the tracer per delivery so a provider installed after
 	// NewReceiver, or swapped later, is honoured.
-	ctx, span := otel.Tracer(instrumentationName).Start(r.Context(), spanName)
-	defer span.End()
+	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	if !rc.cfg.UseRequestSpan {
+		ctx, span = otel.Tracer(instrumentationName).Start(ctx, spanName)
+		defer span.End()
+	}
 
 	status := rc.receive(ctx, span, w, r)
 	span.SetAttributes(attribute.Int("http.response.status_code", status))
-	if status != http.StatusOK {
-		http.Error(w, http.StatusText(status), status)
-
-		return
-	}
-	w.WriteHeader(http.StatusOK)
+	rc.respond(w, r.WithContext(ctx), status)
 }
 
 // receive runs one POST delivery and returns the status to answer with. The
@@ -138,11 +186,14 @@ func (rc *receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // the Verifier, and unverified bytes never reach Deliver.
 func (rc *receiver) receive(ctx context.Context, span trace.Span, w http.ResponseWriter, r *http.Request) int {
 	// A declared length past the cap is rejected before a single byte is read.
-	if r.ContentLength > rc.maxBody {
+	if rc.cfg.ObserveBody == nil && r.ContentLength > rc.maxBody {
 		return reject(ctx, span, http.StatusRequestEntityTooLarge, "body exceeds the cap", nil)
 	}
 
 	body, err := rc.readBody(w, r)
+	if rc.cfg.ObserveBody != nil {
+		rc.cfg.ObserveBody(ctx, r, body, err)
+	}
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return reject(ctx, span, http.StatusRequestEntityTooLarge, "body exceeds the cap", nil)
@@ -164,7 +215,13 @@ func (rc *receiver) receive(ctx context.Context, span trace.Span, w http.Respons
 		Body:   body,
 	})
 	if err != nil {
-		return reject(ctx, span, http.StatusServiceUnavailable, "deliver failed", err)
+		status := http.StatusServiceUnavailable
+		if rc.cfg.DeliveryErrorStatus != nil {
+			if selected := rc.cfg.DeliveryErrorStatus(err); selected >= 400 && selected <= 599 {
+				status = selected
+			}
+		}
+		return reject(ctx, span, status, "deliver failed", err)
 	}
 
 	return http.StatusOK
@@ -179,6 +236,16 @@ func (rc *receiver) readBody(w http.ResponseWriter, r *http.Request) ([]byte, er
 		return []byte{}, nil
 	}
 
+	if rc.cfg.ObserveBody != nil {
+		// Tee the actual bounded read so the observer retains the overrun
+		// byte while MaxBytesReader still signals HTTP/1 connection closure.
+		var window bytes.Buffer
+		_, err := io.Copy(io.Discard, http.MaxBytesReader(w, io.NopCloser(io.TeeReader(r.Body, &window)), rc.maxBody))
+		if int64(window.Len()) > rc.maxBody {
+			err = &http.MaxBytesError{Limit: rc.maxBody}
+		}
+		return window.Bytes(), err
+	}
 	return io.ReadAll(http.MaxBytesReader(w, r.Body, rc.maxBody))
 }
 
@@ -205,4 +272,16 @@ func reject(ctx context.Context, span trace.Span, status int, reason string, err
 	}
 
 	return status
+}
+
+func (rc *receiver) respond(w http.ResponseWriter, r *http.Request, status int) {
+	if rc.cfg.Response != nil {
+		rc.cfg.Response(w, r, status)
+		return
+	}
+	if status != http.StatusOK {
+		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	w.WriteHeader(status)
 }
