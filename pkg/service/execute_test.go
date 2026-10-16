@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -108,4 +109,58 @@ func TestExecuteExitCode(t *testing.T) {
 	require.Equal(t, 1, exitCode(errors.New("plain failure")))
 	require.Equal(t, 78, exitCode(fmt.Errorf("start: %w", errorsutils.NewErrorWithExitCode(errors.New("bad config"), 78))))
 	require.Equal(t, 3, exitCode(errorsutils.ErrorWithExitCode{Err: errors.New("value form"), ExitCode: 3}))
+}
+
+func TestEnvironmentBindingErrorDebugMode(t *testing.T) {
+	for _, mode := range []string{"absent", "enabled", "disabled", "environment-only"} {
+		for _, binder := range []string{"execute", "command", "flag-set"} {
+			t.Run(mode+"/"+binder, func(t *testing.T) {
+				t.Setenv("GRPC_PORT", "sensitive-invalid-port")
+				t.Setenv("DEBUG", "true")
+				root := &cobra.Command{Use: "service", SilenceErrors: true, SilenceUsage: true}
+				run := &cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {
+					t.Fatal("malformed environment must be rejected before run")
+				}}
+				run.Flags().Int("grpc-port", 8888, "")
+				root.AddCommand(run)
+				args := []string{"run"}
+				if mode != "absent" {
+					root.PersistentFlags().Bool(DebugFlag, mode == "disabled", "")
+				}
+				switch mode {
+				case "enabled":
+					args = append(args, "--debug")
+				case "disabled":
+					args = append(args, "--debug=false")
+				}
+				var err error
+				if binder == "execute" {
+					root.SetArgs(args)
+					bindEnvForExecute(root)
+					err = root.Execute()
+				} else {
+					require.NoError(t, run.ParseFlags(args[1:]))
+					if binder == "command" {
+						err = BindEnvToCommandWithError(root)
+					} else {
+						err = BindEnvToFlagSetWithError(run.Flags())
+					}
+				}
+				require.Error(t, err)
+				var binding *EnvironmentBindingError
+				require.ErrorAs(t, err, &binding)
+				require.ErrorIs(t, err, strconv.ErrSyntax)
+				require.ErrorContains(t, err, "GRPC_PORT")
+				require.ErrorContains(t, err, "--grpc-port")
+				for _, formatted := range []string{err.Error(), fmt.Sprintf("%+v", err)} {
+					if mode == "enabled" {
+						require.Contains(t, formatted, binding.Unwrap().Error())
+						require.Contains(t, formatted, "sensitive-invalid-port")
+					} else {
+						require.NotContains(t, formatted, "sensitive-invalid-port")
+					}
+				}
+			})
+		}
+	}
 }
