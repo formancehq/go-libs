@@ -12,11 +12,15 @@ import (
 // its owner must still close it. The caller owns time/cancellation admission.
 // A nil or absent body produces no window. Negative and overflowing limits are
 // refused before reading. This is for optional bounded diagnostics, not decoding.
+// Upgraded responses have bidirectional stream ownership and are left untouched.
 func SnapshotResponseBody(response *http.Response, maxBytes int64) ([]byte, error) {
 	if maxBytes < 0 || maxBytes == 1<<63-1 {
 		return nil, fmt.Errorf("httpclient: invalid response snapshot limit")
 	}
 	if response == nil || response.Body == nil || response.Body == http.NoBody {
+		return nil, nil
+	}
+	if response.StatusCode == http.StatusSwitchingProtocols {
 		return nil, nil
 	}
 	head, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
