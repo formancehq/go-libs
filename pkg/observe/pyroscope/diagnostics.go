@@ -40,6 +40,16 @@ func (c Config) scrubber() func(string) string {
 					secrets = append(secrets, values...)
 				}
 			}
+			// SDK uploads append /ingest and replace query parameters. Keep
+			// policy-sensitive path components protected after those rewrites.
+			for _, segment := range strings.Split(parsed.EscapedPath(), "/") {
+				if segment != "" && redact.Path("/"+segment) != "/"+segment {
+					secrets = append(secrets, segment)
+					if decoded, err := url.PathUnescape(segment); err == nil {
+						secrets = append(secrets, decoded)
+					}
+				}
+			}
 			replacements = append(replacements, address, redact.URL(parsed))
 		} else {
 			replacements = append(replacements, address, redact.Marker)
@@ -48,6 +58,19 @@ func (c Config) scrubber() func(string) string {
 	for key, value := range c.HTTPHeaders {
 		if redact.SensitiveHeader(key) {
 			secrets = append(secrets, value)
+			if strings.EqualFold(key, "Authorization") || strings.EqualFold(key, "Proxy-Authorization") {
+				scheme, credential, ok := strings.Cut(value, " ")
+				credential = strings.TrimSpace(credential)
+				if ok && (strings.EqualFold(scheme, "Bearer") || strings.EqualFold(scheme, "Basic")) {
+					secrets = append(secrets, credential)
+					if strings.EqualFold(scheme, "Basic") {
+						if decoded, err := base64.StdEncoding.DecodeString(credential); err == nil {
+							user, password, _ := strings.Cut(string(decoded), ":")
+							secrets = append(secrets, user, password)
+						}
+					}
+				}
+			}
 		}
 	}
 	for key, value := range c.Tags {

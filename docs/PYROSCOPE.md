@@ -22,7 +22,7 @@ application name default to empty. Profile names in flag help are sorted.
 It reuses the existing `otel-traces-provider-pyroscope-*` flags.
 
 `ConfigFromFlags` accepts a flag set after CLI/environment parsing. Tag keys and
-values are trimmed; malformed pairs and unknown profile names are skipped.
+values are trimmed; empty keys, malformed pairs and unknown profile names are skipped.
 An empty profile collection keeps DefaultConfig's types; a nonempty collection
 containing no recognized types becomes empty and is subject to the SDK's own
 fallback. Collection reads use `pflag.SliceValue.GetSlice()` directly, preserving
@@ -33,7 +33,8 @@ For plain library use, `NewHook(cfg, logger)` allocates without side effects.
 Call `cfg.SetupRuntimeProfiling()` when process-wide sampling should take effect,
 then use `hook.OnStart(ctx)` and `hook.OnStop(ctx)`. The hook snapshots mutable
 configuration, starts once, and tolerates stop before start or repeated stop.
-Start errors fail startup. Stop errors are logged at Info and shutdown succeeds.
+Negative upload durations fail startup before SDK work; zero retains the SDK
+default. Start errors fail startup. Stop errors are logged at Info and shutdown succeeds.
 The native SDK Stop has no context API: joining uploads can exceed the caller's
 deadline. Stop drains SDK work; it does not promise a fresh final snapshot for
 every profile type. The SDK's ad-hoc address override remains supported.
@@ -53,3 +54,14 @@ has no request context, so SDK callbacks use the process logger.
 This is a source capability candidate. A containing published go-libs release
 and application-specific source/operational qualification are required before
 released adoption. It does not enable profiling in existing applications.
+
+Native flag registration owns the existing correlation flags too: do not also
+call `pyroscopetraces.AddFlags` on the same flag set. Similarly, select one trace
+provider decorator; do not combine `PyroscopeModule` with another enabled
+Pyroscope correlation decorator in the same Fx scope. The module composes that
+correlation itself.
+
+Configured Authorization/Proxy-Authorization credential components and opaque
+address path segments selected by the URL redactor remain masked when an SDK
+callback echoes only a token or rewrites the address to an upload endpoint.
+These diagnostic transformations never alter SDK request credentials.

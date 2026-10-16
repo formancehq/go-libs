@@ -82,7 +82,10 @@ func ConfigFromFlags(flags *pflag.FlagSet) Config {
 	cfg.TagAllSpans, _ = flags.GetBool(pyroscopetraces.OtelTracesProviderPyroscopeAllSpansFlag)
 	for _, pair := range sliceValue(flags, TagsFlag) {
 		if key, value, ok := strings.Cut(strings.TrimSpace(pair), "="); ok {
-			cfg.Tags[strings.TrimSpace(key)] = strings.TrimSpace(value)
+			key = strings.TrimSpace(key)
+			if key != "" {
+				cfg.Tags[key] = strings.TrimSpace(value)
+			}
 		}
 	}
 	names := sliceValue(flags, ProfileTypesFlag)

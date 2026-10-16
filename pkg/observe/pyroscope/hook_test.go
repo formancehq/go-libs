@@ -135,3 +135,53 @@ func TestRealSDKInvalidAddressDoesNotDiscloseInput(t *testing.T) {
 	require.False(t, strings.Contains(err.Error(), "synthetic-password"))
 	require.NoError(t, hook.OnStop(t.Context()))
 }
+
+func TestNegativeUploadRateFailsBeforeSDKStart(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	cfg.UploadRate = -time.Second
+	hook := NewHook(cfg, nil)
+	hook.start = func(sdk.Config) (func() error, error) { t.Fatal("invalid duration reached SDK"); return nil, nil }
+	require.ErrorContains(t, hook.OnStart(t.Context()), "upload rate must not be negative")
+	require.NoError(t, hook.OnStop(t.Context()))
+	cfg.UploadRate = 0
+	hook = NewHook(cfg, nil)
+	hook.start = func(c sdk.Config) (func() error, error) {
+		require.Zero(t, c.UploadRate)
+		return func() error { return nil }, nil
+	}
+	require.NoError(t, hook.OnStart(t.Context()))
+	require.NoError(t, hook.OnStop(t.Context()))
+}
+
+func TestRealSDKCallbackMasksBareBearerAndRewrittenPath(t *testing.T) {
+	var received atomic.Bool
+	const token = "synthetic-bare-callback-token"
+	const path = "synthetickey0123456789"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer "+token && r.URL.Path == "/"+path+"/ingest" {
+			received.Store(true)
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprint(w, "rejected "+strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}))
+	defer server.Close()
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	cfg.ApplicationName = "example"
+	cfg.ServerAddress = server.URL + "/" + path + "?region=eu"
+	t.Setenv("PYROSCOPE_ADHOC_SERVER_ADDRESS", cfg.ServerAddress)
+	cfg.HTTPHeaders = map[string]string{"Authorization": "Bearer " + token}
+	cfg.DisableGCRuns = true
+	cfg.ProfileTypes = []sdk.ProfileType{sdk.ProfileGoroutines}
+	cfg.UploadRate = 100 * time.Millisecond
+	var output bytes.Buffer
+	hook := NewHook(cfg, logging.NewZapStack(&output, zapcore.DebugLevel, logging.ZapStackOptions{JSONFormatting: true}))
+	require.NoError(t, hook.OnStart(t.Context()))
+	defer func() { require.NoError(t, hook.OnStop(t.Context())) }()
+	require.Eventually(t, received.Load, 3*time.Second, 10*time.Millisecond)
+	require.NoError(t, hook.OnStop(t.Context()))
+	require.Contains(t, output.String(), "rejected")
+	require.NotContains(t, output.String(), token)
+	require.NotContains(t, output.String(), path)
+}
