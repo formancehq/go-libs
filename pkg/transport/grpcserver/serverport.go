@@ -130,8 +130,11 @@ func WithHealthServer(probe *health.Server) ServerOptionModifier {
 	}
 }
 
-// WithServeErrorHandler reports an unexpected Serve failure after health has
-// been withdrawn. The callback runs on the serving goroutine and must return
+// WithServeErrorHandler opts into withdrawing the configured health server
+// before reporting an unexpected Serve failure. Withdrawal affects every service
+// on that probe, including services sharing it with another hook. A nil handler
+// disables both notification and failure-triggered health withdrawal; OnStop still
+// withdraws health. The callback runs on the serving goroutine and must return
 // promptly: it may request application shutdown but must not wait for OnStop,
 // which waits for that goroutine. Normal shutdown does not invoke it.
 func WithServeErrorHandler(notify func(error)) ServerOptionModifier {
@@ -170,12 +173,13 @@ func NewHook(serverOptionsModifiers ...ServerOptionModifier) Hook {
 				options.grpcServerOpts,
 				options.grpcSetupOpts,
 				func(serveErr error) {
+					if options.onServeError == nil {
+						return
+					}
 					if probe != nil {
 						probe.Shutdown()
 					}
-					if options.onServeError != nil {
-						options.onServeError(serveErr)
-					}
+					options.onServeError(serveErr)
 				},
 			)
 			if err != nil {

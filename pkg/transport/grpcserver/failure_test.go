@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -79,5 +80,55 @@ func TestListenerStartupFailureReturnsWithoutServeNotification(t *testing.T) {
 	case err := <-notified:
 		t.Fatalf("startup failure notified as Serve failure: %v", err)
 	default:
+	}
+}
+
+func TestServeFailureWithoutHandlerPreservesHealth(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		options []ServerOptionModifier
+	}{
+		{name: "no handler"},
+		{name: "nil handler", options: []ServerOptionModifier{WithServeErrorHandler(nil)}},
+		{name: "disabled handler", options: []ServerOptionModifier{
+			WithServeErrorHandler(func(error) { t.Error("disabled handler invoked") }),
+			WithServeErrorHandler(nil),
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				listener, err := net.Listen("tcp", "127.0.0.1:0")
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = listener.Close() })
+				probe := health.NewServer()
+				probe.SetServingStatus("sibling", healthpb.HealthCheckResponse_SERVING)
+				options := append([]ServerOptionModifier{
+					WithServerPortOptions(serverport.WithListener(failedListener{listener, errors.New("fatal listener error")})),
+					WithHealthServer(probe),
+				}, tc.options...)
+				hook := NewHook(options...)
+				require.NoError(t, hook.OnStart(t.Context()))
+				// Accept fails immediately. Wait for the serving goroutine to finish before
+				// asserting the old caller-controlled health state, without a timing delay.
+				synctest.Wait()
+				for _, service := range []string{"", "sibling"} {
+					response, err := probe.Check(t.Context(), &healthpb.HealthCheckRequest{Service: service})
+					require.NoError(t, err)
+					require.Equal(t, healthpb.HealthCheckResponse_SERVING, response.GetStatus())
+				}
+				probe.SetServingStatus("sibling", healthpb.HealthCheckResponse_NOT_SERVING)
+				response, err := probe.Check(t.Context(), &healthpb.HealthCheckRequest{Service: "sibling"})
+				require.NoError(t, err)
+				require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, response.GetStatus())
+				probe.SetServingStatus("sibling", healthpb.HealthCheckResponse_SERVING)
+				response, err = probe.Check(t.Context(), &healthpb.HealthCheckRequest{Service: "sibling"})
+				require.NoError(t, err)
+				require.Equal(t, healthpb.HealthCheckResponse_SERVING, response.GetStatus(), "caller updates must remain effective")
+				require.NoError(t, hook.OnStop(t.Context()))
+				response, err = probe.Check(t.Context(), &healthpb.HealthCheckRequest{})
+				require.NoError(t, err)
+				require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, response.GetStatus(), "OnStop must still withdraw health")
+			})
+		})
 	}
 }
