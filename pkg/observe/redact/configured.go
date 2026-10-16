@@ -20,8 +20,8 @@ type valueReplacer struct {
 }
 
 // ConfigureValues atomically replaces the process-wide credential set. Empty
-// values and literal Marker matches are ignored; nil clears it. Resolve credentials before
-// startup and configure once before logging. Values expand to JSON, URL and
+// values and literal Marker matches are ignored; nil clears it. Resolve
+// credentials before startup and configure once before logging. Values expand to JSON, URL and
 // base64 spellings; short variants require token boundaries.
 func ConfigureValues(values []string) {
 	variants := map[string]struct{}{}

@@ -84,14 +84,20 @@ var (
 // returns a copy and never mutates data. Letters, digits and the token
 // punctuation written as JSON escapes are classified, and shown, decoded.
 func Bytes(data []byte) []byte {
-	out := redactHeaderEchoes(decodeInertEscapes(data))
+	return redactConfiguredValues(redactNamedValues(decodeInertEscapes(data), true))
+}
+
+// redactNamedValues shares the diagnostic vocabulary without normalizing input.
+// Structured capture refuses non-string credentials, so it disables bare masking.
+func redactNamedValues(data []byte, maskBare bool) []byte {
+	out := redactHeaderEchoes(data)
 	out = danglingSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 	out = kvSecretRe.ReplaceAll(out, []byte("${1}"+Marker+"${3}"))
-	out = kvBareSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
+	if maskBare {
+		out = kvBareSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
+	}
 	out = bearerRe.ReplaceAll(out, []byte("${1}"+Marker))
-	out = headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
-
-	return redactConfiguredValues(out)
+	return headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 }
 
 // decodeInertEscapes decodes every JSON escape whose character is inert to

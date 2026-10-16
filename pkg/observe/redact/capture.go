@@ -12,14 +12,6 @@ import (
 var sensitiveJSONKeyRe = regexp.MustCompile(`(?i)^[a-z0-9_-]*` + bodySecretKey + `$`)
 var jsonKeyRe = regexp.MustCompile(`"(?:\\.|[^"\\])*"\s*:`)
 
-func captureNamedValues(data []byte) []byte {
-	out := redactHeaderEchoes(data)
-	out = danglingSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
-	out = kvSecretRe.ReplaceAll(out, []byte("${1}"+Marker+"${3}"))
-	out = bearerRe.ReplaceAll(out, []byte("${1}"+Marker))
-	return headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
-}
-
 // JSON redacts string credentials in one valid JSON document, retaining all
 // bytes outside redacted strings. Duplicate credential keys (case-insensitive),
 // escaped credential names and non-string credential values return nil, false.
@@ -59,7 +51,7 @@ func JSON(data []byte) ([]byte, bool) {
 		}
 	}
 
-	out := redactConfiguredJSONStrings(captureNamedValues(data))
+	out := redactConfiguredJSONStrings(redactNamedValues(data, false))
 	if !json.Valid(out) {
 		return nil, false
 	}
