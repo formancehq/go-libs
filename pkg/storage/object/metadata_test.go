@@ -68,3 +68,17 @@ func TestCloudMetadataRejectsNegativeSizes(t *testing.T) {
 		}
 	}
 }
+
+func TestAzureStatPreservesAbsentRevisionForConsumerPolicy(t *testing.T) {
+	client := azureClient(t, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Length": {"3"}, "Last-Modified": {"Fri, 16 Oct 2026 10:00:00 GMT"}}, Body: http.NoBody, Request: r}, nil
+	})
+	bucket, err := NewAzure(client, "container", Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := bucket.Stat(t.Context(), "item")
+	if err != nil || meta.Key != "item" || meta.Size != 3 || meta.Revision != "" {
+		t.Fatalf("%+v %v", meta, err)
+	}
+}

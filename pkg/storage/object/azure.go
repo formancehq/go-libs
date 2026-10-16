@@ -83,10 +83,14 @@ func (a *Azure) Stat(ctx context.Context, key string) (Metadata, error) {
 	if err != nil {
 		return Metadata{}, azureError(err)
 	}
-	if raw.ContentLength == nil || *raw.ContentLength < 0 || raw.LastModified == nil || raw.ETag == nil {
+	if raw.ContentLength == nil || *raw.ContentLength < 0 || raw.LastModified == nil {
 		return Metadata{}, ErrInvalid
 	}
-	return Metadata{Key: key, Size: *raw.ContentLength, LastModified: raw.LastModified.UTC(), Revision: string(*raw.ETag)}, nil
+	meta := Metadata{Key: key, Size: *raw.ContentLength, LastModified: raw.LastModified.UTC()}
+	if raw.ETag != nil {
+		meta.Revision = string(*raw.ETag)
+	}
+	return meta, nil
 }
 func (a *Azure) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
 	if err := ctx.Err(); err != nil {

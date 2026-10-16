@@ -23,9 +23,10 @@ opaque ETag for cloud backends; no quoting or normalization is applied. Errors
 retain the underlying SDK cause along with neutral size, permission, credential
 and revision verdicts for consumer policy.
 
-`ReadCurrent` reads exact metadata and that conditional generation, then checks
-body size. It applies the revision when present; consumers requiring a named
-generation must reject metadata without a validator. Directory revisions identify size and modification time; they do not
+`ReadCurrent` reads exact metadata, applies its revision when present and checks
+body size. Metadata revisions are optional for every backend; consumers requiring
+a named generation must reject a missing validator. Directory revisions identify
+size and modification time; they do not
 constitute a content digest. Applications needing detection of same-size,
 same-time edits must retain an independent digest. Reads additionally compare
 file identity and metadata before and after reading. Escaping keys, special
