@@ -277,3 +277,19 @@ instead of treating it as a recoverable per-read timeout. A reader paused for
 local admission cannot service pongs, so callers must coordinate heartbeat
 failure policy with backpressure. Close ends the connection and releases the
 read loop; the owner cancels and joins its work before starting another session.
+
+### WebSocket session supervision
+
+`pkg/transport/websocketclient.Supervisor` owns one reconnecting transport
+session: bounded raw-frame admission, ping, confirmation timeout, activity
+watchdog, stable-connection retry reset and cancellation. Callers supply Open
+and HandleFrame plus lifecycle callbacks. Protocol setup, recovery and decoded
+event queues remain caller-owned. HandleFrame returns FrameResult to report
+confirmation, activity or requested reconnect; it does not transfer decoding or
+provider authority into the transport.
+
+SupervisorMonitor provides coherent frame accounting and public performance
+snapshots. FrameJob consumes an existing observe/job descriptor; opening a socket
+never runs under a frame job. Byte admission uses the existing weighted semaphore
+with 64 KiB charges and a separate item bound. No generic worker/event-queue
+framework or second connection interface is introduced.
