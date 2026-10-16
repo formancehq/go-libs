@@ -9,8 +9,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 // Connection-pool defaults for the transport the retry transport builds when
@@ -73,7 +71,7 @@ func NewBaseTransport(perAttemptTimeout time.Duration) *http.Transport {
 // The wrapping sits BELOW RetryTransport deliberately: each retry is its own
 // round-trip and so its own span, which is what makes a retry storm visible
 // in a trace instead of hiding inside one long span.
-func instrumentedTransport(next http.RoundTripper, tp trace.TracerProvider, mp metric.MeterProvider) http.RoundTripper {
+func instrumentedTransport(next http.RoundTripper, tp trace.TracerProvider, mp metric.MeterProvider, pathCredential bool) http.RoundTripper {
 	var opts []otelhttp.Option
 	if tp != nil {
 		opts = append(opts, otelhttp.WithTracerProvider(tp))
@@ -82,7 +80,7 @@ func instrumentedTransport(next http.RoundTripper, tp trace.TracerProvider, mp m
 		opts = append(opts, otelhttp.WithMeterProvider(mp))
 	}
 
-	return otelhttp.NewTransport(&attemptSpanAnnotator{next: next}, opts...)
+	return otelhttp.NewTransport(&attemptSpanAnnotator{next: next, pathIsCredential: pathCredential}, opts...)
 }
 
 // resendCountAttr is the semantic-convention attribute for the ordinal number
@@ -103,7 +101,8 @@ func withAttempt(ctx context.Context, attempt int) context.Context {
 // span already exists in the request context. The first attempt carries no
 // resend count, as the semantic conventions require.
 type attemptSpanAnnotator struct {
-	next http.RoundTripper
+	pathIsCredential bool
+	next             http.RoundTripper
 }
 
 func (a *attemptSpanAnnotator) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -112,7 +111,7 @@ func (a *attemptSpanAnnotator) RoundTrip(req *http.Request) (*http.Response, err
 		// value carries a credential for any upstream embedding one in the path
 		// or query (an API key as a path segment, a presigned URL), so write the
 		// redacted rendering over it: SetAttributes replaces an existing key.
-		span.SetAttributes(attribute.String(urlFullAttr, redact.URL(req.URL)))
+		span.SetAttributes(attribute.String(urlFullAttr, diagnosticURL(req.URL, a.pathIsCredential)))
 		if attempt, ok := req.Context().Value(attemptKey{}).(int); ok && attempt > 1 {
 			span.SetAttributes(attribute.Int(resendCountAttr, attempt-1))
 		}

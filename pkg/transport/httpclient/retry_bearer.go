@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+
+	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 // maxBearerStabilityChecks bounds the token re-reads across limiter waits: a
@@ -149,9 +151,12 @@ func (rt *roundTrip) remintBearer(ctx, authBudget context.Context) (outcome stri
 
 	fields := map[string]any{
 		"method":  rt.req.Method,
-		"host":    rt.req.URL.Host,
+		"host":    redact.MaskValues(rt.req.URL.Host),
 		"attempt": rt.attempt,
 		"outcome": outcome,
+	}
+	if rt.t.cfg.LogPath && !rt.t.cfg.PathIsCredential {
+		fields["path"] = redact.Path(rt.req.URL.EscapedPath())
 	}
 	if refreshErr != nil {
 		for k, v := range BearerRefreshFailureFields(refreshErr) {

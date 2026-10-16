@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
+	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 // Retry defaults. Zero-value RetryConfig fields fall back to these so a caller
@@ -28,6 +29,21 @@ const (
 // a sensible default, so a caller that does not care about retry, pacing or
 // deadlines can pass the zero RetryConfig.
 type RetryConfig struct {
+	// LogPath includes a shape-redacted path in retry/recovery fields. It is
+	// ignored when PathIsCredential is true; the default logs host only.
+	LogPath bool
+
+	// PathIsCredential renders only the origin in transport diagnostics and spans.
+	PathIsCredential bool
+	// Debug enables metadata diagnostics. Nil disables them; negative MaxBodyBytes
+	// prevents body previews. Logger is inherited from RetryConfig when absent.
+	Debug *DebugConfig
+	// OnAttempt observes a completed wire attempt before policy evaluation and
+	// limiter feedback. It runs synchronously, may restore a bounded response
+	// preview, and must preserve body bytes/errors and obey the request context.
+	// Nil adds no work. Credential/payload admission remains the observer's duty.
+	OnAttempt func(context.Context, Attempt)
+
 	// TotalTimeout is the http.Client timeout NewRetryClient sets, which spans
 	// ALL attempts including the backoff waits between them and the body read.
 	//
@@ -164,7 +180,15 @@ func NewRetryTransport(cfg RetryConfig) *RetryTransport {
 	// value.
 	timeout := deriveTimeout(&cfg)
 	if cfg.Base == nil {
-		cfg.Base = instrumentedTransport(NewBaseTransport(cfg.PerAttemptTimeout), cfg.TracerProvider, cfg.MeterProvider)
+		cfg.Base = instrumentedTransport(NewBaseTransport(cfg.PerAttemptTimeout), cfg.TracerProvider, cfg.MeterProvider, cfg.PathIsCredential)
+	}
+	if cfg.Debug != nil {
+		diagnostic := *cfg.Debug
+		if diagnostic.Logger == nil {
+			diagnostic.Logger = cfg.Logger
+		}
+		diagnostic.PathIsCredential = cfg.PathIsCredential
+		cfg.Base = NewDebugHTTPTransportWithConfig(cfg.Base, diagnostic)
 	}
 	if cfg.Policy == nil {
 		cfg.Policy = DefaultRetryPolicy{Base: cfg.BaseDelay, Max: cfg.MaxDelay}
@@ -376,6 +400,9 @@ func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, er
 		return nil, rt.budgetSpent(ctx, "while pacing the retry", err)
 	}
 	if err != nil {
+		if rt.authReplayPending && authBudget.Err() != nil && ctx.Err() == nil {
+			rt.t.metrics.observeExhausted(ctx, rt.req, causeBudget)
+		}
 		return nil, err
 	}
 	r, err := rt.authorize(ctx)
@@ -516,6 +543,9 @@ func (rt *roundTrip) send(ctx context.Context, r *http.Request) (*http.Response,
 	resp, err := rt.t.cfg.Base.RoundTrip(r)
 	rt.authReplayPending = false
 	rt.t.metrics.observeAttempt(ctx, rt.req, resp, err)
+	if rt.t.cfg.OnAttempt != nil {
+		rt.t.cfg.OnAttempt(r.Context(), Attempt{Request: r, Response: resp, Err: err, Count: rt.attempt})
+	}
 
 	// Feed the completed attempt to a limiter that learns from responses, so
 	// it sees every reply including the ones no retry follows. This is what
@@ -589,13 +619,17 @@ func (rt *roundTrip) waitBackoff(ctx context.Context, resp *http.Response, err e
 
 	rt.t.metrics.observeRetry(ctx, rt.req, resp, err)
 	rt.policyAttempt++
-	rt.t.logger(ctx).WithFields(map[string]any{
+	fields := map[string]any{
 		"method":  rt.req.Method,
-		"host":    rt.req.URL.Host,
+		"host":    redact.MaskValues(rt.req.URL.Host),
 		"status":  statusOf(resp),
 		"attempt": rt.attempt,
 		"wait":    wait.String(),
-	}).Infof("http retry after rate limit / server error")
+	}
+	if rt.t.cfg.LogPath && !rt.t.cfg.PathIsCredential {
+		fields["path"] = redact.Path(rt.req.URL.EscapedPath())
+	}
+	rt.t.logger(ctx).WithFields(fields).Infof("http retry after rate limit / server error")
 
 	return sleepContext(ctx, wait)
 }

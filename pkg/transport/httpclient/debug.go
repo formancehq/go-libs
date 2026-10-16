@@ -18,6 +18,13 @@ const DefaultMaxBodyBytes = 4096
 
 // DebugConfig bounds what the debug transport writes into a log entry.
 type DebugConfig struct {
+	// MetadataOnly emits structured metadata after the attempt, without body reads.
+	MetadataOnly bool
+	// Logger overrides the context logger when provided.
+	Logger logging.Logger
+	// PathIsCredential omits path, query, fragment and userinfo from diagnostics.
+	PathIsCredential bool
+
 	// MaxBodyBytes caps each request and response body preview: at most
 	// MaxBodyBytes+1 bytes are read to build it, and at most MaxBodyBytes
 	// bytes of redacted text are logged, followed by "...[truncated]" when
@@ -34,16 +41,41 @@ type DebugConfig struct {
 // are bounded, redacted previews. The bytes sent to the server and handed back
 // to the caller are never altered or truncated.
 type httpTransport struct {
-	underlying   http.RoundTripper
-	maxBodyBytes int
+	underlying       http.RoundTripper
+	maxBodyBytes     int
+	logger           logging.Logger
+	pathIsCredential bool
+	metadataOnly     bool
 }
 
 func (h httpTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	logger := logging.FromContext(request.Context())
+	if h.logger != nil {
+		logger = h.logger.WithContext(request.Context())
+	}
 	if !logger.Enabled(logging.DebugLevel) {
 		return h.underlying.RoundTrip(request)
 	}
 
+	if h.metadataOnly {
+		response, err := h.underlying.RoundTrip(request)
+		fields := map[string]any{"attempt": 1, "method": request.Method, "url": diagnosticURL(request.URL, h.pathIsCredential), "request_headers": redact.Headers(request.Header)}
+		if attempt, ok := request.Context().Value(attemptKey{}).(int); ok {
+			fields["attempt"] = attempt
+		}
+		message := "http request completed"
+		if err != nil {
+			fields["error_kind"] = BearerRefreshFailureFields(err)["error_kind"]
+			message = "http request failed"
+		} else if response == nil {
+			message = "http request produced no response"
+		} else {
+			fields["status"] = response.StatusCode
+			fields["response_headers"] = redact.Headers(response.Header)
+		}
+		logger.WithFields(fields).Debug(message)
+		return response, err
+	}
 	dump, outgoing := h.dumpRequest(request)
 	logger.Debug(dump)
 
@@ -55,7 +87,7 @@ func (h httpTransport) RoundTrip(request *http.Request) (*http.Response, error) 
 	dump, err = h.dumpResponse(rsp)
 	logger.Debug(dump)
 	if err != nil {
-		logger.Debugf("failed to dump HTTP response body: %v", err)
+		logger.Debugf("failed to dump HTTP response body: %v", redact.MaskValues(err.Error()))
 	}
 
 	return rsp, nil
@@ -82,8 +114,11 @@ func newDebugHTTPTransport(underlying http.RoundTripper, cfg DebugConfig) *httpT
 	}
 
 	return &httpTransport{
-		underlying:   underlying,
-		maxBodyBytes: maxBodyBytes,
+		underlying:       underlying,
+		maxBodyBytes:     maxBodyBytes,
+		logger:           cfg.Logger,
+		pathIsCredential: cfg.PathIsCredential,
+		metadataOnly:     cfg.MetadataOnly,
 	}
 }
 
@@ -94,9 +129,9 @@ func newDebugHTTPTransport(underlying http.RoundTripper, cfg DebugConfig) *httpT
 // so the caller's request is never modified.
 func (h httpTransport) dumpRequest(req *http.Request) (string, *http.Request) {
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "%s %s %s\r\n", req.Method, redact.RequestURI(req.URL), req.Proto)
+	fmt.Fprintf(&builder, "%s %s %s\r\n", req.Method, h.requestURI(req), req.Proto)
 	if req.Host != "" {
-		fmt.Fprintf(&builder, "Host: %s\r\n", req.Host)
+		fmt.Fprintf(&builder, "Host: %s\r\n", redact.MaskValues(req.Host))
 	}
 	writeRedactedHeaders(&builder, req.Header)
 	builder.WriteString("\r\n")
@@ -203,4 +238,11 @@ func writeRedactedHeaders(builder *strings.Builder, headers http.Header) {
 	for _, name := range names {
 		fmt.Fprintf(builder, "%s: %s\r\n", name, strings.Join(redact.HeaderValues(name, headers[name]), ", "))
 	}
+}
+
+func (h httpTransport) requestURI(req *http.Request) string {
+	if h.pathIsCredential {
+		return diagnosticURL(req.URL, true)
+	}
+	return redact.RequestURI(req.URL)
 }
