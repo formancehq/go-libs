@@ -334,3 +334,18 @@ ManualReader. Exporter ForceFlush alone does not collect. Collection failure,
 freshness and unavailable-versus-observed-zero handling belong to the local view.
 Histogram estimates and collected intervals must not be labelled as exact retained
 sample percentiles or the withdrawn recorder's exact 10/60-second windows.
+
+### Bounded decoded WebSocket work
+
+`websocketclient.EventQueue` owns non-blocking bounded FIFO admission, close/drain,
+reset discard and coherent queue accounting. Callers select drop or coalesce for
+item saturation; encoded-byte rejection is always a drop. `KeyedBuffer` owns
+insertion ordering, replacement-in-place, bounded oldest eviction and drains.
+Both retain encoded-payload bounds without claiming total heap measurement.
+`Event.Origin` and keyed origins use immutable OpenTelemetry span contexts.
+
+Generic correlation uses `observe/traces.AddLinks` for valid deduplicated origins
+and `RecordSpanError` for no-stacktrace error/status recording. Application span
+names/attributes, root selection, capture policy, provider recovery and generation
+fences remain with callers. Broker listeners and a linked list do not supply these
+bounded in-process semantics; no second generic framework is introduced.
