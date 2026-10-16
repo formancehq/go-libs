@@ -249,3 +249,11 @@ from `OnStart`.
 [PYROSCOPE.md](./PYROSCOPE.md) describes the optional native SDK configuration and
 plain lifecycle hook. `pkg/fx/observefx.PyroscopeModule` composes it with existing
 trace correlation; pprof HTTP profiling remains separate.
+
+## Bounded read-only object access
+
+`pkg/storage/object` owns bounded object listing, metadata and conditional reads
+for composed S3/Azure clients and rooted local directories. Credential and CLI
+configuration stays at composition. See [object storage](OBJECT_STORAGE.md) for
+limits, generation and enumeration semantics. AWS IAM also exposes a flag-free
+`Options`/`LoadConfig` API; its existing flag API remains compatible.
