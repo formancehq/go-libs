@@ -91,7 +91,7 @@ func Bytes(data []byte) []byte {
 	out = bearerRe.ReplaceAll(out, []byte("${1}"+Marker))
 	out = headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 
-	return out
+	return redactConfiguredValues(out)
 }
 
 // decodeInertEscapes decodes every JSON escape whose character is inert to
@@ -250,7 +250,14 @@ func HeaderValues(name string, values []string) []string {
 	case urlValuedHeader(name):
 		return headerURLs(values)
 	default:
-		return values
+		if len(values) == 0 || configuredValues.Load() == nil {
+			return values
+		}
+		out := make([]string, len(values))
+		for i, value := range values {
+			out[i] = MaskValues(value)
+		}
+		return out
 	}
 }
 
@@ -292,7 +299,7 @@ func URL(u *url.URL) string {
 		b.WriteString(u.Scheme)
 		b.WriteString("://")
 	}
-	b.WriteString(u.Host)
+	b.WriteString(MaskValues(u.Host))
 	b.WriteString(Path(u.EscapedPath()))
 	if q := query(u.Query()); q != "" {
 		b.WriteString("?")
@@ -337,7 +344,7 @@ func Path(path string) string {
 		return ""
 	}
 
-	segments := strings.Split(path, "/")
+	segments := strings.Split(redactConfiguredURLString(path), "/")
 	for i, segment := range segments {
 		if opaqueSegment(segment) {
 			segments[i] = Marker
@@ -362,7 +369,11 @@ func query(values url.Values) string {
 
 			continue
 		}
-		out[name] = value
+		redacted := make([]string, len(value))
+		for index := range value {
+			redacted[index] = MaskValues(value[index])
+		}
+		out[name] = redacted
 	}
 
 	return out.Encode()
