@@ -52,8 +52,8 @@ func ConfigureValues(values []string) {
 
 		return strings.Compare(left, right)
 	})
-	plainReplacements := make([]string, 0, len(ordered)*2)
-	urlReplacements := make([]string, 0, len(ordered)*2)
+	var plainReplacements []string
+	var urlReplacements []string
 	bounded := make([]string, 0, len(ordered))
 	for _, variant := range ordered {
 		if len(variant) < minUnboundedSecretValue {
