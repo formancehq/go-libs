@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
-	"github.com/uptrace/opentelemetry-go-extra/otellogrus"
 )
 
 type LogrusLogger struct {
@@ -176,12 +175,12 @@ func SetHooks(l *logrus.Logger, otelTraces bool) {
 	}
 
 	hooks := make([]logrus.Hook, 0)
-	hooks = append(hooks, otellogrus.NewHook(otellogrus.WithLevels(
+	hooks = append(hooks, NewSpanEventHook(
 		logrus.PanicLevel,
 		logrus.FatalLevel,
 		logrus.ErrorLevel,
 		logrus.WarnLevel,
-	)), NewTraceHook())
+	), NewTraceHook())
 	for _, hook := range hooks {
 		l.AddHook(hook)
 	}
