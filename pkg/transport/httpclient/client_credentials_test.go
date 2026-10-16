@@ -173,34 +173,24 @@ func TestTokenSourceSingleFlightsConcurrentMintFailure(t *testing.T) {
 	})}
 	source := NewClientCredentialsSource(ClientCredentialsConfig{HTTPClient: client, TokenURL: "https://auth.example/token"})
 
-	// Every caller has to be scheduled and inside Token before the first mint is
-	// allowed to fail, or a goroutine the runtime has not started yet begins its
-	// own flight afterwards and legitimately counts a second call.
-	//
-	// The barrier is what makes that deterministic: each goroutine reports that
-	// it is about to call, and the test waits for all of them before releasing,
-	// so the only remaining window is the handful of instructions between the
-	// report and joining the flight rather than a whole scheduling delay on a
-	// loaded machine.
 	const goroutines = 12
 	start := make(chan struct{})
-	ready := make(chan struct{}, goroutines)
-	errs := make(chan error, goroutines)
+	joined := make(chan struct{}, goroutines)
+	errs := make(chan error, goroutines+1)
 	var wg sync.WaitGroup
+	wg.Go(func() { _, err := source.Token(context.Background()); errs <- err })
+	<-entered
 	for range goroutines {
 		wg.Go(func() {
 			<-start
-			ready <- struct{}{}
-			_, err := source.Token(context.Background())
+			_, err := source.Token(&joinedFlightContext{Context: t.Context(), joined: joined})
 			errs <- err
 		})
 	}
 	close(start)
 	for range goroutines {
-		<-ready
+		<-joined
 	}
-	<-entered
-	time.Sleep(50 * time.Millisecond)
 	close(release)
 	wg.Wait()
 	close(errs)
@@ -373,6 +363,7 @@ func TestTokenSourceSharesATokenClientTimeoutWithHealthyWaiters(t *testing.T) {
 
 	var calls atomic.Int32
 	entered := make(chan struct{})
+	release := make(chan struct{})
 	client := &http.Client{
 		Timeout: 50 * time.Millisecond,
 		Transport: credentialsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -380,6 +371,7 @@ func TestTokenSourceSharesATokenClientTimeoutWithHealthyWaiters(t *testing.T) {
 				close(entered)
 			}
 			<-r.Context().Done()
+			<-release
 
 			return nil, r.Context().Err()
 		}),
@@ -394,16 +386,21 @@ func TestTokenSourceSharesATokenClientTimeoutWithHealthyWaiters(t *testing.T) {
 
 	const waiters = 12
 	start := make(chan struct{})
+	joined := make(chan struct{}, waiters)
 	errs := make(chan error, waiters)
 	var wg sync.WaitGroup
 	for range waiters {
 		wg.Go(func() {
 			<-start
-			_, err := source.Token(context.Background())
+			_, err := source.Token(&joinedFlightContext{Context: t.Context(), joined: joined})
 			errs <- err
 		})
 	}
 	close(start)
+	for range waiters {
+		<-joined
+	}
+	close(release)
 	ownerErr := <-ownerDone
 	wg.Wait()
 	close(errs)
@@ -702,3 +699,16 @@ func TestClientCredentialsTransportIdentityWithoutRendering(t *testing.T) {
 type credentialsUnprintableError struct{}
 
 func (credentialsUnprintableError) Error() string { panic("untrusted transport error rendered") }
+
+// Done is evaluated only after Token has selected the existing flight and
+// released the mutex. The barrier therefore observes membership, not scheduling.
+type joinedFlightContext struct {
+	context.Context
+	joined chan<- struct{}
+	once   sync.Once
+}
+
+func (c *joinedFlightContext) Done() <-chan struct{} {
+	c.once.Do(func() { c.joined <- struct{}{} })
+	return c.Context.Done()
+}
