@@ -244,3 +244,14 @@ invoke the callback. Listener admission failures still return from `OnStart`.
 
 [REDACTION.md](./REDACTION.md) describes configured-value masking on the existing
 redaction primitives and byte-preserving JSON/form capture refusal rules.
+## Token refresh diagnostics
+
+`transport/httpclient.BearerRefreshFailureFields(err)` produces the bounded
+`error_kind` vocabulary used by bearer recovery logs. Context deadline and
+cancellation take precedence. Token endpoint errors may expose
+`HTTPStatusCode() int`; `oauth2.RetrieveError` remains supported. The result
+contains only the error kind and optional integer `token_endpoint_status`.
+The classifier never renders error messages, response bodies, URLs or tokens.
+It reports diagnostics only: it does not authorize replay, select retry policy,
+or turn a status into a permanent credential verdict. Transport timeout-capable
+errors and invalid-token responses retain their existing categories.
