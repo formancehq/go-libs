@@ -238,3 +238,11 @@ calling the optional `grpcserver.WithServeErrorHandler` callback. The callback
 can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
+
+## Bounded read-only object access
+
+`pkg/storage/object` owns bounded object listing, metadata and conditional reads
+for composed S3/Azure clients and rooted local directories. Credential and CLI
+configuration stays at composition. See [object storage](OBJECT_STORAGE.md) for
+limits, generation and enumeration semantics. AWS IAM also exposes a flag-free
+`Options`/`LoadConfig` API; its existing flag API remains compatible.
