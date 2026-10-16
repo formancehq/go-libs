@@ -258,3 +258,21 @@ The shared `serverport.Server.Listen` also honors startup cancellation. It uses
 or advertising a socket, and releases a newly-created listener when cancellation
 is observed before publication. A supplied listener remains caller-owned when
 startup is refused. Both HTTP and gRPC hooks consume this same boundary.
+
+### Startup cancellation compatibility
+
+The listener cancellation correction is unconditional, including when both new
+HTTP options are omitted. Previously an already-cancelled startup context could
+still admit a supplied listener. Startup now returns the context error before
+admission, does not publish readiness, and does not transfer listener ownership.
+`OnStop` after that failed HTTP or gRPC start leaves the supplied listener open;
+the caller must close it. After successful admission, normal lifecycle shutdown
+continues to close the listener. Newly created sockets are closed if cancellation
+is observed before publication.
+
+This differs from the old cancelled-start behavior. The default graceful HTTP
+shutdown policy is unchanged; that does not imply all startup behavior is
+unchanged. Consumers must qualify failed-start cleanup and ownership before
+adoption. The correction's compatibility classification requires maintainer
+review; the default-off HTTP options alone do not establish same-major
+compatibility for this shared listener change.

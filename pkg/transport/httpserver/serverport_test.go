@@ -246,3 +246,23 @@ func TestHookCanceledHostnameStartNeverListens(t *testing.T) {
 	default:
 	}
 }
+
+func TestCanceledHookStartLeavesSuppliedListenerCallerOwned(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	ctx, cancel := context.WithCancel(ContextWithServerInfo(logging.TestingContext()))
+	cancel()
+	hook := NewHook(http.NewServeMux(), WithListener(listener))
+	require.ErrorIs(t, hook.OnStart(ctx), context.Canceled)
+	require.NoError(t, hook.OnStop(t.Context()))
+	require.Empty(t, serverport.Address(ctx, serverPortDiscr))
+	select {
+	case <-serverport.Started(ctx, serverPortDiscr):
+		t.Fatal("failed start published listener")
+	default:
+	}
+	conn, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
+	require.NoError(t, err)
+	_ = conn.Close()
+}
