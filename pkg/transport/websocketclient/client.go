@@ -1,7 +1,7 @@
 // Package websocketclient provides bounded WebSocket dialing and duplex I/O.
 // Supervisor optionally owns transport session lifecycle and bounded raw-frame
-// admission. Protocol messages, subscriptions, recovery and decoded-event queues
-// belong to callers.
+// admission. EventQueue and KeyedBuffer supply bounded decoded-value storage.
+// Protocol messages, subscriptions, recovery and observation policy belong to callers.
 package websocketclient
 
 import (

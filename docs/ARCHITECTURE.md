@@ -274,3 +274,18 @@ snapshots. FrameJob consumes an existing observe/job descriptor; opening a socke
 never runs under a frame job. Byte admission uses the existing weighted semaphore
 with 64 KiB charges and a separate item bound. No generic worker/event-queue
 framework or second connection interface is introduced.
+
+### Bounded decoded WebSocket work
+
+`websocketclient.EventQueue` owns non-blocking bounded FIFO admission, close/drain,
+reset discard and coherent queue accounting. Callers select drop or coalesce for
+item saturation; encoded-byte rejection is always a drop. `KeyedBuffer` owns
+insertion ordering, replacement-in-place, bounded oldest eviction and drains.
+Both retain encoded-payload bounds without claiming total heap measurement.
+`Event.Origin` and keyed origins use immutable OpenTelemetry span contexts.
+
+Generic correlation uses `observe/traces.AddLinks` for valid deduplicated origins
+and `RecordSpanError` for no-stacktrace error/status recording. Application span
+names/attributes, root selection, capture policy, provider recovery and generation
+fences remain with callers. Broker listeners and a linked list do not supply these
+bounded in-process semantics; no second generic framework is introduced.
