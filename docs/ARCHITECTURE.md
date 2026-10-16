@@ -251,3 +251,12 @@ failed delivery with a successful status. The observer sees at most MaxBody+1
 bytes and never bypasses body admission or verification. Capture and redaction
 remain the observer's responsibility. Middleware can retain span lifecycle
 ownership with `UseRequestSpan`, preventing duplicate delivery spans.
+
+## Webhook hook admission
+
+The optional body observer receives the bounded window, including one overrun
+byte, while `http.MaxBytesReader` retains HTTP/1 oversize/close signaling. An
+overrun wins over a simultaneous read error: verification and delivery do not
+run, and the response is 413 without waiting for a missing body remainder.
+Default 405 responses include configured additional methods after HEAD and POST
+in deterministic order. With no hooks, the original method gate is unchanged.

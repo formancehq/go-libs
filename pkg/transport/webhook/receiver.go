@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -133,8 +136,7 @@ type receiver struct {
 }
 
 const (
-	allowedMethods = http.MethodHead + ", " + http.MethodPost
-	spanName       = "webhook.delivery"
+	spanName = "webhook.delivery"
 )
 
 // ServeHTTP implements [http.Handler]. HEAD and rejected methods never touch
@@ -158,7 +160,8 @@ func (rc *receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rc.respond(w, r, http.StatusMethodNotAllowed)
 			return
 		}
-		w.Header().Set("Allow", allowedMethods)
+		methods := slices.Sorted(maps.Keys(rc.cfg.MethodHandlers))
+		w.Header().Set("Allow", strings.Join(append([]string{http.MethodHead, http.MethodPost}, methods...), ", "))
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 
 		return
@@ -234,11 +237,14 @@ func (rc *receiver) readBody(w http.ResponseWriter, r *http.Request) ([]byte, er
 	}
 
 	if rc.cfg.ObserveBody != nil {
-		body, err := io.ReadAll(io.LimitReader(r.Body, rc.maxBody+1))
-		if err == nil && int64(len(body)) > rc.maxBody {
+		// Tee the actual bounded read so the observer retains the overrun
+		// byte while MaxBytesReader still signals HTTP/1 connection closure.
+		var window bytes.Buffer
+		_, err := io.Copy(io.Discard, http.MaxBytesReader(w, io.NopCloser(io.TeeReader(r.Body, &window)), rc.maxBody))
+		if int64(window.Len()) > rc.maxBody {
 			err = &http.MaxBytesError{Limit: rc.maxBody}
 		}
-		return body, err
+		return window.Bytes(), err
 	}
 	return io.ReadAll(http.MaxBytesReader(w, r.Body, rc.maxBody))
 }
