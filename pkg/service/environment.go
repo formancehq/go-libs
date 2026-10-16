@@ -17,6 +17,8 @@ var ErrInvalidEnvironmentValue = errors.New("invalid environment value")
 // BindEnvToFlagSetExact binds environment values after CLI parsing. Changed
 // flags win; present empty strings are values. Strings are preserved byte for
 // byte. String slices and arrays require JSON arrays containing only strings.
+// Read collections through their typed pointer or pflag.SliceValue.GetSlice;
+// pflag convenience getters may lose empty items and normalize CRLF via CSV.
 // DEBUG is never bound. Diagnostics remain redacted even when debug is enabled.
 // Successful bindings use FlagSet.Set bookkeeping, including Changed and Visit.
 // Binding is not transactional: earlier successful flags remain set on error.

@@ -265,3 +265,51 @@ func (*rejectedSliceValue) Replace(values []string) error {
 	return fmt.Errorf("parser payload: %v", values)
 }
 func (*rejectedSliceValue) GetSlice() []string { return nil }
+
+// These cases distinguish stored-value correctness from pflag's CSV-based
+// convenience getters. Consumers requiring exact values must use GetSlice or
+// the typed pointer, not a String representation followed by parsing.
+func TestExactEnvironmentLosslessCollectionRetrieval(t *testing.T) {
+	for _, kind := range []string{"slice", "array"} {
+		for _, tc := range []struct {
+			name        string
+			input       string
+			exact       []string
+			convenience []string
+		}{
+			{"sole-empty", `[""]`, []string{""}, []string{}},
+			{"CRLF", `["line\r\nnext"]`, []string{"line\r\nnext"}, []string{"line\nnext"}},
+		} {
+			t.Run(kind+"/"+tc.name, func(t *testing.T) {
+				t.Setenv("QUALIFICATION_ITEMS", tc.input)
+				flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+				var pointer *[]string
+				if kind == "slice" {
+					pointer = flags.StringSlice("qualification-items", nil, "")
+				} else {
+					pointer = flags.StringArray("qualification-items", nil, "")
+				}
+				original := flags.Lookup("qualification-items").Value
+				require.NoError(t, BindEnvToFlagSetExact(flags))
+				require.Same(t, original, flags.Lookup("qualification-items").Value)
+				require.Equal(t, tc.exact, *pointer)
+				slice, ok := flags.Lookup("qualification-items").Value.(pflag.SliceValue)
+				require.True(t, ok)
+				require.Equal(t, tc.exact, slice.GetSlice())
+				var convenience []string
+				var err error
+				if kind == "slice" {
+					convenience, err = flags.GetStringSlice("qualification-items")
+				} else {
+					convenience, err = flags.GetStringArray("qualification-items")
+				}
+				require.NoError(t, err)
+				require.Equal(t, tc.convenience, convenience)
+				require.NotEqual(t, tc.exact, convenience)
+				// Reading through convenience getters does not mutate the exact storage.
+				require.Equal(t, tc.exact, slice.GetSlice())
+				require.Equal(t, tc.exact, *pointer)
+			})
+		}
+	}
+}

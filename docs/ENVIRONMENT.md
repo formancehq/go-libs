@@ -67,6 +67,25 @@ Successful bindings set `Changed` and participate in `Visit` and `NFlag`, like
 earlier successful flags remain bound if a later flag fails. Configure and execute
 command instances serially; pflag command configuration is not concurrency safe.
 
+### Lossless collection retrieval
+
+The binding guarantee applies to the stored values. To preserve every collection
+item, callers must read the typed pointer registered with pflag, or assert
+`pflag.SliceValue` on the original flag value and call `GetSlice()` directly:
+
+```go
+items := cmd.Flag("endpoints").Value.(pflag.SliceValue).GetSlice()
+```
+
+With the pinned pflag version, `GetStringSlice` and `GetStringArray` reconstruct
+values through a CSV round trip. They return an empty collection for `[""]` and
+normalize CRLF within an item to LF. `Value.String()` is also a CSV display
+representation, not a lossless serialization. Exact binding does not change these
+third-party getters. Use the direct retrieval paths above for configuration and
+secret values that require exact item preservation.
+
+### Safe errors
+
 Failures return `*EnvironmentBindingError` with the environment and flag names and
 wrap `ErrInvalidEnvironmentValue`. Parser errors and their input are discarded,
 including in debug mode and through error unwrapping. `DEBUG` is always ignored;
