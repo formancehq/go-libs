@@ -77,7 +77,7 @@ func rejectSelectedEnvErrorsBeforeRun(cmd *cobra.Command, bindingErrors map[*pfl
 			selectedError = bindingErrors[flag]
 		})
 		if selectedError != nil {
-			return selectedError
+			return environmentBindingErrorForCommand(selectedError, cmd)
 		}
 		if originalArgs != nil {
 			return originalArgs(cmd, args)
