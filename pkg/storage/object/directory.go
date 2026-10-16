@@ -58,6 +58,9 @@ func metadata(key string, info fs.FileInfo) Metadata {
 	return Metadata{Key: key, Size: info.Size(), LastModified: info.ModTime().UTC(), Revision: revision(info)}
 }
 func (d *Directory) Stat(ctx context.Context, key string) (Metadata, error) {
+	if err := ctx.Err(); err != nil {
+		return Metadata{}, err
+	}
 	if d.root == nil {
 		opened, err := OpenDirectory(d.path, d.limits)
 		if err != nil {
@@ -65,9 +68,6 @@ func (d *Directory) Stat(ctx context.Context, key string) (Metadata, error) {
 		}
 		defer func() { _ = opened.Close() }()
 		return opened.Stat(ctx, key)
-	}
-	if err := ctx.Err(); err != nil {
-		return Metadata{}, err
 	}
 	if !validKey(key) {
 		return Metadata{}, ErrInvalid
@@ -82,6 +82,9 @@ func (d *Directory) Stat(ctx context.Context, key string) (Metadata, error) {
 	return metadata(key, info), nil
 }
 func (d *Directory) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ReadResult{}, err
+	}
 	if d.root == nil {
 		opened, err := OpenDirectory(d.path, d.limits)
 		if err != nil {
@@ -89,9 +92,6 @@ func (d *Directory) Read(ctx context.Context, req ReadRequest) (ReadResult, erro
 		}
 		defer func() { _ = opened.Close() }()
 		return opened.Read(ctx, req)
-	}
-	if err := ctx.Err(); err != nil {
-		return ReadResult{}, err
 	}
 	cap, err := readBound(req, d.limits.MaxBytes)
 	if err != nil {
@@ -154,6 +154,9 @@ func (d *Directory) Read(ctx context.Context, req ReadRequest) (ReadResult, erro
 // Each call is bounded; concurrent mutations may change enumeration positions.
 // Symlinks are skipped; all opens remain constrained by os.Root.
 func (d *Directory) ListPage(ctx context.Context, req ListRequest) (Page, error) {
+	if err := ctx.Err(); err != nil {
+		return Page{}, err
+	}
 	if d.root == nil {
 		opened, err := OpenDirectory(d.path, d.limits)
 		if err != nil {
@@ -161,9 +164,6 @@ func (d *Directory) ListPage(ctx context.Context, req ListRequest) (Page, error)
 		}
 		defer func() { _ = opened.Close() }()
 		return opened.ListPage(ctx, req)
-	}
-	if err := ctx.Err(); err != nil {
-		return Page{}, err
 	}
 	if req.Limit <= 0 {
 		return Page{}, ErrInvalid

@@ -468,3 +468,21 @@ func TestDirectoryChunkedListingPreservesWireMetadataAndUTC(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLazyDirectoryCancellationPrecedesRootAccess(t *testing.T) {
+	bucket, err := NewDirectory(filepath.Join(t.TempDir(), "missing"), Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := bucket.Stat(ctx, "item"); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if _, err := bucket.Read(ctx, ReadRequest{Key: "item"}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if _, err := bucket.ListPage(ctx, ListRequest{Limit: 1}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+}
