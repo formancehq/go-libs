@@ -406,3 +406,136 @@ func TestReceiverLogsRejectionsWithoutRequestContent(t *testing.T) {
 		})
 	}
 }
+
+func TestReceiverAdditionalMethodAndExactResponse(t *testing.T) {
+	p := &probe{}
+	cfg := p.config(16)
+	cfg.MethodHandlers = map[string]http.Handler{http.MethodGet: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = io.WriteString(w, r.URL.Query().Get("challenge"))
+	})}
+	cfg.Response = func(w http.ResponseWriter, _ *http.Request, status int) {
+		w.Header().Set("X-Consumer", "response")
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, "exact")
+	}
+	h := newReceiver(t, cfg)
+	r := httptest.NewRecorder()
+	h.ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/?challenge=verify", nil))
+	require.Equal(t, "verify", r.Body.String())
+	require.Empty(t, p.verified)
+	r = serve(h, http.MethodPost, strings.NewReader("body"))
+	require.Equal(t, 200, r.Code)
+	require.Equal(t, "exact", r.Body.String())
+	require.Equal(t, "response", r.Header().Get("X-Consumer"))
+	require.Empty(t, r.Header().Get("X-Content-Type-Options"))
+	for _, method := range []string{http.MethodHead, http.MethodPost} {
+		cfg.MethodHandlers = map[string]http.Handler{method: http.NotFoundHandler()}
+		_, err := webhook.NewReceiver(cfg)
+		require.Error(t, err)
+	}
+}
+
+func TestReceiverDeliveryClassificationCannotAcceptFailure(t *testing.T) {
+	for _, status := range []int{400, 503, 200, 0, 600} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			p := &probe{deliverErr: errors.New("sensitive delivery detail")}
+			cfg := p.config(16)
+			cfg.DeliveryErrorStatus = func(error) int { return status }
+			r := serve(newReceiver(t, cfg), http.MethodPost, strings.NewReader("body"))
+			want := status
+			if status < 400 || status > 599 {
+				want = 503
+			}
+			require.Equal(t, want, r.Code)
+			require.NotContains(t, r.Body.String(), "sensitive")
+			p.verifyErr = errors.New("verification rejected")
+			r = serve(newReceiver(t, cfg), http.MethodPost, strings.NewReader("body"))
+			require.Equal(t, 401, r.Code)
+		})
+	}
+}
+
+func TestReceiverObservedOverrunIsBoundedAndNeverVerified(t *testing.T) {
+	p := &probe{}
+	cfg := p.config(16)
+	var observed int
+	cfg.ObserveBody = func(_ context.Context, _ *http.Request, body []byte, err error) {
+		observed++
+		require.Len(t, body, 17)
+		_, ok := errors.AsType[*http.MaxBytesError](err)
+		require.True(t, ok)
+	}
+	reader := &countingReader{r: strings.NewReader(strings.Repeat("x", 100))}
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Body = io.NopCloser(reader)
+	req.ContentLength = 100
+	r := httptest.NewRecorder()
+	newReceiver(t, cfg).ServeHTTP(r, req)
+	require.Equal(t, 413, r.Code)
+	require.Equal(t, int64(17), reader.read)
+	require.Equal(t, 1, observed)
+	require.Empty(t, p.verified)
+	require.Empty(t, p.delivered)
+}
+
+func TestReceiverPreparedTraceContextReachesDelivery(t *testing.T) {
+	p := &probe{}
+	cfg := p.config(16)
+	id := trace.TraceID{1, 2, 3}
+	cfg.PrepareContext = func(r *http.Request) context.Context {
+		return trace.ContextWithRemoteSpanContext(r.Context(), trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID: id, SpanID: trace.SpanID{1}, TraceFlags: trace.FlagsSampled, Remote: true,
+		}))
+	}
+	provider := sdktrace.NewTracerProvider()
+	old := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() { otel.SetTracerProvider(old); _ = provider.Shutdown(t.Context()) })
+	cfg.Deliver = func(ctx context.Context, _ webhook.Delivery) error {
+		require.Equal(t, id, trace.SpanContextFromContext(ctx).TraceID())
+		return nil
+	}
+	require.Equal(t, 200, serve(newReceiver(t, cfg), http.MethodPost, strings.NewReader("body")).Code)
+}
+
+func TestReceiverCanReuseMiddlewareSpan(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	old := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() { otel.SetTracerProvider(old); _ = provider.Shutdown(t.Context()) })
+	ctx, span := provider.Tracer("middleware").Start(t.Context(), "existing-delivery")
+	cfg := (&probe{}).config(16)
+	cfg.UseRequestSpan = true
+	cfg.Deliver = func(deliveryCtx context.Context, _ webhook.Delivery) error {
+		require.Equal(t, span.SpanContext(), trace.SpanContextFromContext(deliveryCtx))
+		return nil
+	}
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", strings.NewReader("body"))
+	newReceiver(t, cfg).ServeHTTP(httptest.NewRecorder(), req)
+	require.Empty(t, recorder.Ended(), "receiver must not end middleware-owned span")
+	span.End()
+	require.Len(t, recorder.Ended(), 1)
+}
+
+func TestReceiverObservedBodyStillVerifiesBeforeDelivery(t *testing.T) {
+	var phases []string
+	cfg := webhook.Config{
+		ObserveBody: func(_ context.Context, _ *http.Request, body []byte, err error) {
+			require.NoError(t, err)
+			require.Equal(t, "body", string(body))
+			phases = append(phases, "body")
+		},
+		Verifier: webhook.VerifierFunc(func(context.Context, *http.Request, []byte) error {
+			phases = append(phases, "verify")
+			return nil
+		}),
+		Deliver: func(context.Context, webhook.Delivery) error {
+			phases = append(phases, "deliver")
+			return nil
+		},
+	}
+	require.Equal(t, 200, serve(newReceiver(t, cfg), http.MethodPost, strings.NewReader("body")).Code)
+	require.Equal(t, []string{"body", "verify", "deliver"}, phases)
+}

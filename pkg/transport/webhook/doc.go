@@ -31,4 +31,13 @@
 //     ask the sender to redeliver;
 //   - routing: the receiver is a plain [net/http.Handler], mounted on whatever
 //     mux and path the consumer chooses, behind whatever middleware it uses.
+//
+// Optional Config hooks support additional method handlers, complete response
+// rendering, permanent delivery rejection classification and incoming context
+// preparation. Existing callers retain the default methods, status mapping and
+// tracing. An ObserveBody callback receives at most MaxBody+1 bytes, including
+// failed bounded reads, before verification; it must apply its own capture and
+// redaction policy. UseRequestSpan lets middleware retain ownership of tracing
+// without a second delivery span. None of these hooks bypass body admission or
+// verification before Deliver.
 package webhook
