@@ -1,7 +1,6 @@
 package iam
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,7 +73,7 @@ func TestLoadConfigRetainsWorkloadAndProfileRoleSelection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			minted, err := cfg.Credentials.Retrieve(context.Background())
+			minted, err := cfg.Credentials.Retrieve(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}

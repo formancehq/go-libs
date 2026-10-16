@@ -10,6 +10,9 @@ migrates or opts in.
 [METRICS.md](./METRICS.md) covers the namespace prefix for a service's own
 metrics.
 
+[ENVIRONMENT.md](./ENVIRONMENT.md) covers environment binding diagnostics and
+opt-in exact binding with CLI precedence.
+
 ## Dependency rules checklist
 
 Before submitting a PR, verify:
