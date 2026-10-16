@@ -29,7 +29,10 @@ func URL(ctx context.Context) string {
 	return fmt.Sprintf("http://%s", serverport.Address(ctx, serverPortDiscr))
 }
 
-func startServer(ctx context.Context, s *serverport.Server, handler http.Handler, options ...func(server *http.Server)) (func(ctx context.Context) error, error) {
+func startServer(ctx context.Context, s *serverport.Server, handler http.Handler, options *ServerOptions) (func(context.Context) error, error) {
+	if options == nil {
+		options = &ServerOptions{}
+	}
 
 	if err := s.Listen(ctx); err != nil {
 		return nil, err
@@ -40,24 +43,33 @@ func startServer(ctx context.Context, s *serverport.Server, handler http.Handler
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-	for _, option := range options {
+	for _, option := range options.httpServerOpts {
 		option(srv)
 	}
 
 	go func() {
 		if err := srv.Serve(s.Listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logging.FromContext(ctx).Errorf("failed to serve: %v", err)
+			if options.serveErrorHandler != nil {
+				options.serveErrorHandler(err)
+			}
 		}
 	}()
 
 	return func(ctx context.Context) error {
-		return srv.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
+		if err != nil && options.closeOnShutdownError {
+			_ = srv.Close()
+		}
+		return err
 	}, nil
 }
 
 type ServerOptions struct {
-	serverOptions  []serverport.ServerOpts
-	httpServerOpts []func(server *http.Server)
+	closeOnShutdownError bool
+	serveErrorHandler    func(error)
+	serverOptions        []serverport.ServerOpts
+	httpServerOpts       []func(server *http.Server)
 }
 
 type ServerOptionModifier func(server *ServerOptions)
@@ -82,6 +94,20 @@ func WithHttpServerOpts(opts ...func(server *http.Server)) ServerOptionModifier 
 	}
 }
 
+// WithCloseOnShutdownError closes active connections if graceful shutdown fails.
+// OnStop still returns the original shutdown error. The default leaves connections
+// open so the caller can decide how to recover from a failed drain.
+func WithCloseOnShutdownError() ServerOptionModifier {
+	return func(options *ServerOptions) { options.closeOnShutdownError = true }
+}
+
+// WithServeErrorHandler observes an unexpected Serve failure after it is logged.
+// It is not called for normal shutdown or listen errors. The callback runs on
+// the serving goroutine and must return promptly; it must not wait for OnStop.
+func WithServeErrorHandler(handler func(error)) ServerOptionModifier {
+	return func(options *ServerOptions) { options.serveErrorHandler = handler }
+}
+
 func NewHook(handler http.Handler, serverOptionModifiers ...ServerOptionModifier) Hook {
 	var (
 		close func(ctx context.Context) error
@@ -104,7 +130,7 @@ func NewHook(handler http.Handler, serverOptionModifiers ...ServerOptionModifier
 			defer func() {
 				logging.FromContext(ctx).Infof("HTTP server started")
 			}()
-			close, err = startServer(ctx, server, handler, serverOptions.httpServerOpts...)
+			close, err = startServer(ctx, server, handler, serverOptions)
 			return err
 		},
 		OnStop: func(ctx context.Context) error {
