@@ -449,3 +449,9 @@ shape-redacted path only when the path is not declared a credential. All use the
 shared configured-value masking state. Caller-supplied base transports continue
 to own their own tracing. A pending bearer replay that expires while pacing
 records budget exhaustion once while preserving the wait's original error.
+
+## Context-aware client credentials
+
+[CLIENT_CREDENTIALS.md](./CLIENT_CREDENTIALS.md) describes the bounded token
+exchange and per-call-context cache composed directly with `httpclient` bearer
+recovery. Authentication policy stays with callers.
