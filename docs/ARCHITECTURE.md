@@ -233,8 +233,13 @@ cancellation therefore holds the hook past the deadline; Fx still returns at
 the budget.
 
 
-An unexpected gRPC serving failure withdraws the configured health server before
-calling the optional `grpcserver.WithServeErrorHandler` callback. The callback
-can request application shutdown; it must return promptly and must not wait for
-`OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
-invoke the callback. Listener admission failures still return from `OnStart`.
+A non-nil `grpcserver.WithServeErrorHandler` callback opts into withdrawing the
+configured health server before reporting an unexpected gRPC serving failure.
+Withdrawal affects every named service on that probe, including services sharing
+it with another hook. The callback can request application shutdown; it must
+return promptly and must not wait for `OnStop`, because shutdown joins the serving
+goroutine. Without a handler, including an explicitly nil handler, serving
+failures are logged and health remains under the existing lifecycle and caller
+control. `OnStop` still withdraws the configured probe before draining. Normal
+shutdown does not invoke the callback. Listener admission failures still return
+from `OnStart`.
