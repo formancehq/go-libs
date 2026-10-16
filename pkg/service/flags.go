@@ -10,16 +10,21 @@ import (
 )
 
 // EnvironmentBindingError identifies a rejected environment setting without
-// including its value in the diagnostic. The original parser error remains
-// available through errors.As/errors.Is; callers must not log an unwrapped
+// including its value in the diagnostic unless debug mode is enabled.
+// The original parser error remains available through errors.As/errors.Is;
+// callers must not log an unwrapped
 // parser error because it may include the rejected value.
 type EnvironmentBindingError struct {
 	EnvironmentVariable string
 	FlagName            string
 	cause               error
+	debug               bool
 }
 
 func (e *EnvironmentBindingError) Error() string {
+	if e.debug {
+		return fmt.Sprintf("binding environment variable %s to flag --%s: %v", e.EnvironmentVariable, e.FlagName, e.cause)
+	}
 	return fmt.Sprintf("binding environment variable %s to flag --%s: invalid value", e.EnvironmentVariable, e.FlagName)
 }
 
@@ -50,10 +55,10 @@ func BindEnvToCommand(cmd *cobra.Command) {
 // malformed-value rejection until after CLI parsing.
 func BindEnvToCommandWithError(cmd *cobra.Command) error {
 	if err := BindEnvToFlagSetWithError(cmd.Flags()); err != nil {
-		return err
+		return environmentBindingErrorForCommand(err, cmd)
 	}
 	if err := BindEnvToFlagSetWithError(cmd.PersistentFlags()); err != nil {
-		return err
+		return environmentBindingErrorForCommand(err, cmd)
 	}
 
 	for _, subCmd := range cmd.Commands() {
@@ -79,7 +84,11 @@ func BindEnvToFlagSet(set *pflag.FlagSet) {
 // values. Callers using service.Execute should use Execute's integrated
 // binding instead.
 func BindEnvToFlagSetWithError(set *pflag.FlagSet) error {
-	return bindEnvToFlagSet(set, true)
+	err := bindEnvToFlagSet(set, true)
+	if binding, ok := err.(*EnvironmentBindingError); ok {
+		binding.debug, _ = set.GetBool(DebugFlag)
+	}
+	return err
 }
 
 func bindEnvToFlagSet(set *pflag.FlagSet, failFast bool) error {
@@ -124,4 +133,18 @@ func bindEnvToFlag(set *pflag.FlagSet, flag *pflag.Flag) error {
 	}
 
 	return nil
+}
+
+// Resolve debug mode at the reporting boundary: Execute binds before CLI parsing,
+// while direct command binding runs after parsing. Flag searches inherited flags
+// as well, so a root persistent --debug applies to descendant commands.
+func environmentBindingErrorForCommand(err error, cmd *cobra.Command) error {
+	binding, ok := err.(*EnvironmentBindingError)
+	if !ok {
+		return err
+	}
+	copy := *binding
+	debug := cmd.Flag(DebugFlag)
+	copy.debug = debug != nil && debug.Value.Type() == "bool" && debug.Value.String() == "true"
+	return &copy
 }
