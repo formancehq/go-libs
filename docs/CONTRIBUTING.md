@@ -68,3 +68,5 @@ Key rules:
 - Unit tests go alongside the code (`foo_test.go` next to `foo.go`)
 - Integration tests that need containers use helpers from `testing/platform/`
 - Test service scaffolding is in `testing/testservice/`
+
+[SECRET-FLAGS.md](./SECRET-FLAGS.md) covers opt-in secret flag collection and file resolution.
