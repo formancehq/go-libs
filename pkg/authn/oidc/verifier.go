@@ -170,6 +170,7 @@ func CheckSignature(ctx context.Context, token string, payload []byte, supported
 
 	signedPayload, err := set.VerifySignature(ctx, jws)
 	if err != nil {
+		logRetiredSigningKeyRejection(ctx, jws, retiredKey())
 		return "", fmt.Errorf("%w (%v)", ErrSignatureInvalid, err)
 	}
 
