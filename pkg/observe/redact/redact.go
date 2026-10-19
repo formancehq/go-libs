@@ -163,11 +163,12 @@ func Reader(r io.Reader, maxBytes int) string {
 	// Normalize once before either matching pass.
 	data = decodeInertEscapes(data)
 	configured := configuredValues.Load()
+	var tail []redaction
 	if truncated {
-		data = maskConfiguredTail(data, configured)
+		tail = configuredTailRedactions(data, configured)
 	}
 
-	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, configured)))
+	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, configured, tail...)))
 	if truncated || len(s) > maxBytes {
 		s = s[:min(len(s), maxBytes)] + "...[truncated]"
 	}

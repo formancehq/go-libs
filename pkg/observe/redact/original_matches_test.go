@@ -3,6 +3,7 @@ package redact
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -143,5 +144,110 @@ func TestReaderPreservesEscapeInterpretationAndExactWindow(t *testing.T) {
 	const limit = len(`safe=\\u0061\nz`)
 	if got := Reader(reader, limit); got != input[:limit]+"...[truncated]" || reader.read != limit+1 {
 		t.Fatalf("inert-escape boundary or bounded read changed: %q (%d)", got, reader.read)
+	}
+}
+
+func TestReaderConfiguredRepresentationsAtEveryEscapeCut(t *testing.T) {
+	secret := `onlyAlphabetic09-._~configured/with+symbols`
+	ConfigureValues([]string{secret})
+	t.Cleanup(func() { ConfigureValues(nil) })
+	for variantIndex, variant := range valueVariants(secret) {
+		var lower, upper strings.Builder
+		for _, c := range []byte(variant) {
+			if _, ok := inertEscape([]byte(fmt.Sprintf(`\u%04x`, c))); ok {
+				fmt.Fprintf(&lower, `\u%04x`, c)
+				fmt.Fprintf(&upper, `\u%04X`, c)
+			} else {
+				lower.WriteByte(c)
+				upper.WriteByte(c)
+			}
+		}
+		for spellingIndex, spelling := range []string{variant, lower.String(), upper.String(), strings.ReplaceAll(variant, "/", `\/`)} {
+			for visible := 1; visible < len(spelling); visible++ {
+				const prefix = "unknown="
+				limit := len(prefix) + visible
+				reader := &cappedCredentialReader{reader: strings.NewReader(prefix + spelling + " remainder")}
+				want := prefix + Marker
+				want = want[:min(len(want), limit)] + "...[truncated]"
+				if got := Reader(reader, limit); got != want {
+					t.Fatalf("variant %d spelling %d cut %d: got %q, want %q", variantIndex, spellingIndex, visible, got, want)
+				}
+				if reader.read != limit+1 {
+					t.Fatalf("read %d bytes, want %d", reader.read, limit+1)
+				}
+			}
+		}
+	}
+}
+
+func TestReaderPartialEscapeUnambiguousControls(t *testing.T) {
+	ConfigureValues([]string{`onlyalphabeticconfiguredcredential/with+symbols`})
+	t.Cleanup(func() { ConfigureValues(nil) })
+	for _, window := range []string{
+		`safe=zzzz\u004`,  // No configured prefix can continue with this escape.
+		`safe=only\u004`,  // The configured next character is 'a', not this code prefix.
+		`safe=only\\u006`, // The backslash is escaped, not an incomplete Unicode escape.
+		`safe=zzzz\x`,     // Unsupported escapes retain their existing interpretation.
+	} {
+		reader := &cappedCredentialReader{reader: strings.NewReader(window + " remainder")}
+		limit := len(window) - 1
+		if got := Reader(reader, limit); got != window[:limit]+"...[truncated]" || reader.read != limit+1 {
+			t.Fatalf("unambiguous window/read changed: got %q (%d)", got, reader.read)
+		}
+	}
+	ConfigureValues(nil)
+	window := `unknown=only\u006`
+	if got := Reader(strings.NewReader(window+" remainder"), len(window)-1); got != window[:len(window)-1]+"...[truncated]" {
+		t.Fatalf("unconfigured diagnostic contract changed: %q", got)
+	}
+}
+
+func TestReaderMasksEveryPartialUnicodeEscapeAfterConfiguredPrefix(t *testing.T) {
+	ConfigureValues([]string{`onlyalphabeticconfiguredcredential/with+symbols`})
+	t.Cleanup(func() { ConfigureValues(nil) })
+	const prefix = "unknown="
+	const observed = "only"
+	const escape = `\u0061`
+	for offset := 1; offset < len(escape); offset++ {
+		t.Run(fmt.Sprintf("escape-bytes-%d", offset), func(t *testing.T) {
+			window := prefix + observed + escape[:offset]
+			limit := len(window) - 1
+			reader := &cappedCredentialReader{reader: strings.NewReader(prefix + observed + escape + "lphabeticconfiguredcredential/with+symbols remainder")}
+			want := prefix + Marker
+			want = want[:min(len(want), limit)] + "...[truncated]"
+			if got := Reader(reader, limit); got != want {
+				t.Fatalf("partial Unicode escape exposed configured prefix: got %q, want %q", got, want)
+			}
+			if reader.read != limit+1 {
+				t.Fatalf("read %d bytes, want %d", reader.read, limit+1)
+			}
+		})
+	}
+}
+
+func TestReaderKeepsLiteralConfiguredEscapePrefixesProtected(t *testing.T) {
+	t.Cleanup(func() { ConfigureValues(nil) })
+	for _, secret := range []string{
+		`only\literalconfiguredcredential/with+symbols`,
+		`literal\unicodeconfiguredtail`,
+		`only\u-prefixliteralconfiguredcredential/with+symbols`,
+		`\u-prefixliteralconfiguredcredential/with+symbols`,
+	} {
+		ConfigureValues([]string{secret})
+		for variantIndex, variant := range valueVariants(secret) {
+			for visible := 1; visible < len(variant); visible++ {
+				const prefix = "unknown="
+				limit := len(prefix) + visible
+				reader := &cappedCredentialReader{reader: strings.NewReader(prefix + variant + " remainder")}
+				want := prefix + Marker
+				want = want[:min(len(want), limit)] + "...[truncated]"
+				if got := Reader(reader, limit); got != want {
+					t.Fatalf("literal credential variant %d cut %d: got %q, want %q", variantIndex, visible, got, want)
+				}
+				if reader.read != limit+1 {
+					t.Fatalf("read %d bytes, want %d", reader.read, limit+1)
+				}
+			}
+		}
 	}
 }

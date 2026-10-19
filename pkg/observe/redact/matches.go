@@ -14,8 +14,8 @@ type redaction struct {
 	prefix     string
 }
 
-func redactDiagnosticValues(data []byte, maskBare bool, configured *valueReplacer) []byte {
-	ranges := namedValueRedactions(data, maskBare)
+func redactDiagnosticValues(data []byte, maskBare bool, configured *valueReplacer, additional ...redaction) []byte {
+	ranges := append(namedValueRedactions(data, maskBare), additional...)
 	if configured != nil {
 		value := string(data)
 		for _, variant := range configured.variants {
@@ -92,25 +92,62 @@ func applyRedactions(data []byte, ranges []redaction) []byte {
 
 // A detection window can end partway through any configured representation.
 // A matching prefix at that edge is ambiguous; mask it without reading ahead.
-func maskConfiguredTail(data []byte, configured *valueReplacer) []byte {
+func configuredTailRedactions(data []byte, configured *valueReplacer) []redaction {
 	if configured == nil {
-		return data
+		return nil
 	}
 	value := string(data)
 	start := len(data)
+	end := incompleteEscapeStart(value)
 	for _, variant := range configured.variants {
-		for index := max(0, len(value)-len(variant)+1); index < start; index++ {
+		for index := max(0, end-len(variant)+1); index < start; index++ {
 			if len(variant) < minUnboundedSecretValue && index > 0 && credentialTokenByte(value[index-1]) {
 				continue
 			}
-			if strings.HasPrefix(variant, value[index:]) {
+			rawMatch := strings.HasPrefix(variant, value[index:])
+			inertMatch := false
+			if end < len(value) && index <= end {
+				prefix := value[index:end]
+				inertMatch = len(prefix) < len(variant) && strings.HasPrefix(variant, prefix) &&
+					partialInertEscapeMatches(value[end:], variant[len(prefix)])
+			}
+			if rawMatch || inertMatch {
 				start = index
 				break
 			}
 		}
 	}
 	if start == len(data) {
-		return data
+		return nil
 	}
-	return append(bytes.Clone(data[:start]), Marker...)
+	return []redaction{{start: start, end: len(data)}}
+}
+
+// Complete escapes have already been normalized. Only an unpaired final
+// backslash, optionally followed by an unfinished Unicode escape, can still
+// hide the next configured byte. An escaped backslash is literal input.
+func incompleteEscapeStart(value string) int {
+	index := strings.LastIndexByte(value, '\\')
+	if index < 0 || len(value)-index >= len(`\u0000`) {
+		return len(value)
+	}
+	first := index
+	for first > 0 && value[first-1] == '\\' {
+		first--
+	}
+	if (index-first)%2 != 0 {
+		return len(value)
+	}
+	if tail := value[index:]; len(tail) == 1 || strings.HasPrefix(tail, `\u`) {
+		return index
+	}
+	return len(value)
+}
+
+func partialInertEscapeMatches(partial string, next byte) bool {
+	const hex = "0123456789abcdef"
+	escape := []byte{'\\', 'u', '0', '0', hex[next>>4], hex[next&15]}
+	_, inert := inertEscape(escape)
+	return inert && (strings.HasPrefix(string(escape), strings.ToLower(partial)) ||
+		next == '/' && strings.HasPrefix(`\/`, partial))
 }

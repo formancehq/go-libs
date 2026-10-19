@@ -24,7 +24,13 @@ a truncation indicator even when the original input fit within the cap. When the
 bounded detection window ends inside a possible configured representation, Reader
 masks that ambiguous tail without reading beyond the existing cap-plus-one limit.
 Reader normalizes supported inert JSON escapes once before both tail detection
-and diagnostic matching. Each call uses one immutable configured-value snapshot.
+and diagnostic matching. If that window ends inside a supported escape that
+could continue a configured prefix, the incomplete escape and matching prefix
+are masked together without reading further. Tail ranges join full matches
+before replacement so they cannot fragment a complete credential. Literal
+configured backslash prefixes are still matched. Escaped backslashes and incompatible
+escape prefixes retain their existing interpretation. Each call uses one
+immutable configured-value snapshot.
 
 ## Structured capture
 
