@@ -242,8 +242,10 @@ invoke the callback. Listener admission failures still return from `OnStart`.
 
 ## Bounded read-only object access
 
-`pkg/storage/object` owns bounded object listing, metadata and conditional reads
-for composed S3/Azure clients and rooted local directories. Credential and CLI
+The extension-first prototype retains a small SDK-free contract and algorithms
+in `pkg/storage/object`. Bounded S3 operations extend the existing `pkg/storage/s3`
+without changing `NewAWSClient`; native Azure and rooted directories live in
+`pkg/storage/azureblob` and `pkg/storage/directory`. Credential and CLI
 configuration stays at composition. See [object storage](OBJECT_STORAGE.md) for
 limits, generation and enumeration semantics. AWS IAM also exposes a flag-free
 `Options`/`LoadConfig` API; its existing flag API remains compatible.

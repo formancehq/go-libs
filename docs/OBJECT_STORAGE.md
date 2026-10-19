@@ -1,12 +1,33 @@
 # Bounded object access
 
-`pkg/storage/object` supplies read-only access through `Bucket.ListPage`,
-`Bucket.Stat` and `Bucket.Read`. `NewS3` takes an AWS SDK client and bucket name;
-`NewAzure` takes an Azure Blob SDK client and container name. `OpenDirectory`
-keeps an `os.Root` descriptor until `Close`; `NewDirectory` opens and closes the
-configured root path for each operation. These constructors accept `Limits`;
-zero fields select defaults of 256 MiB per object, one million listed objects,
-and ten thousand pages for `ListAll`. Negative limits are invalid.
+This extension-first prototype keeps the released
+`pkg/storage/s3.NewAWSClient(config, optFns)` signature, SDK defaults and existing
+flag API unchanged. The bounded S3 implementation lives in that existing domain;
+native Azure Blob and rooted directories are separate packages.
+
+| Package | Constructor / responsibility | Production SDK closure |
+| --- | --- | --- |
+| `storage/s3` | `NewBucket(client, bucket, limits)`, alongside unchanged `NewAWSClient` | AWS SDK; no Azure SDK |
+| `storage/azureblob` | `NewBucket(client, container, limits)` for the native Azure SDK | Azure SDK; no AWS SDK |
+| `storage/directory` | `NewBucket(root, limits)` reopens per operation; `Open(root, limits)` pins `os.Root` until `Close` | No cloud SDK |
+| `storage/object` | SDK-free `Reader`/`Bucket`, requests/results, error identities, `ListAll` and `ReadCurrent` | No SDK |
+
+The old unreleased `object.NewS3`, `object.NewAzure`, `object.NewDirectory` and
+`object.OpenDirectory` entry points are removed, not retained as aliases or
+forwarders. A source consumer of that proposal must update its imports and
+constructors. No released constructor or consumer is changed by this prototype.
+
+Constructors accept `object.Limits`; zero fields select defaults of 256 MiB per
+object, one million listed objects and ten thousand pages. Negative limits are
+invalid. `NormalizeLimits` is the shared validation/default algorithm. Each
+backend exposes its normalized `Bounds()` through the common Bucket contract,
+so aggregate callers can lower but cannot raise configured budgets. Directory's
+`ListAll` capability preserves its one-traversal behavior rather than repeatedly
+walking the root in remote-style pages. The generic algorithm recognizes that
+whole-list capability without importing a backend, checks its aggregate output
+bound and suppresses partial output on failure. The shared bounded-stream
+and HTTP range/clock implementations remain internal to the storage domain;
+there are no new per-backend forwarding interfaces or credential layers.
 
 S3 listing requests URL-encoded keys and decodes them exactly once when the
 response declares URL encoding. This preserves control characters, literal plus
@@ -52,3 +73,22 @@ S3 marks definitive credential and permission error codes with the SDK-independe
 clock-skew and unknown errors remain unmarked. Bodiless S3 metadata failures and
 Azure authorization errors retain the SDK error without adding terminal verdicts.
 Applications retain their own retry and stop decisions.
+
+## Scope and adoption decision
+
+The common contract is for a caller that performs bounded inventory listing,
+exact metadata lookup and a conditional read without choosing backend-specific
+SDK operations. Native Azure revisions/continuations and local root identity
+are not emulated through S3. Their common invariant is refusal of usable partial
+results after byte, inventory or generation admission fails; lifecycle,
+checkpoint, discovery ordering and provider policy remain outside this API.
+One application's use of several backends does not demonstrate independent
+service needs or establish shared maintenance ownership.
+
+This is a local extension-first design candidate, not approval of the package
+layout or a published replacement. Module manifests remain unchanged: removing
+SDK imports from a directory-only compiled closure does not remove cloud SDKs
+from the selected module graph. Concrete application adoption, owner disposition,
+provider-specific SDK compatibility and operational costs remain qualification
+steps. Directory-only use still selects its Unix dependency where applicable;
+no zero-dependency claim is made for every backend/platform.

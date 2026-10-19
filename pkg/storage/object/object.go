@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"time"
 )
@@ -25,7 +24,8 @@ type Limits struct {
 	MaxPages   int
 }
 
-func limits(in Limits) (Limits, error) {
+// NormalizeLimits validates ceilings and applies bounded defaults.
+func NormalizeLimits(in Limits) (Limits, error) {
 	if in.MaxBytes < 0 || in.MaxObjects < 0 || in.MaxPages < 0 || in.MaxBytes == math.MaxInt64 {
 		return in, ErrInvalid
 	}
@@ -83,60 +83,17 @@ type Reader interface {
 // Bucket is the complete read-only contract. Implementations enforce bounds
 // before accumulating bodies.
 type Bucket interface {
+	// Bounds returns normalized configured ceilings; callers can only lower them.
+	Bounds() Limits
 	ListPage(context.Context, ListRequest) (Page, error)
 	Stat(context.Context, string) (Metadata, error)
 	Read(context.Context, ReadRequest) (ReadResult, error)
 }
 
-func readBound(req ReadRequest, cap int64) (int64, error) {
-	if req.Key == "" || req.MaxBytes < 0 || req.PrefixBytes < 0 {
-		return 0, ErrInvalid
-	}
-	if req.MaxBytes > 0 {
-		cap = min(cap, req.MaxBytes)
-	}
-	if req.PrefixBytes > cap {
-		return 0, ErrTooLarge
-	}
-	if req.PrefixBytes > 0 {
-		cap = req.PrefixBytes
-	}
-	return cap, nil
-}
-
-func readBody(ctx context.Context, r io.Reader, cap int64) ([]byte, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	b, err := io.ReadAll(io.LimitReader(&contextReader{ctx: ctx, r: r}, cap+1))
-	if err != nil {
-		return nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if int64(len(b)) > cap {
-		return nil, ErrTooLarge
-	}
-	return b, nil
-}
-
-type contextReader struct {
-	ctx context.Context
-	r   io.Reader
-}
-
-func (r *contextReader) Read(p []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil {
-		return 0, err
-	}
-	return r.r.Read(p)
-}
-
 // ListAll stops on repeated tokens, empty advancing pages, and aggregate bounds.
 // Failure returns no partial listing. It does not claim snapshot consistency.
 func ListAll(ctx context.Context, b Bucket, prefix string, bounds Limits) ([]Metadata, error) {
-	l, err := limits(bounds)
+	l, err := NormalizeLimits(bounds)
 	if err != nil {
 		return nil, err
 	}
@@ -144,29 +101,23 @@ func ListAll(ctx context.Context, b Bucket, prefix string, bounds Limits) ([]Met
 		return nil, ErrInvalid
 	}
 	// A caller can lower, but never raise, the concrete bucket's configured bounds.
-	var configured Limits
-	switch backend := b.(type) {
-	case *S3:
-		configured = backend.limits
-	case *Azure:
-		configured = backend.limits
-	case *Directory:
-		configured = backend.limits
-	}
+	configured := b.Bounds()
 	if configured.MaxObjects > 0 {
 		l.MaxObjects = min(l.MaxObjects, configured.MaxObjects)
 		l.MaxPages = min(l.MaxPages, configured.MaxPages)
 	}
-	// Local whole listings need one traversal, not one root rewalk per page.
-	if directory, ok := b.(*Directory); ok {
-		page, err := directory.ListPage(ctx, ListRequest{Prefix: prefix, Limit: l.MaxObjects})
+	// A whole-list implementation can preserve bounded single-traversal local IO.
+	if whole, ok := b.(interface {
+		ListAll(context.Context, string, Limits) ([]Metadata, error)
+	}); ok {
+		objects, err := whole.ListAll(ctx, prefix, l)
 		if err != nil {
 			return nil, err
 		}
-		if page.NextCursor != "" {
+		if len(objects) > l.MaxObjects {
 			return nil, ErrListingLimit
 		}
-		return page.Objects, nil
+		return objects, nil
 	}
 	out := []Metadata{}
 	cursor := ""
