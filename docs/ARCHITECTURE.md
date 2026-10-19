@@ -257,6 +257,10 @@ ownership with `UseRequestSpan`, preventing duplicate delivery spans.
 The optional body observer receives the bounded window, including one overrun
 byte, while `http.MaxBytesReader` retains HTTP/1 oversize/close signaling. An
 overrun wins over a simultaneous read error: verification and delivery do not
-run, and the response is 413 without waiting for a missing body remainder.
+run, and the response is 413. Rejection does not wait for a missing body
+remainder when the response writer preserves net/http's oversize notification.
+Writer wrappers, including `httpserver.OTLPMiddleware`, may obscure that signal
+and allow the response to wait for the remainder. This existing middleware
+limitation does not bypass bounded admission or verification.
 Default 405 responses include configured additional methods after HEAD and POST
 in deterministic order. With no hooks, the original method gate is unchanged.

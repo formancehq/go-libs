@@ -39,8 +39,12 @@
 // failed bounded reads, before verification; it must apply its own capture and
 // redaction policy. UseRequestSpan lets middleware retain ownership of tracing
 // without a second delivery span. None of these hooks bypass body admission or
-// verification before Deliver. Observed overruns retain HTTP/1 close signaling,
-// so a stalled remainder cannot delay the size rejection. An observed overrun
+// verification before Deliver. Observed overruns retain HTTP/1 close signaling
+// when the response writer preserves net/http's oversize notification. A writer
+// wrapper, including httpserver.OTLPMiddleware, may obscure that notification;
+// in that composition, a stalled remainder can delay the response even though
+// body admission still fails. This is an existing middleware limitation.
+// An observed overrun
 // is a size failure even if that read also fails. Default 405 responses list
 // HEAD, POST and configured additional methods in deterministic order.
 package webhook
