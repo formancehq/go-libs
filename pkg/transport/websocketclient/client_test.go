@@ -94,17 +94,37 @@ func TestDialFailsOnANonWebSocketEndpoint(t *testing.T) {
 
 // property every streamer's shutdown path relies on.
 func TestReadRespectsContextCancellation(t *testing.T) {
+	releaseHandler := make(chan struct{})
+	handlerStarted := make(chan struct{})
+	handlerDone := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(handlerStarted)
+		defer close(handlerDone)
 		conn, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			return
 		}
-		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
-		<-r.Context().Done() // never send anything
+		defer func() { _ = conn.CloseNow() }()
+		// Hijacking detaches this connection from HTTP server shutdown.
+		// Stay silent until cleanup releases and joins the handler explicitly.
+		<-releaseHandler
 	}))
-	defer srv.Close()
+	t.Cleanup(func() {
+		close(releaseHandler)
+		srv.Close()
+		select {
+		case <-handlerStarted:
+			select {
+			case <-handlerDone:
+			case <-time.After(5 * time.Second):
+				t.Error("upgraded test handler did not close its connection and return")
+			}
+		default:
+			// Dial may fail before a request reaches the handler.
+		}
+	})
 
-	dialCtx, dialCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	dialCtx, dialCancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer dialCancel()
 
 	conn, err := NewDialer("")(dialCtx, "ws"+strings.TrimPrefix(srv.URL, "http"))
@@ -113,7 +133,7 @@ func TestReadRespectsContextCancellation(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	readCtx, readCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	readCtx, readCancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer readCancel()
 
 	if _, err := conn.Read(readCtx); err == nil {
