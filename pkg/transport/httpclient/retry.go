@@ -393,14 +393,14 @@ func (rt *roundTrip) closeOriginalBody() {
 // signing, before the send.
 func (rt *roundTrip) prepare(ctx, authBudget context.Context) (*http.Request, error) {
 	workCtx, cancelWork := rt.paceContext(ctx, authBudget)
-	err := rt.pace(ctx, workCtx)
-	spent := rt.retryPacingSpentBudget(ctx, workCtx, err)
+	limiterFailed, err := rt.pace(ctx, workCtx)
+	spent := rt.retryPacingSpentBudget(ctx, workCtx, limiterFailed, err)
 	cancelWork()
 	if spent {
 		return nil, rt.budgetSpent(ctx, "while pacing the retry", err)
 	}
 	if err != nil {
-		if rt.authReplayPending && ctx.Err() == nil && (authBudget.Err() != nil || errors.Is(err, context.DeadlineExceeded)) {
+		if rt.authReplayPending && ctx.Err() == nil && (authBudget.Err() != nil || (limiterFailed && errors.Is(err, context.DeadlineExceeded))) {
 			rt.t.metrics.observeExhausted(ctx, rt.req, causeBudget)
 		}
 		return nil, err
@@ -455,12 +455,12 @@ func (rt *roundTrip) paceContext(ctx, authBudget context.Context) (context.Conte
 // the end of the MaxElapsed budget: its bounded wait was cut short or refused
 // as unable to finish in time, or it finished with no budget left to send in.
 // Caller cancellation wins over the budget cause.
-func (rt *roundTrip) retryPacingSpentBudget(ctx, workCtx context.Context, err error) bool {
+func (rt *roundTrip) retryPacingSpentBudget(ctx, workCtx context.Context, limiterFailed bool, err error) bool {
 	if rt.attempt == 1 || rt.authReplayPending || ctx.Err() != nil {
 		return false
 	}
 	if err != nil {
-		return workCtx.Err() != nil || errors.Is(err, context.DeadlineExceeded)
+		return workCtx.Err() != nil || (limiterFailed && errors.Is(err, context.DeadlineExceeded))
 	}
 
 	return !time.Now().Before(rt.deadline)
@@ -468,13 +468,16 @@ func (rt *roundTrip) retryPacingSpentBudget(ctx, workCtx context.Context, err er
 
 // pace acquires the bearer token, when Bearer is set, and then waits for an
 // API limiter slot. workCtx bounds both waits; ctx is the caller's context.
-func (rt *roundTrip) pace(ctx, workCtx context.Context) error {
+// limiterFailed distinguishes anticipatory limiter refusal from a token source's
+// independent timeout without wrapping or replacing either error.
+func (rt *roundTrip) pace(ctx, workCtx context.Context) (limiterFailed bool, err error) {
 	if rt.t.cfg.Bearer == nil {
 		if rt.t.cfg.Limiter == nil {
-			return nil
+			return false, nil
 		}
 
-		return rt.waitLimiter(ctx, workCtx)
+		err := rt.waitLimiter(ctx, workCtx)
+		return err != nil, err
 	}
 
 	// Acquire before the API limiter: a cache miss may mint through a
@@ -482,14 +485,14 @@ func (rt *roundTrip) pace(ctx, workCtx context.Context) error {
 	// first would let the mint and the API request leave back-to-back.
 	token, err := rt.t.cfg.Bearer.Token(workCtx)
 	if err != nil {
-		return fmt.Errorf("httpclient: acquire bearer token: %w", err)
+		return false, fmt.Errorf("httpclient: acquire bearer token: %w", err)
 	}
 	if token == "" {
-		return fmt.Errorf("httpclient: acquire bearer token: source returned an empty token")
+		return false, fmt.Errorf("httpclient: acquire bearer token: source returned an empty token")
 	}
 	rt.bearer = token
 	if rt.t.cfg.Limiter == nil {
-		return nil
+		return false, nil
 	}
 
 	return rt.stabilizeBearer(ctx, workCtx)
