@@ -139,6 +139,9 @@ func ListAll(ctx context.Context, b Bucket, prefix string, bounds Limits) ([]Met
 		if err != nil {
 			return nil, err
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if len(page.Objects) > l.MaxObjects-len(out) {
 			return nil, ErrListingLimit
 		}

@@ -64,8 +64,8 @@ positional, not snapshots; mutations can change enumeration positions.
 
 `ListAll` refuses repeated cursors and bounds even empty advancing pages. A
 failed listing returns no partial inventory. Canceled calls do not dispatch
-listing, and cancellation before a whole-list result returns suppresses that
-inventory. `Page.ServerTime` is only a single,
+listing, and cancellation during a successful whole-list or paginated call
+suppresses its inventory. `Page.ServerTime` is only a single,
 uncached provider Date header; missing or cached dates remain unavailable.
 Neither cloud listings nor local pagination assert snapshot consistency or
 modification-time ordering. Consumers own checkpoint and discovery policy.
@@ -88,9 +88,11 @@ One application's use of several backends does not demonstrate independent
 service needs or establish shared maintenance ownership.
 
 This is a local extension-first design candidate, not approval of the package
-layout or a published replacement. Module manifests remain unchanged: removing
-SDK imports from a directory-only compiled closure does not remove cloud SDKs
-from the selected module graph. Concrete application adoption, owner disposition,
+layout or a published replacement. The package-placement follow-up does not
+further change the prototype's module manifests. Relative to the PR base, the
+prototype adds Azure SDK dependencies and their checksums. Removing SDK imports
+from a directory-only compiled closure does not remove cloud SDKs from the
+selected module graph. Concrete application adoption, owner disposition,
 provider-specific SDK compatibility and operational costs remain qualification
 steps. Directory-only use still selects its Unix dependency where applicable;
 no zero-dependency claim is made for every backend/platform.

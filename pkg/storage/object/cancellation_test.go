@@ -8,11 +8,15 @@ import (
 
 type cancellationPageBucket struct {
 	currentBucket
-	calls int
+	calls  int
+	cancel context.CancelFunc
 }
 
 func (b *cancellationPageBucket) ListPage(context.Context, ListRequest) (Page, error) {
 	b.calls++
+	if b.cancel != nil {
+		b.cancel()
+	}
 	return Page{Objects: []Metadata{{Key: "item"}}}, nil
 }
 
@@ -35,8 +39,8 @@ func (b *cancellationWholeBucket) ListAll(context.Context, string, Limits) ([]Me
 	return []Metadata{{Key: "item"}}, nil
 }
 
-func TestListAllCancellationPreventsListingAndSuccessfulWholeResults(t *testing.T) {
-	for _, mode := range []string{"pre-canceled paged", "pre-canceled whole", "canceled whole result"} {
+func TestListAllCancellationPreventsListingAndSuccessfulResults(t *testing.T) {
+	for _, mode := range []string{"pre-canceled paged", "pre-canceled whole", "canceled whole result", "canceled paged result"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -44,12 +48,17 @@ func TestListAllCancellationPreventsListingAndSuccessfulWholeResults(t *testing.
 			whole := &cancellationWholeBucket{cancellationPageBucket: page}
 			var bucket Bucket = whole
 			wantWholeCalls := 0
+			wantPageCalls := 0
 			switch mode {
 			case "pre-canceled paged":
 				bucket = page
 				cancel()
 			case "pre-canceled whole":
 				cancel()
+			case "canceled paged result":
+				bucket = page
+				page.cancel = cancel
+				wantPageCalls = 1
 			case "canceled whole result":
 				whole.cancel = cancel
 				wantWholeCalls = 1
@@ -58,8 +67,8 @@ func TestListAllCancellationPreventsListingAndSuccessfulWholeResults(t *testing.
 			if !errors.Is(err, context.Canceled) || got != nil {
 				t.Fatalf("listing admitted canceled work: objects=%v error=%v", got, err)
 			}
-			if page.calls != 0 || whole.wholeCalls != wantWholeCalls {
-				t.Fatalf("listing calls: paged=%d whole=%d, want paged=0 whole=%d", page.calls, whole.wholeCalls, wantWholeCalls)
+			if page.calls != wantPageCalls || whole.wholeCalls != wantWholeCalls {
+				t.Fatalf("listing calls: paged=%d whole=%d, want paged=%d whole=%d", page.calls, whole.wholeCalls, wantPageCalls, wantWholeCalls)
 			}
 		})
 	}
