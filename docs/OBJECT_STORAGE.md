@@ -35,9 +35,11 @@ size and modification time; they do not
 constitute a content digest. Applications needing detection of same-size,
 same-time edits must retain an independent digest. Reads additionally compare
 file identity and metadata before and after reading. Escaping keys, special
-files and symlink escapes are rejected. Listings skip symlinks and bound both
-visited entries and accumulated results. Directory cursors are positional, not
-snapshots; mutations can change enumeration positions.
+files and symlink escapes are rejected. Listings skip symlinks and keys that
+Stat/Read cannot accept, including backslash-containing names, before directory
+recursion. Skipped names still count toward the visited-entry budget; listings
+bound both visited entries and accumulated results. Directory cursors are
+positional, not snapshots; mutations can change enumeration positions.
 
 `ListAll` refuses repeated cursors and bounds even empty advancing pages. A
 failed listing returns no partial inventory. `Page.ServerTime` is only a single,
