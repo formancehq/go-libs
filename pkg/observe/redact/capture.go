@@ -70,6 +70,10 @@ func JSON(data []byte) ([]byte, bool) {
 
 func redactJSONStrings(data []byte) []byte {
 	configured := configuredValues.Load()
+	var variants []configuredVariant
+	if configured != nil {
+		variants = configured.variants
+	}
 
 	out := make([]byte, 0, len(data))
 	last := 0
@@ -99,7 +103,7 @@ func redactJSONStrings(data []byte) []byte {
 		if err := json.Unmarshal(data[contentStart-1:contentEnd+1], &content); err != nil {
 			return nil
 		}
-		redacted := string(redactDiagnosticValues([]byte(content), false, configured))
+		redacted := string(redactDiagnosticValues([]byte(content), false, variants))
 		if redacted != content {
 			rendered, err := json.Marshal(redacted)
 			if err != nil {

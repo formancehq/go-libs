@@ -87,7 +87,11 @@ func Bytes(data []byte) []byte {
 }
 
 func redactBytes(data []byte, configured *valueReplacer) []byte {
-	return redactDiagnosticValues(decodeInertEscapes(data), true, configured)
+	var variants []configuredVariant
+	if configured != nil {
+		variants = configured.diagnostic
+	}
+	return redactDiagnosticValues(decodeInertEscapes(data), true, variants)
 }
 
 // redactNamedValues shares the diagnostic vocabulary without normalizing input.
@@ -163,12 +167,16 @@ func Reader(r io.Reader, maxBytes int) string {
 	// Normalize once before either matching pass.
 	data = decodeInertEscapes(data)
 	configured := configuredValues.Load()
+	var variants []configuredVariant
+	if configured != nil {
+		variants = configured.diagnostic
+	}
 	var tail []redaction
 	if truncated {
-		tail = configuredTailRedactions(data, configured)
+		tail = configuredTailRedactions(data, variants)
 	}
 
-	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, configured, tail...)))
+	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, variants, tail...)))
 	if truncated || len(s) > maxBytes {
 		s = s[:min(len(s), maxBytes)] + "...[truncated]"
 	}

@@ -251,3 +251,82 @@ func TestReaderKeepsLiteralConfiguredEscapePrefixesProtected(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnosticKnownLiteralEscapesRemainProtected(t *testing.T) {
+	t.Cleanup(func() { ConfigureValues(nil) })
+	for _, secret := range []string{
+		`only\u0061configuredcredential/with+symbols`,
+		`only\/configuredcredential/with+symbols`,
+		`only\u0041configured\/credential\u002bwithsymbols`,
+		`\u0061\u0062\u0063`,                           // Normalization must not lose the long raw value's boundary policy.
+		`only\\u0061configuredcredential/with+symbols`, // No recursive decoding.
+	} {
+		ConfigureValues([]string{secret})
+		const prefix = "unknown="
+		for variantIndex, variant := range valueVariants(secret) {
+			input := []byte(prefix + variant)
+			original := bytes.Clone(input)
+			t.Run(fmt.Sprintf("Bytes-%d", variantIndex), func(t *testing.T) {
+				if got := Bytes(input); string(got) != prefix+Marker || !bytes.Equal(input, original) {
+					t.Fatalf("variant %d complete diagnostic exposed a known value or changed input: %q", variantIndex, got)
+				}
+			})
+			reader := &cappedCredentialReader{reader: strings.NewReader(string(input))}
+			t.Run(fmt.Sprintf("Reader-%d", variantIndex), func(t *testing.T) {
+				if got := Reader(reader, len(input)); got != prefix+Marker || reader.read != len(input) {
+					t.Fatalf("variant %d exact-window diagnostic changed: %q (%d)", variantIndex, got, reader.read)
+				}
+			})
+			for limit := len(prefix) + 1; limit < len(input); limit++ {
+				reader := &cappedCredentialReader{reader: strings.NewReader(string(input) + " remainder")}
+				want := prefix + Marker
+				want = want[:min(len(want), limit)] + "...[truncated]"
+				if got := Reader(reader, limit); got != want || reader.read != limit+1 {
+					t.Fatalf("variant %d cap %d: known literal prefix or read bound changed: %q (%d)", variantIndex, limit, got, reader.read)
+				}
+			}
+		}
+		if got := MaskValues(prefix + secret); got != prefix+Marker {
+			t.Fatalf("direct literal masking changed: %q", got)
+		}
+		normalized := string(decodeInertEscapes([]byte(secret)))
+		if normalized != secret && MaskValues(prefix+normalized) != prefix+normalized {
+			t.Fatal("diagnostic-only normalization leaked into direct masking")
+		}
+		for _, value := range []string{secret, normalized} {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input := []byte(`{ "note":` + string(encoded) + `, "safe":"\u0061\/", "n":1e+09 }`)
+			want := string(input)
+			if value == secret {
+				want = `{ "note":"[REDACTED]", "safe":"\u0061\/", "n":1e+09 }`
+			}
+			original := bytes.Clone(input)
+			if got, ok := JSON(input); !ok || string(got) != want || !bytes.Equal(input, original) {
+				t.Fatalf("structured raw-value/byte-preservation contract changed: %q (%v)", got, ok)
+			}
+		}
+	}
+}
+
+func TestDiagnosticNormalizedBoundaryPolicy(t *testing.T) {
+	t.Cleanup(func() { ConfigureValues(nil) })
+	ConfigureValues([]string{`\u0061\u0062\u0063`})
+	input := []byte(`prefix\u0061\u0062\u0063suffix`)
+	if got := string(Bytes(input)); got != "prefix"+Marker+"suffix" {
+		t.Fatalf("normalization lost original unbounded matching: %q", got)
+	}
+	ConfigureValues([]string{`\u0061`})
+	if got := string(Bytes([]byte(`unknown=\u0061`))); got != "unknown="+Marker {
+		t.Fatalf("isolated short known value was not masked: %q", got)
+	}
+	if got := string(Bytes([]byte(`safe=c\u0061t`))); got != "safe=cat" {
+		t.Fatalf("short normalized value lost token boundaries: %q", got)
+	}
+	ConfigureValues([]string{`only\\u0061configuredcredential`})
+	if got := string(Bytes([]byte(`safe=onlyaconfiguredcredential`))); got != "safe=onlyaconfiguredcredential" {
+		t.Fatalf("diagnostic known variants were recursively normalized: %q", got)
+	}
+}

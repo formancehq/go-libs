@@ -23,6 +23,12 @@ inert JSON escapes; `Reader` still caps expanded redacted output and can append
 a truncation indicator even when the original input fit within the cap. When the
 bounded detection window ends inside a possible configured representation, Reader
 masks that ambiguous tail without reading beyond the existing cap-plus-one limit.
+Diagnostics retain raw known variants and add their once-normalized inert-escape
+spellings to the same immutable snapshot. Each spelling keeps its original
+short-value boundary policy, so normalization cannot expose an already known
+credential. Normalization can conservatively mask the resulting spelling in
+diagnostic text. Direct `MaskValues`, URL helpers and structured JSON capture
+retain their original variant sets; diagnostic variants do not broaden those APIs.
 Reader normalizes supported inert JSON escapes once before both tail detection
 and diagnostic matching. If that window ends inside a supported escape that
 could continue a configured prefix, the incomplete escape and matching prefix

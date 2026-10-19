@@ -14,18 +14,19 @@ type redaction struct {
 	prefix     string
 }
 
-func redactDiagnosticValues(data []byte, maskBare bool, configured *valueReplacer, additional ...redaction) []byte {
+func redactDiagnosticValues(data []byte, maskBare bool, variants []configuredVariant, additional ...redaction) []byte {
 	ranges := append(namedValueRedactions(data, maskBare), additional...)
-	if configured != nil {
+	if len(variants) > 0 {
 		value := string(data)
-		for _, variant := range configured.variants {
+		for _, known := range variants {
+			variant := known.value
 			for offset := 0; offset < len(value); {
 				relative := strings.Index(value[offset:], variant)
 				if relative < 0 {
 					break
 				}
 				start := offset + relative
-				if len(variant) >= minUnboundedSecretValue || valueBounded(value, start, len(variant)) {
+				if known.unbounded || valueBounded(value, start, len(variant)) {
 					ranges = append(ranges, redaction{start: start, end: start + len(variant)})
 				}
 				offset = start + 1
@@ -92,16 +93,17 @@ func applyRedactions(data []byte, ranges []redaction) []byte {
 
 // A detection window can end partway through any configured representation.
 // A matching prefix at that edge is ambiguous; mask it without reading ahead.
-func configuredTailRedactions(data []byte, configured *valueReplacer) []redaction {
-	if configured == nil {
+func configuredTailRedactions(data []byte, variants []configuredVariant) []redaction {
+	if len(variants) == 0 {
 		return nil
 	}
 	value := string(data)
 	start := len(data)
 	end := incompleteEscapeStart(value)
-	for _, variant := range configured.variants {
+	for _, known := range variants {
+		variant := known.value
 		for index := max(0, end-len(variant)+1); index < start; index++ {
-			if len(variant) < minUnboundedSecretValue && index > 0 && credentialTokenByte(value[index-1]) {
+			if !known.unbounded && index > 0 && credentialTokenByte(value[index-1]) {
 				continue
 			}
 			rawMatch := strings.HasPrefix(variant, value[index:])
