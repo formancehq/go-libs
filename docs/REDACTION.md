@@ -15,11 +15,15 @@ mechanism, without classifying business field names.
 
 Existing `Bytes`, `Reader`, `Headers`, `HeaderValues`, `URL`, `RequestURI` and
 `Path` apply configured masking in addition to their diagnostic name/shape
-rules. Name classification precedes value replacement so a configured value
-that looks like a credential field cannot hide that field's secret. Headers and
+rules. Name classification and configured matches are collected from the original
+input before either replacement can fragment another match. A configured value
+that looks like a credential field therefore cannot hide that field's secret. Headers and
 URLs keep their existing rendering policy. Diagnostic `Bytes` still normalizes
 inert JSON escapes; `Reader` still caps expanded redacted output and can append
-a truncation indicator even when the original input fit within the cap.
+a truncation indicator even when the original input fit within the cap. When the
+bounded detection window ends inside a possible configured representation, Reader
+masks that ambiguous tail without reading beyond the existing cap-plus-one limit.
+Each Reader call uses one immutable configured-value snapshot.
 
 ## Structured capture
 
@@ -30,8 +34,10 @@ duplicate credential keys within the same object, and non-string credential
 values. Repeated keys in separate objects are independent. Noncredential
 object/array/scalar content and every byte outside redacted strings retain their
 original representation, including whitespace, number spelling and escapes.
-Configured values match semantic decoded string contents, including equivalent
-Unicode/slash escapes; only changed strings are re-encoded. This capture path
+Diagnostic credential patterns and configured values match original decoded
+string contents, including equivalent Unicode/slash escapes, before either
+replacement fragments a complete configured match. Original keys remain available
+for field-name classification; only changed value strings are re-encoded. This capture path
 never applies diagnostic escape normalization or bare-value substitution.
 If named diagnostic masking leaves invalid JSON (for example by consuming an
 escape before an embedded quote), capture refuses it before scanning configured

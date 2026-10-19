@@ -14,9 +14,10 @@ const minUnboundedSecretValue = 16
 var configuredValues atomic.Pointer[valueReplacer]
 
 type valueReplacer struct {
-	plain   *strings.Replacer
-	url     *strings.Replacer
-	bounded []string
+	plain    *strings.Replacer
+	url      *strings.Replacer
+	bounded  []string
+	variants []string
 }
 
 // ConfigureValues atomically replaces the process-wide credential set. Empty
@@ -64,7 +65,7 @@ func ConfigureValues(values []string) {
 		plainReplacements = append(plainReplacements, variant, Marker)
 		urlReplacements = append(urlReplacements, variant, url.QueryEscape(Marker))
 	}
-	replacer := &valueReplacer{bounded: bounded}
+	replacer := &valueReplacer{bounded: bounded, variants: ordered}
 	if len(plainReplacements) > 0 {
 		replacer.plain = strings.NewReplacer(plainReplacements...)
 		replacer.url = strings.NewReplacer(urlReplacements...)
@@ -88,15 +89,6 @@ func valueVariants(value string) []string {
 		base64.URLEncoding.EncodeToString([]byte(value)),
 		base64.RawURLEncoding.EncodeToString([]byte(value)),
 	}
-}
-
-func redactConfiguredValues(data []byte) []byte {
-	configured := configuredValues.Load()
-	if configured == nil {
-		return data
-	}
-
-	return []byte(configured.replace(string(data), Marker, configured.plain))
 }
 
 // MaskValues removes configured values without applying field-name heuristics.
