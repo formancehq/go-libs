@@ -14,9 +14,17 @@ const minUnboundedSecretValue = 16
 var configuredValues atomic.Pointer[valueReplacer]
 
 type valueReplacer struct {
-	plain   *strings.Replacer
-	url     *strings.Replacer
-	bounded []string
+	plain      *strings.Replacer
+	url        *strings.Replacer
+	bounded    []string
+	variants   []configuredVariant
+	diagnostic []configuredVariant
+}
+
+// A normalized spelling retains the boundary policy of its original known value.
+type configuredVariant struct {
+	value     string
+	unbounded bool
 }
 
 // ConfigureValues atomically replaces the process-wide credential set. Empty
@@ -65,6 +73,25 @@ func ConfigureValues(values []string) {
 		urlReplacements = append(urlReplacements, variant, url.QueryEscape(Marker))
 	}
 	replacer := &valueReplacer{bounded: bounded}
+	diagnostic := make(map[string]bool, len(ordered))
+	for _, value := range ordered {
+		unbounded := len(value) >= minUnboundedSecretValue
+		replacer.variants = append(replacer.variants, configuredVariant{value: value, unbounded: unbounded})
+		// Only diagnostic input receives this single inert-escape normalization.
+		// Keep both spellings; direct masking and structured capture use variants.
+		for _, spelling := range []string{value, string(decodeInertEscapes([]byte(value)))} {
+			diagnostic[spelling] = diagnostic[spelling] || unbounded
+		}
+	}
+	for value, unbounded := range diagnostic {
+		replacer.diagnostic = append(replacer.diagnostic, configuredVariant{value: value, unbounded: unbounded})
+	}
+	slices.SortFunc(replacer.diagnostic, func(left, right configuredVariant) int {
+		if len(left.value) != len(right.value) {
+			return len(right.value) - len(left.value)
+		}
+		return strings.Compare(left.value, right.value)
+	})
 	if len(plainReplacements) > 0 {
 		replacer.plain = strings.NewReplacer(plainReplacements...)
 		replacer.url = strings.NewReplacer(urlReplacements...)
@@ -88,15 +115,6 @@ func valueVariants(value string) []string {
 		base64.URLEncoding.EncodeToString([]byte(value)),
 		base64.RawURLEncoding.EncodeToString([]byte(value)),
 	}
-}
-
-func redactConfiguredValues(data []byte) []byte {
-	configured := configuredValues.Load()
-	if configured == nil {
-		return data
-	}
-
-	return []byte(configured.replace(string(data), Marker, configured.plain))
 }
 
 // MaskValues removes configured values without applying field-name heuristics.
