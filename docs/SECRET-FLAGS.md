@@ -12,8 +12,9 @@ global logger or redactor and does not inspect environment variables itself.
 
 For a file source, `DefaultPath` applies only when the flag is empty. A readable
 default is activated on that flag and marks it changed. `OptionalDefault` permits
-a genuinely absent default; a dangling symlink or any other read failure stops
-collection. A missing explicitly configured file always fails. Empty file
+a genuinely absent default; a dangling symlink in the final component or any
+ancestor, or any other read failure, stops collection. Healthy symlinks retain
+their normal filesystem behavior. A missing explicitly configured file always fails. Empty file
 contents activate the path but contribute no redaction value.
 
 Results contain unique non-empty values in first occurrence order. Local,

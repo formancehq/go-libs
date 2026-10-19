@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -115,10 +116,8 @@ func readFile(flag *pflag.Flag, source Source) ([]string, error) {
 	}
 	contents, err := os.ReadFile(path) //nolint:gosec // application-selected secret file
 	if err != nil {
-		if implicit && source.OptionalDefault && os.IsNotExist(err) {
-			if _, statErr := os.Lstat(path); os.IsNotExist(statErr) {
-				return nil, nil
-			}
+		if implicit && source.OptionalDefault && os.IsNotExist(err) && missingOptionalDefault(path) {
+			return nil, nil
 		}
 		// os.PathError embeds the input path; retain the filesystem classification
 		// without echoing operator input into startup diagnostics.
@@ -135,4 +134,33 @@ func readFile(flag *pflag.Flag, source Source) ([]string, error) {
 		flag.Changed = true
 	}
 	return []string{string(contents)}, nil
+}
+
+// missingOptionalDefault excludes dangling symlinks at any path component.
+// Inspect prefixes without cleaning the path: link/../file must still inspect
+// link before treating the read failure as optional absence.
+func missingOptionalDefault(path string) bool {
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		return false
+	}
+	volume := len(filepath.VolumeName(path))
+	for i := volume; i < len(path); i++ {
+		if i == volume || !os.IsPathSeparator(path[i]) {
+			continue
+		}
+		prefix := path[:i]
+		info, err := os.Lstat(prefix)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return false
+			}
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			if _, err := os.Stat(prefix); err != nil {
+				return false
+			}
+		}
+	}
+	return true
 }
