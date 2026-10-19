@@ -1,7 +1,5 @@
 //go:build pyroscope
 
-// Package pyroscope configures native continuous profiling. It is optional at
-// build time; compile with the pyroscope tag to include the native SDK.
 package pyroscope
 
 import (

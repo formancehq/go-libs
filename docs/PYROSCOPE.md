@@ -72,6 +72,25 @@ callback echoes only a token or rewrites the address to an upload endpoint.
 These diagnostic transformations never alter SDK request credentials.
 
 
+## OpenTelemetry Profiles
+
+As of October 19, 2026, the [OpenTelemetry Profiles specification] is Alpha.
+It defines a profile data model derived from pprof and supports OTLP transport.
+The [official SDK status matrix] lists no Profiles support for Go.
+The existing OpenTelemetry trace, metric and log exporters therefore do not
+replace profile collection and export in these packages.
+
+`observe/profiling` exposes pprof HTTP endpoints for local diagnostics or
+periodic retrieval by an external collector. `observe/pyroscope` collects and
+uploads through the native Grafana SDK; it does not implement OTLP Profiles
+export. `observe/pyroscopetraces` links traces and profiles, without collecting
+or uploading profiles. Grafana's [Go span profiles guide] configures the native
+profiler separately from the OpenTelemetry trace correlation bridge.
+
+[OpenTelemetry Profiles specification]: https://opentelemetry.io/docs/specs/otel/profiles/
+[official SDK status matrix]: https://opentelemetry.io/status/
+[Go span profiles guide]: https://grafana.com/docs/pyroscope/latest/configure-client/trace-span-profiles/go-span-profiles/
+
 ## Collection path and composition
 
 The existing `profiling.NewRouter` and
