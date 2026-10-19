@@ -243,3 +243,9 @@ failures are logged and health remains under the existing lifecycle and caller
 control. `OnStop` still withdraws the configured probe before draining. Normal
 shutdown does not invoke the callback. Listener admission failures still return
 from `OnStart`.
+
+## Native continuous profiling
+
+[PYROSCOPE.md](./PYROSCOPE.md) describes the optional native SDK configuration and
+plain lifecycle hook. `pkg/fx/observefx.PyroscopeModule` composes it with existing
+trace correlation; pprof HTTP profiling remains separate.
