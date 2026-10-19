@@ -23,7 +23,8 @@ inert JSON escapes; `Reader` still caps expanded redacted output and can append
 a truncation indicator even when the original input fit within the cap. When the
 bounded detection window ends inside a possible configured representation, Reader
 masks that ambiguous tail without reading beyond the existing cap-plus-one limit.
-Each Reader call uses one immutable configured-value snapshot.
+Reader normalizes supported inert JSON escapes once before both tail detection
+and diagnostic matching. Each call uses one immutable configured-value snapshot.
 
 ## Structured capture
 

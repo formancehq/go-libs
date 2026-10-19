@@ -159,12 +159,15 @@ func Reader(r io.Reader, maxBytes int) string {
 	n, _ := io.ReadFull(r, data)
 	data = data[:n]
 	truncated := len(data) > maxBytes
+	// Use the same supported representation for tail detection and full matches.
+	// Normalize once before either matching pass.
+	data = decodeInertEscapes(data)
 	configured := configuredValues.Load()
 	if truncated {
 		data = maskConfiguredTail(data, configured)
 	}
 
-	s := strings.TrimSpace(string(redactBytes(data, configured)))
+	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, configured)))
 	if truncated || len(s) > maxBytes {
 		s = s[:min(len(s), maxBytes)] + "...[truncated]"
 	}

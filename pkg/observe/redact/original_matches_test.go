@@ -99,3 +99,49 @@ func TestReaderRetainsCompleteAndUnambiguousWindows(t *testing.T) {
 		t.Fatalf("unambiguous truncated window changed: %q (%d)", got, reader.read)
 	}
 }
+
+func TestReaderMasksEscapedConfiguredPrefixAtInputCap(t *testing.T) {
+	secret := `onlyalphabeticconfiguredcredential/with+symbols`
+	ConfigureValues([]string{secret})
+	t.Cleanup(func() { ConfigureValues(nil) })
+	for _, test := range []struct {
+		name, value, visible string
+	}{
+		{"unicode leading letter", `\u006fnlyalphabeticconfiguredcredential/with+symbols`, `\u006fnlyalph`},
+		{"unicode embedded letter", `only\u0061lphabeticconfiguredcredential/with+symbols`, `only\u0061lph`},
+		{"multiple unicode letters", `\u006fnly\u0061lphabeticconfiguredcredential/with+symbols`, `\u006fnly\u0061lph`},
+		{"escaped slash", `onlyalphabeticconfiguredcredential\/with+symbols`, `onlyalphabeticconfiguredcredential\/wi`},
+		{"unicode punctuation", `onlyalphabeticconfiguredcredential\u002fwith\u002bsymbols`, `onlyalphabeticconfiguredcredential\u002fwith\u002bsy`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			const prefix = "unknown="
+			limit := len(prefix) + len(test.visible)
+			reader := &cappedCredentialReader{reader: strings.NewReader(prefix + test.value + " remainder")}
+			want := prefix + Marker + "...[truncated]"
+			if got := Reader(reader, limit); got != want {
+				t.Fatalf("escaped configured prefix was not fully masked: got %q, want %q", got, want)
+			}
+			if reader.read != limit+1 {
+				t.Fatalf("read %d bytes, want bounded detection window %d", reader.read, limit+1)
+			}
+		})
+	}
+}
+
+func TestReaderPreservesEscapeInterpretationAndExactWindow(t *testing.T) {
+	secret := `onlyalphabeticconfiguredcredential/with+symbols`
+	ConfigureValues([]string{secret})
+	t.Cleanup(func() { ConfigureValues(nil) })
+	input := `unknown=\u006fnlyalphabeticconfiguredcredential\/with+symbols`
+	reader := &cappedCredentialReader{reader: strings.NewReader(input)}
+	if got := Reader(reader, len(input)); got != "unknown="+Marker || reader.read != len(input) {
+		t.Fatalf("complete escaped credential or exact-window read changed: %q (%d)", got, reader.read)
+	}
+	// An escaped backslash must not become a Unicode escape on a second pass.
+	input = `safe=\\u0061\nzzzzzzzzzz`
+	reader = &cappedCredentialReader{reader: strings.NewReader(input)}
+	const limit = len(`safe=\\u0061\nz`)
+	if got := Reader(reader, limit); got != input[:limit]+"...[truncated]" || reader.read != limit+1 {
+		t.Fatalf("inert-escape boundary or bounded read changed: %q (%d)", got, reader.read)
+	}
+}
