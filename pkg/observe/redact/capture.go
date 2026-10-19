@@ -57,7 +57,10 @@ func JSON(data []byte) ([]byte, bool) {
 	if !json.Valid(out) {
 		return nil, false
 	}
-	out = redactConfiguredJSONStrings(out)
+	// Match semantic values on the original strings before either policy can
+	// fragment a configured credential. Original keys remain available to the
+	// named policy; the preflight refusal above remains part of the contract.
+	out = redactNamedValues(redactJSONStrings(data), false)
 	if !json.Valid(out) {
 		return nil, false
 	}
@@ -65,10 +68,11 @@ func JSON(data []byte) ([]byte, bool) {
 	return out, true
 }
 
-func redactConfiguredJSONStrings(data []byte) []byte {
+func redactJSONStrings(data []byte) []byte {
 	configured := configuredValues.Load()
-	if configured == nil {
-		return data
+	var variants []configuredVariant
+	if configured != nil {
+		variants = configured.variants
 	}
 
 	out := make([]byte, 0, len(data))
@@ -99,7 +103,7 @@ func redactConfiguredJSONStrings(data []byte) []byte {
 		if err := json.Unmarshal(data[contentStart-1:contentEnd+1], &content); err != nil {
 			return nil
 		}
-		redacted := configured.replace(content, Marker, configured.plain)
+		redacted := string(redactDiagnosticValues([]byte(content), false, variants))
 		if redacted != content {
 			rendered, err := json.Marshal(redacted)
 			if err != nil {
