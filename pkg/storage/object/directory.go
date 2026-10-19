@@ -207,6 +207,9 @@ func (d *Directory) ListPage(ctx context.Context, req ListRequest) (Page, error)
 					return ErrListingLimit
 				}
 				key := path.Join(dir, entry.Name())
+				if !validKey(key) {
+					continue
+				}
 				if entry.Type()&fs.ModeSymlink != 0 {
 					continue
 				}
