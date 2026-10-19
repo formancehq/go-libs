@@ -16,6 +16,13 @@ func TestKeyedBufferEvictsWithinByteBudgetAndPreservesReplacement(t *testing.T) 
 	if b.Stats().Rejected != 1 || b.Len() != 1 {
 		t.Fatal("oversized replacement discarded old value")
 	}
+	stats := b.Stats()
+	if stats.Pushed != stats.Inserted+stats.Replaced+stats.Rejected {
+		t.Fatalf("push accounting mismatch: %+v", stats)
+	}
+	if stats.Inserted-stats.Drained-stats.Evicted-stats.Discarded != uint64(stats.Depth) {
+		t.Fatalf("depth accounting mismatch: %+v", stats)
+	}
 	values, _ := b.Drain(t.Context(), 1)
 	if len(values) != 1 || values[0] != "two" || b.Stats().Bytes != 0 {
 		t.Fatalf("values=%v stats=%+v", values, b.Stats())

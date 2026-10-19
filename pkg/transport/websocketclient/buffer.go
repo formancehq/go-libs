@@ -174,8 +174,8 @@ func (b *KeyedBuffer[T]) Drop() {
 }
 
 // Stats returns one internally consistent snapshot of buffer counters and
-// gauges. Pushed counts all Push calls; Inserted and Replaced split that total,
-// so Inserted - Drained - Evicted - Discarded equals Depth. OldestQueuedAt and
+// gauges. Pushed counts all Push calls and equals Inserted + Replaced + Rejected.
+// Inserted - Drained - Evicted - Discarded equals Depth. OldestQueuedAt and
 // OldestQueuedAge report key residency and are zero when the buffer is empty.
 // Replacing an existing key keeps its original queue position and queued-at
 // timestamp.
