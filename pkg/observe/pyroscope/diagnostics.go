@@ -59,7 +59,7 @@ func (c Config) scrubber() func(string) string {
 		if redact.SensitiveHeader(key) {
 			secrets = append(secrets, value)
 			if strings.EqualFold(key, "Authorization") || strings.EqualFold(key, "Proxy-Authorization") {
-				scheme, credential, ok := strings.Cut(value, " ")
+				scheme, credential, ok := strings.Cut(strings.TrimSpace(value), " ")
 				credential = strings.TrimSpace(credential)
 				if ok && (strings.EqualFold(scheme, "Bearer") || strings.EqualFold(scheme, "Basic")) {
 					secrets = append(secrets, credential)
