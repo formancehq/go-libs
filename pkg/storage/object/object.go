@@ -100,6 +100,9 @@ func ListAll(ctx context.Context, b Bucket, prefix string, bounds Limits) ([]Met
 	if b == nil {
 		return nil, ErrInvalid
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// A caller can lower, but never raise, the concrete bucket's configured bounds.
 	configured := b.Bounds()
 	if configured.MaxObjects > 0 {
@@ -116,6 +119,9 @@ func ListAll(ctx context.Context, b Bucket, prefix string, bounds Limits) ([]Met
 		}
 		if len(objects) > l.MaxObjects {
 			return nil, ErrListingLimit
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		return objects, nil
 	}

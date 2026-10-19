@@ -63,7 +63,9 @@ bound both visited entries and accumulated results. Directory cursors are
 positional, not snapshots; mutations can change enumeration positions.
 
 `ListAll` refuses repeated cursors and bounds even empty advancing pages. A
-failed listing returns no partial inventory. `Page.ServerTime` is only a single,
+failed listing returns no partial inventory. Canceled calls do not dispatch
+listing, and cancellation before a whole-list result returns suppresses that
+inventory. `Page.ServerTime` is only a single,
 uncached provider Date header; missing or cached dates remain unavailable.
 Neither cloud listings nor local pagination assert snapshot consistency or
 modification-time ordering. Consumers own checkpoint and discovery policy.
