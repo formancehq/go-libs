@@ -269,6 +269,12 @@ func safeContentType(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return ""
 	}
+	// Check original bytes before MIME parsing lowercases the media type and
+	// destroys an exact configured-value match. This only affects metadata;
+	// classifyContent still owns admission using the original ContentType.
+	if golibsredact.MaskValues(value) != value {
+		return "[REDACTED]"
+	}
 	mediaType, _, err := mime.ParseMediaType(value)
 	if err != nil {
 		return "invalid"

@@ -18,8 +18,9 @@ records; producer error text is never logged. Content-type parameters are stripp
 Caller fields are cloned before adding capture metadata. The complete `payload.*`
 namespace is reserved: stale capture fields are removed from the clone for both
 success and omission records, without mutating caller context. Emitted media-type
-metadata masks configured credential values; content admission still uses the
-original media type.
+metadata checks configured credential values before MIME normalization; an
+original-input match emits a fixed redaction marker instead of a normalized
+credential-derived value. Content admission still uses the original media type.
 
 The engine redacts the complete admitted payload before SHA-256 hashing, base64
 encoding and 64 KiB encoded chunks. Chunk identity, order, counts and the digest

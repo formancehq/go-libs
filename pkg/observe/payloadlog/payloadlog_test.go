@@ -408,3 +408,58 @@ func TestCaptureMasksConfiguredContentTypeAndReservesMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureMasksConfiguredContentTypeBeforeNormalization(t *testing.T) {
+	const secret = "MixedCaseConfiguredCredential"
+	payloadlog.Configure(true, 0)
+	redact.ConfigureValues([]string{secret})
+	t.Cleanup(func() { payloadlog.Configure(false, 0); redact.ConfigureValues(nil) })
+	for _, tc := range []struct {
+		name, contentType, wantType string
+		admitted                    bool
+	}{
+		{"omitted subtype", "application/" + secret, "[REDACTED]", false},
+		{"captured subtype", "application/" + secret + "+json", "[REDACTED]", true},
+		{"parameter", "application/json; boundary=" + secret, "[REDACTED]", true},
+		{"unconfigured normalization", "Application/JSON; charset=utf-8", "application/json", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			produced := false
+			fields := map[string]any{"caller": "retained", "payload.chunk": "stale"}
+			payloadlog.Capture(t.Context(), jsonLogger(&out, logging.DebugLevel), payloadlog.Record{
+				ContentType: tc.contentType, Limit: 1024, Fields: fields,
+				Produce: func(int64) ([]byte, error) { produced = true; return []byte(`{"ok":true}`), nil },
+			})
+			records := lines(t, &out)
+			if len(records) != 1 {
+				t.Fatalf("record count = %d", len(records))
+			}
+			got := records[0]
+			if got["payload.content_type"] != tc.wantType {
+				t.Errorf("media type was not safely rendered")
+			}
+			if strings.Contains(out.String(), secret) || strings.Contains(out.String(), strings.ToLower(secret)) {
+				t.Error("configured media-type value exposed")
+			}
+			if produced != tc.admitted {
+				t.Fatalf("producer admission changed: got %v", produced)
+			}
+			if got["caller"] != "retained" || fields["payload.chunk"] != "stale" {
+				t.Fatal("caller fields changed")
+			}
+			if tc.admitted {
+				chunk, ok := got["payload.chunk"].(string)
+				if !ok {
+					t.Fatal("missing captured chunk")
+				}
+				body, err := base64.StdEncoding.DecodeString(chunk)
+				if err != nil || string(body) != `{"ok":true}` || got["payload.omitted_reason"] != nil {
+					t.Fatal("capture changed")
+				}
+			} else if got["payload.chunk"] != nil || got["payload.omitted_reason"] != "unsupported_content" {
+				t.Fatal("omission changed")
+			}
+		})
+	}
+}
