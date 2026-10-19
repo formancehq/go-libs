@@ -38,23 +38,23 @@ type bearerReplaySpentKey struct{}
 // queued behind the API limiter. Reserve and re-read until the token remains
 // stable across a slot; if the re-read minted through the same limiter, the
 // next loop reserves the API slot after that grant.
-func (rt *roundTrip) stabilizeBearer(ctx, workCtx context.Context) error {
+func (rt *roundTrip) stabilizeBearer(ctx, workCtx context.Context) (limiterFailed bool, err error) {
 	for checks := 0; ; checks++ {
 		if checks >= maxBearerStabilityChecks {
-			return fmt.Errorf("httpclient: bearer token did not stabilize across limiter waits")
+			return false, fmt.Errorf("httpclient: bearer token did not stabilize across limiter waits")
 		}
 		if err := rt.waitLimiter(ctx, workCtx); err != nil {
-			return err
+			return true, err
 		}
 		fresh, err := rt.t.cfg.Bearer.Token(workCtx)
 		if err != nil {
-			return fmt.Errorf("httpclient: revalidate bearer token: %w", err)
+			return false, fmt.Errorf("httpclient: revalidate bearer token: %w", err)
 		}
 		if fresh == "" {
-			return fmt.Errorf("httpclient: revalidate bearer token: source returned an empty token")
+			return false, fmt.Errorf("httpclient: revalidate bearer token: source returned an empty token")
 		}
 		if fresh == rt.bearer {
-			return nil
+			return false, nil
 		}
 		rt.bearer = fresh
 	}

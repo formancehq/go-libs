@@ -15,7 +15,6 @@
 package redact
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"net/url"
@@ -84,20 +83,21 @@ var (
 // returns a copy and never mutates data. Letters, digits and the token
 // punctuation written as JSON escapes are classified, and shown, decoded.
 func Bytes(data []byte) []byte {
-	return redactConfiguredValues(redactNamedValues(decodeInertEscapes(data), true))
+	return redactBytes(data, configuredValues.Load())
+}
+
+func redactBytes(data []byte, configured *valueReplacer) []byte {
+	var variants []configuredVariant
+	if configured != nil {
+		variants = configured.diagnostic
+	}
+	return redactDiagnosticValues(decodeInertEscapes(data), true, variants)
 }
 
 // redactNamedValues shares the diagnostic vocabulary without normalizing input.
 // Structured capture refuses non-string credentials, so it disables bare masking.
 func redactNamedValues(data []byte, maskBare bool) []byte {
-	out := redactHeaderEchoes(data)
-	out = danglingSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
-	out = kvSecretRe.ReplaceAll(out, []byte("${1}"+Marker+"${3}"))
-	if maskBare {
-		out = kvBareSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
-	}
-	out = bearerRe.ReplaceAll(out, []byte("${1}"+Marker))
-	return headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
+	return redactDiagnosticValues(data, maskBare, nil)
 }
 
 // decodeInertEscapes decodes every JSON escape whose character is inert to
@@ -149,28 +149,6 @@ func inertEscape(escape []byte) (byte, bool) {
 	}
 }
 
-// redactHeaderEchoes masks the whole value of every "Name: value" line whose
-// name is a sensitive header, preserving the line ending.
-func redactHeaderEchoes(data []byte) []byte {
-	lines := bytes.SplitAfter(data, []byte("\n"))
-	for index, line := range lines {
-		content := bytes.TrimSuffix(line, []byte("\n"))
-		ending := line[len(content):]
-		content = bytes.TrimSuffix(content, []byte("\r"))
-		if len(content) < len(line)-len(ending) {
-			ending = append([]byte("\r"), ending...)
-		}
-		name, _, found := bytes.Cut(content, []byte(":"))
-		if !found || !SensitiveHeader(strings.TrimSpace(string(name))) {
-			continue
-		}
-		lines[index] = append(append(append([]byte(nil), name...), ':', ' '), Marker...)
-		lines[index] = append(lines[index], ending...)
-	}
-
-	return bytes.Join(lines, nil)
-}
-
 // Reader reads at most maxBytes from r, redacts the complete read window, then
 // applies the display cut and marks it "...[truncated]". The cut applies to
 // the redacted text too, so a short secret replaced by the longer Marker never
@@ -185,11 +163,20 @@ func Reader(r io.Reader, maxBytes int) string {
 	n, _ := io.ReadFull(r, data)
 	data = data[:n]
 	truncated := len(data) > maxBytes
+	// Use the same supported representation for tail detection and full matches.
+	// Normalize once before either matching pass.
+	data = decodeInertEscapes(data)
+	configured := configuredValues.Load()
+	var variants []configuredVariant
+	if configured != nil {
+		variants = configured.diagnostic
+	}
+	var tail []redaction
 	if truncated {
-		data = danglingSecretRe.ReplaceAll(data, []byte("${1}"+Marker))
+		tail = configuredTailRedactions(data, variants)
 	}
 
-	s := strings.TrimSpace(string(Bytes(data)))
+	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, variants, tail...)))
 	if truncated || len(s) > maxBytes {
 		s = s[:min(len(s), maxBytes)] + "...[truncated]"
 	}
