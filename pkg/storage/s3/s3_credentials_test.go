@@ -1,4 +1,4 @@
-package object
+package s3
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/formancehq/go-libs/v5/pkg/storage"
+	"github.com/formancehq/go-libs/v5/pkg/storage/object"
 )
 
 type answerTransport func(*http.Request) (*http.Response, error)
@@ -31,7 +32,7 @@ type s3Answer struct {
 // newAnsweringS3 drives the real SDK client, so the error code is decoded from
 // the body by the SDK rather than built by hand. Retries are off: the SDK's own
 // backoff for 5xx and throttling is not what these tests measure.
-func newAnsweringS3(answer s3Answer) *S3 {
+func newAnsweringS3(answer s3Answer) *Bucket {
 	client := s3.New(s3.Options{
 		Region:       "auto",
 		BaseEndpoint: aws.String("https://storage.example"),
@@ -56,7 +57,7 @@ func newAnsweringS3(answer s3Answer) *S3 {
 		})},
 	})
 
-	bucket, err := NewS3(client, "archive", Limits{})
+	bucket, err := NewBucket(client, "archive", object.Limits{})
 	if err != nil {
 		panic(err)
 	}
@@ -64,25 +65,25 @@ func newAnsweringS3(answer s3Answer) *S3 {
 }
 
 // s3Operations is every S3 call a object consumer makes to list or read.
-var s3Operations = map[string]func(context.Context, *S3) error{
-	"list": func(ctx context.Context, store *S3) error {
-		_, err := ListAll(ctx, store, "objects/", Limits{})
+var s3Operations = map[string]func(context.Context, *Bucket) error{
+	"list": func(ctx context.Context, store *Bucket) error {
+		_, err := object.ListAll(ctx, store, "objects/", object.Limits{})
 		return err
 	},
-	"list page": func(ctx context.Context, store *S3) error {
-		_, err := store.ListPage(ctx, ListRequest{Prefix: "objects/", Limit: 10})
+	"list page": func(ctx context.Context, store *Bucket) error {
+		_, err := store.ListPage(ctx, object.ListRequest{Prefix: "objects/", Limit: 10})
 		return err
 	},
-	"get": func(ctx context.Context, store *S3) error {
-		_, err := store.Read(ctx, ReadRequest{Key: "objects/item"})
+	"get": func(ctx context.Context, store *Bucket) error {
+		_, err := store.Read(ctx, object.ReadRequest{Key: "objects/item"})
 		return err
 	},
-	"get revision bounded": func(ctx context.Context, store *S3) error {
-		_, err := store.Read(ctx, ReadRequest{Key: "objects/item", Revision: `"etag"`, MaxBytes: 1024})
+	"get revision bounded": func(ctx context.Context, store *Bucket) error {
+		_, err := store.Read(ctx, object.ReadRequest{Key: "objects/item", Revision: `"etag"`, MaxBytes: 1024})
 		return err
 	},
-	"get range": func(ctx context.Context, store *S3) error {
-		_, err := store.Read(ctx, ReadRequest{Key: "objects/item", PrefixBytes: 512})
+	"get range": func(ctx context.Context, store *Bucket) error {
+		_, err := store.Read(ctx, object.ReadRequest{Key: "objects/item", PrefixBytes: 512})
 		return err
 	},
 }

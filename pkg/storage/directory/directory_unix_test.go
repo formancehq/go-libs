@@ -1,6 +1,6 @@
 //go:build unix
 
-package object
+package directory
 
 import (
 	"errors"
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/formancehq/go-libs/v5/pkg/storage/object"
 )
 
 func TestDirectoryRefusesFIFOWithoutWriter(t *testing.T) {
@@ -18,16 +20,16 @@ func TestDirectoryRefusesFIFOWithoutWriter(t *testing.T) {
 	if err := unix.Mkfifo(filepath.Join(root, "fifo"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	directory, err := OpenDirectory(root, Limits{})
+	directory, err := Open(root, object.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = directory.Close() }()
 	done := make(chan error, 1)
-	go func() { _, err := directory.Read(t.Context(), ReadRequest{Key: "fifo"}); done <- err }()
+	go func() { _, err := directory.Read(t.Context(), object.ReadRequest{Key: "fifo"}); done <- err }()
 	select {
 	case err := <-done:
-		if !errors.Is(err, ErrInvalid) {
+		if !errors.Is(err, object.ErrInvalid) {
 			t.Fatal(err)
 		}
 	case <-time.After(time.Second):
@@ -63,18 +65,18 @@ func TestDirectoryListingSkipsUnreadableKeysBeforeRecursion(t *testing.T) {
 	}
 	for _, mode := range []string{"path", "pinned"} {
 		t.Run(mode, func(t *testing.T) {
-			var directory *Directory
+			var directory *Bucket
 			var err error
 			if mode == "path" {
-				directory, err = NewDirectory(root, Limits{MaxObjects: 8})
+				directory, err = NewBucket(root, object.Limits{MaxObjects: 8})
 			} else {
-				directory, err = OpenDirectory(root, Limits{MaxObjects: 8})
+				directory, err = Open(root, object.Limits{MaxObjects: 8})
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer func() { _ = directory.Close() }()
-			objects, err := ListAll(t.Context(), directory, "", Limits{})
+			objects, err := object.ListAll(t.Context(), directory, "", object.Limits{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -84,11 +86,11 @@ func TestDirectoryListingSkipsUnreadableKeysBeforeRecursion(t *testing.T) {
 				if _, err := directory.Stat(t.Context(), meta.Key); err != nil {
 					t.Fatal(err)
 				}
-				result, err := directory.Read(t.Context(), ReadRequest{Key: meta.Key, Revision: meta.Revision})
+				result, err := directory.Read(t.Context(), object.ReadRequest{Key: meta.Key, Revision: meta.Revision})
 				if err != nil || string(result.Data) != "abc" {
 					t.Fatalf("listed key cannot be read: %q, %v", meta.Key, err)
 				}
-				_, data, err := ReadCurrent(t.Context(), directory, meta.Key, 16)
+				_, data, err := object.ReadCurrent(t.Context(), directory, meta.Key, 16)
 				if err != nil || string(data) != "abc" {
 					t.Fatalf("listed key cannot be read currently: %q, %v", meta.Key, err)
 				}
@@ -105,11 +107,11 @@ func TestDirectoryListingSkipsUnreadableKeysBeforeRecursion(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			limited, err := NewDirectory(skippedRoot, Limits{MaxObjects: 1})
+			limited, err := NewBucket(skippedRoot, object.Limits{MaxObjects: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := limited.ListPage(t.Context(), ListRequest{Limit: 1}); !errors.Is(err, ErrListingLimit) {
+			if _, err := limited.ListPage(t.Context(), object.ListRequest{Limit: 1}); !errors.Is(err, object.ErrListingLimit) {
 				t.Fatalf("entry budget not enforced: %v", err)
 			}
 		})

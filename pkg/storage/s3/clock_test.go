@@ -1,4 +1,4 @@
-package object
+package s3
 
 import (
 	"io"
@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/formancehq/go-libs/v5/pkg/storage/object"
 )
 
 func TestS3PageCarriesOnlyUncachedProviderClock(t *testing.T) {
@@ -23,11 +25,11 @@ func TestS3PageCarriesOnlyUncachedProviderClock(t *testing.T) {
 			client := s3.New(s3.Options{Region: "us-east-1", BaseEndpoint: aws.String("https://storage.example"), UsePathStyle: true, Credentials: credentials.NewStaticCredentialsProvider("test-id", "test-secret", ""), HTTPClient: &http.Client{Transport: answerTransport(func(request *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Header: headers, Request: request, Body: io.NopCloser(strings.NewReader(`<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>`))}, nil
 			})}})
-			store, createErr := NewS3(client, "archive", Limits{})
+			store, createErr := NewBucket(client, "archive", object.Limits{})
 			if createErr != nil {
 				t.Fatal(createErr)
 			}
-			page, err := store.ListPage(t.Context(), ListRequest{Limit: 1})
+			page, err := store.ListPage(t.Context(), object.ListRequest{Limit: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
