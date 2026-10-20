@@ -87,7 +87,7 @@ func (h httpTransport) RoundTrip(request *http.Request) (*http.Response, error) 
 	dump, err = h.dumpResponse(rsp)
 	logger.Debug(dump)
 	if err != nil {
-		logger.Debugf("failed to dump HTTP response body: %v", redact.MaskValues(err.Error()))
+		logger.Debug("failed to dump HTTP response body")
 	}
 
 	return rsp, nil
@@ -131,7 +131,7 @@ func (h httpTransport) dumpRequest(req *http.Request) (string, *http.Request) {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "%s %s %s\r\n", req.Method, h.requestURI(req), req.Proto)
 	if req.Host != "" {
-		fmt.Fprintf(&builder, "Host: %s\r\n", redact.MaskValues(req.Host))
+		fmt.Fprintf(&builder, "Host: %s\r\n", req.Host)
 	}
 	writeRedactedHeaders(&builder, req.Header)
 	builder.WriteString("\r\n")

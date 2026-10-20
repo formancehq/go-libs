@@ -485,10 +485,15 @@ using OR; either setting keeps credential paths hidden.
 
 `PathIsCredential` renders only the origin in debug diagnostics and default-base
 client spans. Retry/recovery logs remain host-only by default; `LogPath` adds a
-shape-redacted path only when the path is not declared a credential. All use the
-shared configured-value masking state. Caller-supplied base transports continue
+shape-redacted path only when the path is not declared a credential.
+Caller-supplied base transports continue
 to own their own tracing. A pending bearer replay that expires while pacing
 records budget exhaustion once while preserving the wait's original error.
+Pacing retains whether a failure came from the API limiter or token source.
+Anticipatory limiter refusal counts toward MaxElapsed exhaustion; an independent
+source-owned timeout does not while the transport budget remains live. Caller
+cancellation takes precedence for budget attribution, including during token
+revalidation after pacing; this does not replace a source-owned returned error.
 
 ## Context-aware client credentials
 
