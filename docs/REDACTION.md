@@ -9,9 +9,9 @@ side effects and exposes no credential values through errors.
 Configured values expand to plain, JSON-escaped, query/path-escaped and padded or
 raw standard/URL base64 representations. Longer variants match as substrings;
 variants shorter than 16 bytes require token boundaries. ASCII word/token
-characters and non-ASCII bytes cannot form a short-value boundary. Longest
-variants take precedence. `MaskValues` applies only this configured-value
-mechanism, without classifying business field names.
+characters and non-ASCII bytes cannot form a short-value boundary. All overlapping
+matches are unioned across every helper before replacement. `MaskValues` applies
+only this configured-value mechanism, without classifying business field names.
 
 Existing `Bytes`, `Reader`, `Headers`, `HeaderValues`, `URL`, `RequestURI` and
 `Path` apply configured masking in addition to their diagnostic name/shape
@@ -29,8 +29,12 @@ short-value boundary policy, so normalization cannot expose an already known
 credential. Normalization can conservatively mask the resulting spelling in
 diagnostic text. Direct `MaskValues`, URL helpers and structured JSON capture
 retain their original variant sets; diagnostic variants do not broaden those APIs.
-Reader normalizes supported inert JSON escapes once before both tail detection
-and diagnostic matching. If that window ends inside a supported escape that
+Reader collects raw configured matches and bounded tails before normalization,
+then normalizes supported inert JSON escapes once for diagnostic matching.
+Original ranges are carried through each escape contraction, including escapes
+that cross a configured-value boundary; the resulting diagnostic character is
+masked as part of that range. Normalized matches and tails join those original
+ranges before any replacement. If that window ends inside a supported escape that
 could continue a configured prefix, the incomplete escape and matching prefix
 are masked together without reading further. Tail ranges join full matches
 before replacement so they cannot fragment a complete credential. Literal

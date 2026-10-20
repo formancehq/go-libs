@@ -91,7 +91,8 @@ func redactBytes(data []byte, configured *valueReplacer) []byte {
 	if configured != nil {
 		variants = configured.diagnostic
 	}
-	return redactDiagnosticValues(decodeInertEscapes(data), true, variants)
+	data, rawMatches := normalizeConfiguredDiagnostics(data, configured, false)
+	return redactDiagnosticValues(data, true, variants, rawMatches...)
 }
 
 // redactNamedValues shares the diagnostic vocabulary without normalizing input.
@@ -165,15 +166,15 @@ func Reader(r io.Reader, maxBytes int) string {
 	truncated := len(data) > maxBytes
 	// Use the same supported representation for tail detection and full matches.
 	// Normalize once before either matching pass.
-	data = decodeInertEscapes(data)
 	configured := configuredValues.Load()
+	data, rawMatches := normalizeConfiguredDiagnostics(data, configured, truncated)
 	var variants []configuredVariant
 	if configured != nil {
 		variants = configured.diagnostic
 	}
-	var tail []redaction
+	tail := rawMatches
 	if truncated {
-		tail = configuredTailRedactions(data, variants)
+		tail = append(tail, configuredTailRedactions(data, variants)...)
 	}
 
 	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, variants, tail...)))
