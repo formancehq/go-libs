@@ -240,10 +240,11 @@ can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
 
-## Credential and structured capture redaction
+## Credential redaction
 
-[REDACTION.md](./REDACTION.md) describes configured-value masking on the existing
-redaction primitives and byte-preserving JSON/form capture refusal rules.
+The released redaction primitives mask named credentials in headers, URLs and
+body previews. Application-specific secret values and structured capture policy
+belong to the calling application; no process-wide configured-value API is added.
 
 ## Token refresh diagnostics
 
@@ -283,8 +284,8 @@ using OR; either setting keeps credential paths hidden.
 
 `PathIsCredential` renders only the origin in debug diagnostics and default-base
 client spans. Retry/recovery logs remain host-only by default; `LogPath` adds a
-shape-redacted path only when the path is not declared a credential. All use the
-shared configured-value masking state. Caller-supplied base transports continue
+shape-redacted path only when the path is not declared a credential.
+Caller-supplied base transports continue
 to own their own tracing. A pending bearer replay that expires while pacing
 records budget exhaustion once while preserving the wait's original error.
 Pacing retains whether a failure came from the API limiter or token source.

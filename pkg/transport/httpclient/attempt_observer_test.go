@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
-	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 type observerPolicy struct{ seen []string }
@@ -76,26 +75,24 @@ func TestCompletedAttemptObserverPreservesPolicyReplayAndBody(t *testing.T) {
 	}
 }
 
-func TestMetadataDiagnosticsMaskConfiguredValuesWithoutReadingBodies(t *testing.T) {
-	redact.ConfigureValues([]string{"configured-diagnostic-value"})
-	t.Cleanup(func() { redact.ConfigureValues(nil) })
+func TestMetadataDiagnosticsMaskCredentialsWithoutReadingBodies(t *testing.T) {
 	var logs bytes.Buffer
 	logger := logging.NewZapStack(&logs, logging.ToZapLevel(logging.DebugLevel), logging.ZapStackOptions{JSONFormatting: true})
 	requestBody := &diagnosticUnreadBody{t: t}
 	client := NewRetryClient(RetryConfig{Logger: logger, PathIsCredential: true, Debug: &DebugConfig{MetadataOnly: true, MaxBodyBytes: -1}, Base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Body: requestBody, Header: http.Header{"X-Trace": {"configured-diagnostic-value"}}, Request: req}, nil
+		return &http.Response{StatusCode: 200, Body: requestBody, Header: http.Header{"Authorization": {"Bearer diagnostic-credential"}}, Request: req}, nil
 	})})
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://example.test/word-key?cursor=private", requestBody)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("X-Trace", "configured-diagnostic-value")
+	req.Header.Set("Authorization", "Bearer diagnostic-credential")
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close()
-	for _, value := range []string{"configured-diagnostic-value", "word-key", "cursor=private"} {
+	for _, value := range []string{"Bearer diagnostic-credential", "word-key", "cursor=private"} {
 		if strings.Contains(logs.String(), value) {
 			t.Fatalf("diagnostic disclosed protected value: %s", logs.String())
 		}
