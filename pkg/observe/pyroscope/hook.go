@@ -5,7 +5,6 @@ package pyroscope
 import (
 	"context"
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -25,7 +24,6 @@ type Hook struct {
 	logger logging.Logger
 	start  func(sdk.Config) (func() error, error)
 	stop   func() error
-	scrub  func(string) string
 }
 
 func NewHook(cfg Config, logger logging.Logger) *Hook {
@@ -53,18 +51,13 @@ func (h *Hook) OnStart(ctx context.Context) error {
 	if h.cfg.UploadRate < 0 {
 		return errors.New("pyroscope: upload rate must not be negative")
 	}
-	scrub := h.cfg.scrubber()
-	h.scrub = scrub
-	h.logger.WithContext(ctx).WithFields(map[string]any{
-		"server_address": scrub(h.cfg.ServerAddress), "application_name": scrub(h.cfg.ApplicationName),
-		"profile_types": h.cfg.ProfileTypes, "tags": scrub(fmt.Sprint(h.cfg.Tags)),
-	}).Infof("Starting Pyroscope profiler")
+	h.logger.WithContext(ctx).Infof("Starting Pyroscope profiler")
 	config := h.cfg.Config
-	config.Logger = &sdkLogger{logger: h.logger, scrub: scrub}
+	config.Logger = &sdkLogger{logger: h.logger}
 	stop, err := h.start(config)
 	if err != nil {
 		// Do not retain an SDK error chain that may contain a credential-bearing URL.
-		return errors.New("starting pyroscope profiler: " + scrub(err.Error()))
+		return errors.New("starting pyroscope profiler failed")
 	}
 	h.stop = stop
 	return nil
@@ -78,7 +71,7 @@ func (h *Hook) OnStop(ctx context.Context) error {
 	}
 	h.logger.WithContext(ctx).Infof("Stopping Pyroscope profiler")
 	if err := h.stop(); err != nil {
-		h.logger.WithContext(ctx).WithField("error", h.scrub(err.Error())).Infof("Error stopping Pyroscope profiler")
+		h.logger.WithContext(ctx).Infof("Error stopping Pyroscope profiler")
 	}
 	h.stop = nil
 	return nil
@@ -86,17 +79,16 @@ func (h *Hook) OnStop(ctx context.Context) error {
 
 type sdkLogger struct {
 	logger logging.Logger
-	scrub  func(string) string
 }
 
-func (l *sdkLogger) Infof(format string, args ...any) {
-	l.logger.Infof("%s", l.scrub(fmt.Sprintf(format, args...)))
+func (l *sdkLogger) Infof(string, ...any) {
+	l.logger.Infof("Pyroscope SDK event")
 }
-func (l *sdkLogger) Errorf(format string, args ...any) {
-	l.logger.Errorf("%s", l.scrub(fmt.Sprintf(format, args...)))
+func (l *sdkLogger) Errorf(string, ...any) {
+	l.logger.Errorf("Pyroscope SDK event")
 }
-func (l *sdkLogger) Debugf(format string, args ...any) {
+func (l *sdkLogger) Debugf(string, ...any) {
 	if l.logger.Enabled(logging.DebugLevel) {
-		l.logger.Debugf("%s", l.scrub(fmt.Sprintf(format, args...)))
+		l.logger.Debugf("Pyroscope SDK event")
 	}
 }
