@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -16,6 +17,12 @@ type redaction struct {
 
 func redactDiagnosticValues(data []byte, maskBare bool, variants []configuredVariant, additional ...redaction) []byte {
 	ranges := append(namedValueRedactions(data, maskBare), additional...)
+	ranges = append(ranges, configuredValueRedactions(data, variants)...)
+	return applyRedactions(data, ranges, Marker)
+}
+
+func configuredValueRedactions(data []byte, variants []configuredVariant) []redaction {
+	var ranges []redaction
 	if len(variants) > 0 {
 		value := string(data)
 		for _, known := range variants {
@@ -33,7 +40,7 @@ func redactDiagnosticValues(data []byte, maskBare bool, variants []configuredVar
 			}
 		}
 	}
-	return applyRedactions(data, ranges)
+	return ranges
 }
 
 func namedValueRedactions(data []byte, maskBare bool) []redaction {
@@ -66,7 +73,7 @@ func namedValueRedactions(data []byte, maskBare bool) []redaction {
 	return ranges
 }
 
-func applyRedactions(data []byte, ranges []redaction) []byte {
+func applyRedactions(data []byte, ranges []redaction, marker string) []byte {
 	if len(ranges) == 0 {
 		return bytes.Clone(data)
 	}
@@ -85,7 +92,7 @@ func applyRedactions(data []byte, ranges []redaction) []byte {
 	for _, match := range merged {
 		out = append(out, data[last:match.start]...)
 		out = append(out, match.prefix...)
-		out = append(out, Marker...)
+		out = append(out, marker...)
 		last = match.end
 	}
 	return append(out, data[last:]...)
@@ -152,4 +159,48 @@ func partialInertEscapeMatches(partial string, next byte) bool {
 	_, inert := inertEscape(escape)
 	return inert && (strings.HasPrefix(string(escape), strings.ToLower(partial)) ||
 		next == '/' && strings.HasPrefix(`\/`, partial))
+}
+
+// Preserve original configured matches when an inert escape crosses their edge.
+// Match all policies against original or normalized input before replacement;
+// otherwise replacing a known value can hide a credential-bearing field name.
+func normalizeConfiguredDiagnostics(data []byte, configured *valueReplacer, truncated bool) ([]byte, []redaction) {
+	var raw []redaction
+	if configured != nil {
+		raw = configuredValueRedactions(data, configured.variants)
+		if truncated {
+			raw = append(raw, configuredTailRedactions(data, configured.variants)...)
+		}
+	}
+	// Record cumulative contractions once. Mapping each endpoint with a binary
+	// search avoids rescanning every escape for every configured match.
+	type contraction struct{ start, end, removed int }
+	var contractions []contraction
+	removed := 0
+	for _, span := range jsonEscapeRe.FindAllIndex(data, -1) {
+		if _, ok := inertEscape(data[span[0]:span[1]]); !ok {
+			continue
+		}
+		removed += span[1] - span[0] - 1
+		contractions = append(contractions, contraction{span[0], span[1], removed})
+	}
+	offset := func(index int, end bool) int {
+		next := sort.Search(len(contractions), func(i int) bool { return contractions[i].end > index })
+		removed := 0
+		if next > 0 {
+			removed = contractions[next-1].removed
+		}
+		if next < len(contractions) && index > contractions[next].start {
+			if end {
+				return contractions[next].start - removed + 1
+			}
+			return contractions[next].start - removed
+		}
+		return index - removed
+	}
+	for i := range raw {
+		raw[i].start = offset(raw[i].start, false)
+		raw[i].end = offset(raw[i].end, true)
+	}
+	return decodeInertEscapes(data), raw
 }
