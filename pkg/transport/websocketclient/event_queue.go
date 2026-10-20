@@ -89,15 +89,24 @@ func NewEventQueue[T any](capacity int, overflow EventQueueOverflow, options ...
 // snapshot reports those outcomes separately.
 func (q *EventQueue[T]) TryPush(event Event[T]) bool {
 	q.mu.Lock()
+	if q.closed {
+		q.rejectedClosed++
+		q.recordMetrics()
+		q.mu.Unlock()
+		return false
+	}
+	q.mu.Unlock()
+
+	// Encoding may invoke caller code, including Snapshot or Close. Recheck
+	// shutdown under the mutation lock before classifying any admission result.
+	size, err := encodedSize(event.Value)
+	q.mu.Lock()
 	defer q.mu.Unlock()
 	defer q.recordMetrics()
 	if q.closed {
 		q.rejectedClosed++
-
 		return false
 	}
-
-	size, err := encodedSize(event.Value)
 	if err != nil || size > q.byteLimit || q.bytes+size > q.byteLimit {
 		q.dropped++
 		return false
@@ -105,7 +114,7 @@ func (q *EventQueue[T]) TryPush(event Event[T]) bool {
 	select {
 	case <-q.slots:
 	default:
-		if q.overflow == EventQueueCoalesce {
+		if q.overflow == EventQueueCoalesce && q.depth > 0 {
 			q.coalesced++
 		} else {
 			q.dropped++
