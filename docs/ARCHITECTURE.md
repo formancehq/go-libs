@@ -27,8 +27,6 @@ go-libs/
     │   ├── log/                     #   Logger interface + adapters (zap, logr, logrus) -- see docs/LOGGING.md
     │   ├── traces/                  #   Tracer provider (OTLP gRPC/HTTP, stdout)
     │   ├── metrics/                 #   Meter provider (OTLP, in-memory), namespace prefix -- see docs/METRICS.md
-    │   ├── performance/             #   Bounded process-local stage diagnostics -- see docs/PERFORMANCE.md
-    │   ├── redact/                  #   Credential redaction for logged headers, URLs, bodies
     │   ├── resource.go              #   Shared OTLP resource builder
     │   └── profiling/               #   pprof debug server
     │
@@ -240,12 +238,6 @@ can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
 
-## Credential redaction
-
-The released redaction primitives mask named credentials in headers, URLs and
-body previews. Application-specific secret values and structured capture policy
-belong to the calling application; no process-wide configured-value API is added.
-
 ## Token refresh diagnostics
 
 `transport/httpclient.BearerRefreshFailureFields(err)` produces the bounded
@@ -273,23 +265,58 @@ bidirectional stream and close ownership.
 byte while restoring every byte and pending read error for the response owner.
 The owner still closes the body; the observer owns its time budget.
 
-`RetryConfig.Debug` composes the shared diagnostic transport. `DebugConfig.Logger`
-overrides the context logger, and `MetadataOnly` emits structured request/status
-and header fields without reading application bodies. Error diagnostics use the
-closed bearer diagnostic categories and never arbitrary error text. Body preview
-behavior remains unchanged unless the new mode is selected.
-
-Debug-level `PathIsCredential` protection is combined with retry-level protection
-using OR; either setting keeps credential paths hidden.
-
-`PathIsCredential` renders only the origin in debug diagnostics and default-base
-client spans. Retry/recovery logs remain host-only by default; `LogPath` adds a
-shape-redacted path only when the path is not declared a credential.
-Caller-supplied base transports continue
-to own their own tracing. A pending bearer replay that expires while pacing
+`NewDebugHTTPTransport` emits only fixed events and numeric status, without reading
+bodies or rendering URLs, headers or error messages. Retry path diagnostics omit
+the path, and default transport spans omit `url.full`, following the shared
+redaction package removal. Applications own any richer diagnostic policy.
+A pending bearer replay that expires while pacing
 records budget exhaustion once while preserving the wait's original error.
 Pacing retains whether a failure came from the API limiter or token source.
 Anticipatory limiter refusal counts toward MaxElapsed exhaustion; an independent
 source-owned timeout does not while the transport budget remains live. Caller
 cancellation takes precedence for budget attribution, including during token
 revalidation after pacing; this does not replace a source-owned returned error.
+A non-nil `grpcserver.WithServeErrorHandler` callback opts into withdrawing the
+configured health server before reporting an unexpected gRPC serving failure.
+Withdrawal affects every named service on that probe, including services sharing
+it with another hook. The callback can request application shutdown; it must
+return promptly and must not wait for `OnStop`, because shutdown joins the serving
+goroutine. Without a handler, including an explicitly nil handler, serving
+failures are logged and health remains under the existing lifecycle and caller
+control. `OnStop` still withdraws the configured probe before draining. Normal
+shutdown does not invoke the callback. Listener admission failures still return
+from `OnStart`.
+
+## Native continuous profiling
+
+[PYROSCOPE.md](./PYROSCOPE.md) describes the optional native SDK configuration and
+plain lifecycle hook. `pkg/fx/observefx.PyroscopeModule` composes it with existing
+trace correlation; pprof HTTP profiling remains separate.
+
+## WebSocket client transport
+
+`pkg/transport/websocketclient` supplies a minimal `Conn`, `Dialer` and
+`NewDialer(scope)` backed by `github.com/coder/websocket v1.8.15`. It injects
+OpenTelemetry propagation headers into the handshake, bounds inbound messages
+(including fragmented messages) to `ReadLimit` (32 MiB), writes text messages,
+and exposes context-aware read, write and ping with normal close semantics.
+It does not log URLs, headers or frames.
+
+The constructor creates `wsx.dial.attempts` and `wsx.dial.duration` instruments
+once, recording only the closed `outcome=ok|error` dimension. Explicit scopes
+are preserved; an empty scope uses the package's public `DefaultMetricsScope`.
+Instrumentation failure never prevents a connection attempt. These metric
+names remain stable independently of the package name.
+
+Protocol authentication frames, subscriptions, reconnect policy, watchdogs,
+queues, message interpretation and payload capture are caller responsibilities.
+There is no FX, CLI, provider or storage dependency in this package.
+
+### WebSocket connection ownership
+
+Keep one reader active to service control frames and run Ping concurrently.
+An expired or cancelled active Read closes the underlying connection; reconnect
+instead of treating it as a recoverable per-read timeout. A reader paused for
+local admission cannot service pongs, so callers must coordinate heartbeat
+failure policy with backpressure. Close ends the connection and releases the
+read loop; the owner cancels and joins its work before starting another session.

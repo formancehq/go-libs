@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
-	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 // Retry defaults. Zero-value RetryConfig fields fall back to these so a caller
@@ -35,9 +34,6 @@ type RetryConfig struct {
 
 	// PathIsCredential renders only the origin in transport diagnostics and spans.
 	PathIsCredential bool
-	// Debug enables metadata diagnostics. Nil disables them; negative MaxBodyBytes
-	// prevents body previews. Logger is inherited from RetryConfig when absent.
-	Debug *DebugConfig
 	// OnAttempt observes a completed wire attempt before policy evaluation and
 	// limiter feedback. It runs synchronously, may restore a bounded response
 	// preview, and must preserve body bytes/errors and obey the request context.
@@ -181,14 +177,6 @@ func NewRetryTransport(cfg RetryConfig) *RetryTransport {
 	timeout := deriveTimeout(&cfg)
 	if cfg.Base == nil {
 		cfg.Base = instrumentedTransport(NewBaseTransport(cfg.PerAttemptTimeout), cfg.TracerProvider, cfg.MeterProvider, cfg.PathIsCredential)
-	}
-	if cfg.Debug != nil {
-		diagnostic := *cfg.Debug
-		if diagnostic.Logger == nil {
-			diagnostic.Logger = cfg.Logger
-		}
-		diagnostic.PathIsCredential = diagnostic.PathIsCredential || cfg.PathIsCredential
-		cfg.Base = NewDebugHTTPTransportWithConfig(cfg.Base, diagnostic)
 	}
 	if cfg.Policy == nil {
 		cfg.Policy = DefaultRetryPolicy{Base: cfg.BaseDelay, Max: cfg.MaxDelay}
@@ -630,7 +618,7 @@ func (rt *roundTrip) waitBackoff(ctx context.Context, resp *http.Response, err e
 		"wait":    wait.String(),
 	}
 	if rt.t.cfg.LogPath && !rt.t.cfg.PathIsCredential {
-		fields["path"] = redact.Path(rt.req.URL.EscapedPath())
+		fields["path"] = "[omitted]"
 	}
 	rt.t.logger(ctx).WithFields(fields).Infof("http retry after rate limit / server error")
 

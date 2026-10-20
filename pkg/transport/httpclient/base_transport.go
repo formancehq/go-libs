@@ -107,11 +107,9 @@ type attemptSpanAnnotator struct {
 
 func (a *attemptSpanAnnotator) RoundTrip(req *http.Request) (*http.Response, error) {
 	if span := trace.SpanFromContext(req.Context()); span.IsRecording() {
-		// otelhttp stamped url.full from the raw URL before calling us. That
-		// value carries a credential for any upstream embedding one in the path
-		// or query (an API key as a path segment, a presigned URL), so write the
-		// redacted rendering over it: SetAttributes replaces an existing key.
-		span.SetAttributes(attribute.String(urlFullAttr, diagnosticURL(req.URL, a.pathIsCredential)))
+		// otelhttp sets the raw URL before calling us. Overwrite it because
+		// credentials can appear anywhere in the path or query.
+		span.SetAttributes(attribute.String(urlFullAttr, "[omitted]"))
 		if attempt, ok := req.Context().Value(attemptKey{}).(int); ok && attempt > 1 {
 			span.SetAttributes(attribute.Int(resendCountAttr, attempt-1))
 		}
