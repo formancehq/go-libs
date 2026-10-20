@@ -14,9 +14,6 @@ const minUnboundedSecretValue = 16
 var configuredValues atomic.Pointer[valueReplacer]
 
 type valueReplacer struct {
-	plain      *strings.Replacer
-	url        *strings.Replacer
-	bounded    []string
 	variants   []configuredVariant
 	diagnostic []configuredVariant
 }
@@ -60,19 +57,7 @@ func ConfigureValues(values []string) {
 
 		return strings.Compare(left, right)
 	})
-	var plainReplacements []string
-	var urlReplacements []string
-	bounded := make([]string, 0, len(ordered))
-	for _, variant := range ordered {
-		if len(variant) < minUnboundedSecretValue {
-			bounded = append(bounded, variant)
-
-			continue
-		}
-		plainReplacements = append(plainReplacements, variant, Marker)
-		urlReplacements = append(urlReplacements, variant, url.QueryEscape(Marker))
-	}
-	replacer := &valueReplacer{bounded: bounded}
+	replacer := &valueReplacer{}
 	diagnostic := make(map[string]bool, len(ordered))
 	for _, value := range ordered {
 		unbounded := len(value) >= minUnboundedSecretValue
@@ -92,10 +77,6 @@ func ConfigureValues(values []string) {
 		}
 		return strings.Compare(left.value, right.value)
 	})
-	if len(plainReplacements) > 0 {
-		replacer.plain = strings.NewReplacer(plainReplacements...)
-		replacer.url = strings.NewReplacer(urlReplacements...)
-	}
 	configuredValues.Store(replacer)
 }
 
@@ -125,7 +106,7 @@ func MaskValues(value string) string {
 		return value
 	}
 
-	return configured.replace(value, Marker, configured.plain)
+	return configured.replace(value, Marker)
 }
 
 func redactConfiguredURLString(value string) string {
@@ -134,44 +115,11 @@ func redactConfiguredURLString(value string) string {
 		return value
 	}
 
-	return configured.replace(value, url.QueryEscape(Marker), configured.url)
+	return configured.replace(value, url.QueryEscape(Marker))
 }
 
-func (r *valueReplacer) replace(value, marker string, unbounded *strings.Replacer) string {
-	if unbounded != nil {
-		value = unbounded.Replace(value)
-	}
-
-	return replaceBoundedValues(value, r.bounded, marker)
-}
-
-func replaceBoundedValues(value string, variants []string, marker string) string {
-	if len(variants) == 0 {
-		return value
-	}
-
-	var out strings.Builder
-	out.Grow(len(value))
-	for index := 0; index < len(value); {
-		matched := ""
-		for _, variant := range variants {
-			if strings.HasPrefix(value[index:], variant) && valueBounded(value, index, len(variant)) {
-				matched = variant
-
-				break
-			}
-		}
-		if matched == "" {
-			out.WriteByte(value[index])
-			index++
-
-			continue
-		}
-		out.WriteString(marker)
-		index += len(matched)
-	}
-
-	return out.String()
+func (r *valueReplacer) replace(value, marker string) string {
+	return string(applyRedactions([]byte(value), configuredValueRedactions([]byte(value), r.variants), marker))
 }
 
 func valueBounded(value string, start, length int) bool {

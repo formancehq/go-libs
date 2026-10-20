@@ -290,7 +290,8 @@ records budget exhaustion once while preserving the wait's original error.
 Pacing retains whether a failure came from the API limiter or token source.
 Anticipatory limiter refusal counts toward MaxElapsed exhaustion; an independent
 source-owned timeout does not while the transport budget remains live. Caller
-cancellation takes precedence, including during token revalidation after pacing.
+cancellation takes precedence for budget attribution, including during token
+revalidation after pacing; this does not replace a source-owned returned error.
 
 ## Context-aware client credentials
 
