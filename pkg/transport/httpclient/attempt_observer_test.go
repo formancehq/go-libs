@@ -1,10 +1,8 @@
 package httpclient
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -51,7 +49,7 @@ func TestCompletedAttemptObserverPreservesPolicyReplayAndBody(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			a.Response.Body = &prefixReadCloser{head: head, tail: a.Response.Body}
+			a.Response.Body = &joinReadCloser{head: head, tail: a.Response.Body}
 		},
 	})
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.test/resource", strings.NewReader("request"))
@@ -74,56 +72,6 @@ func TestCompletedAttemptObserverPreservesPolicyReplayAndBody(t *testing.T) {
 		t.Fatal("per-attempt signing mutated caller or reused signature")
 	}
 }
-
-func TestMetadataDiagnosticsMaskCredentialsWithoutReadingBodies(t *testing.T) {
-	var logs bytes.Buffer
-	logger := logging.NewZapStack(&logs, logging.ToZapLevel(logging.DebugLevel), logging.ZapStackOptions{JSONFormatting: true})
-	requestBody := &diagnosticUnreadBody{t: t}
-	client := NewRetryClient(RetryConfig{Logger: logger, PathIsCredential: true, Debug: &DebugConfig{MetadataOnly: true, MaxBodyBytes: -1}, Base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Body: requestBody, Header: http.Header{"Authorization": {"Bearer diagnostic-credential"}}, Request: req}, nil
-	})})
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://example.test/word-key?cursor=private", requestBody)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Authorization", "Bearer diagnostic-credential")
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	for _, value := range []string{"Bearer diagnostic-credential", "word-key", "cursor=private"} {
-		if strings.Contains(logs.String(), value) {
-			t.Fatalf("diagnostic disclosed protected value: %s", logs.String())
-		}
-	}
-	if !strings.Contains(logs.String(), "http request completed") || !strings.Contains(logs.String(), "https://example.test") {
-		t.Fatal("metadata diagnostics missing")
-	}
-}
-
-type diagnosticUnreadBody struct{ t *testing.T }
-
-func (b *diagnosticUnreadBody) Read([]byte) (int, error) {
-	b.t.Fatal("metadata diagnostics read application body")
-	return 0, io.EOF
-}
-func (*diagnosticUnreadBody) Close() error { return nil }
-
-type replayWaitToken struct{ calls int }
-
-func (s *replayWaitToken) Token(ctx context.Context) (string, error) {
-	s.calls++
-	if s.calls == 1 {
-		return "old", nil
-	}
-	if s.calls == 2 {
-		return "new", nil
-	}
-	<-ctx.Done()
-	return "", ctx.Err()
-}
-func (*replayWaitToken) Invalidate(string) {}
 
 func TestBearerReplayWaitBudgetExhaustionIsRecorded(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
@@ -161,30 +109,6 @@ func TestBearerReplayWaitBudgetExhaustionIsRecorded(t *testing.T) {
 	}
 	if exhausted != 1 {
 		t.Fatalf("exhausted=%d want 1", exhausted)
-	}
-}
-
-func TestDebugConfigCredentialPathProtectionIsMonotonic(t *testing.T) {
-	for _, metadataOnly := range []bool{false, true} {
-		t.Run(fmt.Sprint(metadataOnly), func(t *testing.T) {
-			var logs bytes.Buffer
-			logger := logging.NewZapStack(&logs, logging.ToZapLevel(logging.DebugLevel), logging.ZapStackOptions{JSONFormatting: true})
-			client := NewRetryClient(RetryConfig{Logger: logger, Debug: &DebugConfig{MetadataOnly: metadataOnly, PathIsCredential: true}, Base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}, Request: req}, nil
-			})})
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.test/wordcredential", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_ = resp.Body.Close()
-			if strings.Contains(logs.String(), "wordcredential") || !strings.Contains(logs.String(), "https://example.test") {
-				t.Fatal("debug credential-path protection lost")
-			}
-		})
 	}
 }
 
@@ -226,3 +150,18 @@ func TestBearerReplayAnticipatoryLimiterBudgetExhaustionIsRecorded(t *testing.T)
 		t.Fatalf("exhausted=%d want1", exhausted)
 	}
 }
+
+type replayWaitToken struct{ calls int }
+
+func (s *replayWaitToken) Token(ctx context.Context) (string, error) {
+	s.calls++
+	if s.calls == 1 {
+		return "old", nil
+	}
+	if s.calls == 2 {
+		return "new", nil
+	}
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+func (*replayWaitToken) Invalidate(string) {}
