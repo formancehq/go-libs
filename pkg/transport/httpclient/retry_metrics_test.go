@@ -270,10 +270,9 @@ func TestSpansArePerAttempt(t *testing.T) {
 	require.Equal(t, map[int64]bool{1: true}, resendCounts, "only the resend carries http.request.resend_count=1")
 }
 
-// TestSpanURLIsRedacted: otelhttp stamps url.full from the raw URL, which
-// carries a credential for an upstream embedding one in the path or query.
-// The span must hold only the redacted rendering, including on retries.
-func TestSpanURLIsRedacted(t *testing.T) {
+// TestSpanURLIsOmitted checks ended spans, including retries, after otelhttp
+// has set url.full from the raw request URL.
+func TestSpanURLIsOmitted(t *testing.T) {
 	t.Parallel()
 
 	exporter := tracetest.NewInMemoryExporter()
@@ -309,7 +308,6 @@ func TestSpanURLIsRedacted(t *testing.T) {
 				full = kv.Value.AsString()
 			}
 		}
-		require.Contains(t, full, "/items", "url.full keeps the route")
-		require.Contains(t, full, "page=2", "url.full keeps non-sensitive query values")
+		require.Equal(t, "[omitted]", full)
 	}
 }

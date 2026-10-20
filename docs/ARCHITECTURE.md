@@ -28,7 +28,6 @@ go-libs/
     │   ├── traces/                  #   Tracer provider (OTLP gRPC/HTTP, stdout)
     │   ├── metrics/                 #   Meter provider (OTLP, in-memory), namespace prefix -- see docs/METRICS.md
     │   ├── payloadlog/              #   Opt-in bounded reassemblable payload capture -- see docs/PAYLOAD-CAPTURE.md
-    │   ├── redact/                  #   Credential redaction for logged headers, URLs, bodies
     │   ├── resource.go              #   Shared OTLP resource builder
     │   └── profiling/               #   pprof debug server
     │

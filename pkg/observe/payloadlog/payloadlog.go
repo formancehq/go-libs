@@ -23,7 +23,6 @@ import (
 	"unicode/utf8"
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
-	golibsredact "github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 const chunkBytes = 64 << 10
@@ -237,7 +236,7 @@ func safePayload(kind contentKind, payload []byte, sanitize func([]byte) ([]byte
 		return rendered, true
 	}
 	if kind == contentPlain {
-		return golibsredact.Bytes(payload), true
+		return bytes.Clone(payload), true
 	}
 	return nil, false
 }

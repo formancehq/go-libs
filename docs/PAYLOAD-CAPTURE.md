@@ -14,8 +14,8 @@ transport error. Adapters retain their original request/response/frame outcomes.
 JSON and form content require an application-owned `Record.Sanitize` callback.
 The callback receives a private copy of the bounded bytes and returns safe content
 or false to omit. Missing sanitization omits structured content. No configured-value
-registry or structured redactor is supplied by this package. Existing released
-named-credential redaction remains available for explicitly trusted plain text.
+registry or structured redactor is supplied by this package. Explicitly trusted plain text may pass through unchanged; callers must supply
+a sanitizer when that content needs masking. The shared redaction package is removed.
 Malformed, unsupported, oversized or rejected payloads emit metadata-only omission;
 producer error text is never logged. Sanitized output must remain valid UTF-8,
 JSON output must remain valid JSON, and output cannot exceed the effective limit.

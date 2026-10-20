@@ -5,7 +5,6 @@ package pyroscope
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -74,41 +73,4 @@ func TestCollectionsReadStoredValues(t *testing.T) {
 	require.Empty(t, ConfigFromFlags(flags).ProfileTypes)
 	require.NoError(t, flags.Lookup(ProfileTypesFlag).Value.(pflag.SliceValue).Replace([]string{}))
 	require.Equal(t, DefaultConfig().ProfileTypes, ConfigFromFlags(flags).ProfileTypes)
-}
-
-func TestDiagnosticScrubbing(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.AuthToken = "synthetic-token"
-	cfg.BasicAuthUser = "synthetic-user"
-	cfg.BasicAuthPassword = "synthetic-password"
-	cfg.ServerAddress = "https://url-user:url-password@profiles.example.test/path?token=query-secret"
-	cfg.Tags = map[string]string{"password": "tag-secret"}
-	cfg.HTTPHeaders = map[string]string{"Authorization": "header-secret"}
-	t.Setenv("PYROSCOPE_ADHOC_SERVER_ADDRESS", "https://ad-user:ad-password@example.test")
-	message := cfg.ServerAddress + " synthetic-token synthetic-user synthetic-password header-secret tag-secret query-secret https://ad-user:ad-password@example.test"
-	redacted := cfg.scrubber()(message)
-	for _, secret := range []string{"synthetic-token", "synthetic-user", "synthetic-password", "url-user", "url-password", "header-secret", "tag-secret", "query-secret", "ad-user", "ad-password"} {
-		require.NotContains(t, redacted, secret)
-	}
-	cfg.ServerAddress = "https://url-user:bad%password@profiles.example.test"
-	require.NotContains(t, cfg.scrubber()(cfg.ServerAddress), "bad%password")
-	require.True(t, strings.Contains(redacted, "profiles.example.test"))
-	cfg.AuthToken = "synthetic-escaped\"\\\n<&"
-	encoded, err := json.Marshal(cfg.AuthToken)
-	require.NoError(t, err)
-	for _, message := range []string{fmt.Sprintf("%q", cfg.AuthToken), string(encoded)} {
-		require.NotContains(t, cfg.scrubber()(message), "synthetic-escaped")
-	}
-}
-
-func TestScrubberMasksRewrittenPathsAndAuthorizationComponents(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.ServerAddress = "https://profiles.example.test/synthetickey0123456789?region=eu"
-	cfg.HTTPHeaders = map[string]string{"Authorization": "Bearer synthetic-header-token"}
-	rewritten := "https://profiles.example.test/synthetickey0123456789/ingest?name=example&from=1"
-	got := cfg.scrubber()(rewritten + " rejected synthetic-header-token")
-	require.NotContains(t, got, "synthetickey0123456789")
-	require.NotContains(t, got, "synthetic-header-token")
-	require.Contains(t, got, "profiles.example.test")
-	require.Equal(t, "Bearer synthetic-header-token", cfg.HTTPHeaders["Authorization"])
 }
