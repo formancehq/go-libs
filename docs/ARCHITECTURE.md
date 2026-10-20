@@ -245,3 +245,47 @@ invoke the callback. Listener admission failures still return from `OnStart`.
 
 [PAYLOAD-CAPTURE.md](./PAYLOAD-CAPTURE.md) separates bounded capture mechanics
 from application-owned sanitization. Structured capture is omitted without that policy.
+A non-nil `grpcserver.WithServeErrorHandler` callback opts into withdrawing the
+configured health server before reporting an unexpected gRPC serving failure.
+Withdrawal affects every named service on that probe, including services sharing
+it with another hook. The callback can request application shutdown; it must
+return promptly and must not wait for `OnStop`, because shutdown joins the serving
+goroutine. Without a handler, including an explicitly nil handler, serving
+failures are logged and health remains under the existing lifecycle and caller
+control. `OnStop` still withdraws the configured probe before draining. Normal
+shutdown does not invoke the callback. Listener admission failures still return
+from `OnStart`.
+
+## Native continuous profiling
+
+[PYROSCOPE.md](./PYROSCOPE.md) describes the optional native SDK configuration and
+plain lifecycle hook. `pkg/fx/observefx.PyroscopeModule` composes it with existing
+trace correlation; pprof HTTP profiling remains separate.
+
+## WebSocket client transport
+
+`pkg/transport/websocketclient` supplies a minimal `Conn`, `Dialer` and
+`NewDialer(scope)` backed by `github.com/coder/websocket v1.8.15`. It injects
+OpenTelemetry propagation headers into the handshake, bounds inbound messages
+(including fragmented messages) to `ReadLimit` (32 MiB), writes text messages,
+and exposes context-aware read, write and ping with normal close semantics.
+It does not log URLs, headers or frames.
+
+The constructor creates `wsx.dial.attempts` and `wsx.dial.duration` instruments
+once, recording only the closed `outcome=ok|error` dimension. Explicit scopes
+are preserved; an empty scope uses the package's public `DefaultMetricsScope`.
+Instrumentation failure never prevents a connection attempt. These metric
+names remain stable independently of the package name.
+
+Protocol authentication frames, subscriptions, reconnect policy, watchdogs,
+queues, message interpretation and payload capture are caller responsibilities.
+There is no FX, CLI, provider or storage dependency in this package.
+
+### WebSocket connection ownership
+
+Keep one reader active to service control frames and run Ping concurrently.
+An expired or cancelled active Read closes the underlying connection; reconnect
+instead of treating it as a recoverable per-read timeout. A reader paused for
+local admission cannot service pongs, so callers must coordinate heartbeat
+failure policy with backpressure. Close ends the connection and releases the
+read loop; the owner cancels and joins its work before starting another session.

@@ -14,7 +14,6 @@ import (
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 	"github.com/formancehq/go-libs/v5/pkg/observe/payloadlog"
-	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
 func jsonLogger(buffer *bytes.Buffer, level logging.Level) logging.Logger {
@@ -73,7 +72,7 @@ func TestCaptureRedactsBeforeChunkingAndReassembles(t *testing.T) {
 	ctx := trace.ContextWithSpanContext(t.Context(), trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2},
 	}))
-	payloadlog.Capture(ctx, jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{Sanitize: func(b []byte) ([]byte, bool) { return bytes.ReplaceAll(b, []byte(secret), []byte(redact.Marker)), true },
+	payloadlog.Capture(ctx, jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{Sanitize: func(b []byte) ([]byte, bool) { return bytes.ReplaceAll(b, []byte(secret), []byte("[REDACTED]")), true },
 		Transport: "websocket", Direction: "receive", Operation: "frame", Fields: map[string]any{"component.name": "example"},
 		ContentType: "application/json", Limit: int64(len(payload)),
 		Produce: func(int64) ([]byte, error) { return payload, nil },
@@ -274,7 +273,10 @@ func TestCaptureRedactsPlainTextAndAcceptsEmptyPayload(t *testing.T) {
 			payloadlog.Capture(t.Context(), jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{
 				Transport: "webhook", Direction: "send", ContentType: "text/plain; charset=utf-8", Limit: 1024,
 				TrustedPlainText: true,
-				Produce:          func(int64) ([]byte, error) { return payload, nil },
+				Sanitize: func(b []byte) ([]byte, bool) {
+					return bytes.ReplaceAll(b, []byte("secret"), []byte("[REDACTED]")), true
+				},
+				Produce: func(int64) ([]byte, error) { return payload, nil },
 			})
 			logs := lines(t, &buffer)
 			if len(logs) != 1 || logs[0]["payload.omitted_reason"] != nil {
@@ -288,7 +290,7 @@ func TestCaptureRedactsPlainTextAndAcceptsEmptyPayload(t *testing.T) {
 				if len(decoded) != 0 {
 					t.Fatal("empty payload changed")
 				}
-			} else if strings.Contains(string(decoded), "secret") || !strings.Contains(string(decoded), redact.Marker) {
+			} else if strings.Contains(string(decoded), "secret") || !strings.Contains(string(decoded), "[REDACTED]") {
 				t.Fatal("decoded plain-text payload did not redact the credential")
 			}
 		})
