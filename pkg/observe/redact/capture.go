@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"iter"
 	"net/url"
 	"regexp"
 	"strings"
@@ -15,6 +16,7 @@ var jsonKeyRe = regexp.MustCompile(`"(?:\\.|[^"\\])*"\s*:`)
 // JSON redacts string credentials in one valid JSON document, retaining all
 // bytes outside redacted strings. Duplicate credential keys (case-insensitive),
 // escaped credential names and non-string credential values return nil, false.
+// Any masking that would change an object key also returns nil, false.
 // Configured credentials also match decoded string contents. Bound input first.
 func JSON(data []byte) ([]byte, bool) {
 	if !json.Valid(data) {
@@ -61,7 +63,7 @@ func JSON(data []byte) ([]byte, bool) {
 	// fragment a configured credential. Original keys remain available to the
 	// named policy; the preflight refusal above remains part of the contract.
 	out = redactNamedValues(redactJSONStrings(data), false)
-	if !json.Valid(out) {
+	if !json.Valid(out) || !jsonObjectKeysPreserved(data, out) {
 		return nil, false
 	}
 
@@ -77,28 +79,11 @@ func redactJSONStrings(data []byte) []byte {
 
 	out := make([]byte, 0, len(data))
 	last := 0
-	for index := 0; index < len(data); {
-		relativeStart := bytes.IndexByte(data[index:], '"')
-		if relativeStart < 0 {
-			break
-		}
-		contentStart := index + relativeStart + 1
-		contentEnd := contentStart
-		for data[contentEnd] != '"' {
-			if data[contentEnd] == '\\' {
-				contentEnd++
-			}
-			contentEnd++
-		}
-		after := contentEnd + 1
-		for after < len(data) && isJSONSpace(data[after]) {
-			after++
-		}
-		if after < len(data) && data[after] == ':' {
-			index = contentEnd + 1
-
+	for token := range jsonStringTokens(data) {
+		if token.key {
 			continue
 		}
+		contentStart, contentEnd := token.start+1, token.end-1
 		var content string
 		if err := json.Unmarshal(data[contentStart-1:contentEnd+1], &content); err != nil {
 			return nil
@@ -113,11 +98,67 @@ func redactJSONStrings(data []byte) []byte {
 			out = append(out, rendered[1:len(rendered)-1]...)
 			last = contentEnd
 		}
-		index = contentEnd + 1
 	}
 	out = append(out, data[last:]...)
 
 	return out
+}
+
+type jsonStringToken struct {
+	start, end int
+	key        bool
+}
+
+// jsonStringTokens walks one valid JSON document without interpreting key
+// spelling or allocating decoded values. end is just after the closing quote.
+func jsonStringTokens(data []byte) iter.Seq[jsonStringToken] {
+	return func(yield func(jsonStringToken) bool) {
+		for index := 0; index < len(data); {
+			relative := bytes.IndexByte(data[index:], '"')
+			if relative < 0 {
+				return
+			}
+			start := index + relative
+			end := start + 1
+			for data[end] != '"' {
+				if data[end] == '\\' {
+					end++
+				}
+				end++
+			}
+			end++
+			after := end
+			for after < len(data) && isJSONSpace(data[after]) {
+				after++
+			}
+			if !yield(jsonStringToken{start, end, after < len(data) && data[after] == ':'}) {
+				return
+			}
+			index = end
+		}
+	}
+}
+
+// Compare encoded key tokens in order, retaining duplicate noncredential keys,
+// escapes and distinct keys across nested objects instead of decoding to maps.
+func jsonObjectKeysPreserved(original, redacted []byte) bool {
+	var keys [][]byte
+	for token := range jsonStringTokens(original) {
+		if token.key {
+			keys = append(keys, original[token.start:token.end])
+		}
+	}
+	index := 0
+	for token := range jsonStringTokens(redacted) {
+		if !token.key {
+			continue
+		}
+		if index >= len(keys) || !bytes.Equal(keys[index], redacted[token.start:token.end]) {
+			return false
+		}
+		index++
+	}
+	return index == len(keys)
 }
 
 func isJSONSpace(b byte) bool { return b == ' ' || b == '\t' || b == '\r' || b == '\n' }

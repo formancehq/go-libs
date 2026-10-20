@@ -48,7 +48,11 @@ immutable configured-value snapshot.
 cannot safely preserve the payload. Bound input before calling it. It validates
 one complete JSON document, refuses escaped credential keys, case-insensitive
 duplicate credential keys within the same object, and non-string credential
-values. Repeated keys in separate objects are independent. Noncredential
+values. If diagnostic masking would change an encoded object key, capture is
+refused, even when the result would still be valid JSON. Key tokens are compared
+without decoding them into a map, so distinct keys, original escapes and allowed
+noncredential duplicate keys retain their exact representation. Repeated keys
+in separate objects are independent. Noncredential
 object/array/scalar content and every byte outside redacted strings retain their
 original representation, including whitespace, number spelling and escapes.
 Diagnostic credential patterns and configured values match original decoded
