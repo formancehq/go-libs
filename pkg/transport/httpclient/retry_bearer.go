@@ -151,7 +151,7 @@ func (rt *roundTrip) remintBearer(ctx, authBudget context.Context) (outcome stri
 
 	fields := map[string]any{
 		"method":  rt.req.Method,
-		"host":    redact.MaskValues(rt.req.URL.Host),
+		"host":    rt.req.URL.Host,
 		"attempt": rt.attempt,
 		"outcome": outcome,
 	}

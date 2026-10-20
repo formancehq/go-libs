@@ -624,7 +624,7 @@ func (rt *roundTrip) waitBackoff(ctx context.Context, resp *http.Response, err e
 	rt.policyAttempt++
 	fields := map[string]any{
 		"method":  rt.req.Method,
-		"host":    redact.MaskValues(rt.req.URL.Host),
+		"host":    rt.req.URL.Host,
 		"status":  statusOf(resp),
 		"attempt": rt.attempt,
 		"wait":    wait.String(),

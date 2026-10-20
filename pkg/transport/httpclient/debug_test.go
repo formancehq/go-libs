@@ -547,7 +547,8 @@ func TestDebugHTTPTransportReplaysHeadBeforeReadError(t *testing.T) {
 
 	logs := strings.Join(logger.debugMessages, "\n")
 	require.Contains(t, logs, "Etag: e1", "the header portion is still logged")
-	require.Contains(t, logs, "failed to dump HTTP response body: connection reset")
+	require.Contains(t, logs, "failed to dump HTTP response body")
+	require.NotContains(t, logs, readErr.Error(), "diagnostics must not render arbitrary reader errors")
 }
 
 // TestDebugHTTPTransportRedactsURLValuedHeaders: Location, Content-Location
