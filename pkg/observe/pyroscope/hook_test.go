@@ -29,6 +29,7 @@ func TestHookLifecycleAndSDKConfiguration(t *testing.T) {
 	cfg.AuthToken = "synthetic-token"
 	cfg.BasicAuthPassword = "synthetic-password"
 	cfg.Tags = map[string]string{"region": "test"}
+	cfg.HTTPHeaders = map[string]string{"Authorization": "Bearer synthetic-header"}
 	hook := NewHook(cfg, logging.NewZapStack(&output, zapcore.DebugLevel, logging.ZapStackOptions{JSONFormatting: true}))
 	cfg.Tags["region"] = "mutated"
 	starts, stops := 0, 0
@@ -36,6 +37,8 @@ func TestHookLifecycleAndSDKConfiguration(t *testing.T) {
 		starts++
 		require.Equal(t, "test", got.Tags["region"])
 		require.Equal(t, "synthetic-token", got.AuthToken)
+		require.Equal(t, cfg.ServerAddress, got.ServerAddress)
+		require.Equal(t, "Bearer synthetic-header", got.HTTPHeaders["Authorization"])
 		require.Equal(t, 15*time.Second, got.UploadRate)
 		require.Len(t, got.ProfileTypes, 10)
 		got.Logger.Infof("token synthetic-token")
@@ -154,7 +157,7 @@ func TestNegativeUploadRateFailsBeforeSDKStart(t *testing.T) {
 	require.NoError(t, hook.OnStop(t.Context()))
 }
 
-func TestRealSDKCallbackMasksBareBearerAndRewrittenPath(t *testing.T) {
+func TestRealSDKCallbackOmitsBearerAndRewrittenPath(t *testing.T) {
 	var received atomic.Bool
 	const token = "synthetic-bare-callback-token"
 	const path = "synthetickey0123456789"
@@ -181,7 +184,8 @@ func TestRealSDKCallbackMasksBareBearerAndRewrittenPath(t *testing.T) {
 	defer func() { require.NoError(t, hook.OnStop(t.Context())) }()
 	require.Eventually(t, received.Load, 3*time.Second, 10*time.Millisecond)
 	require.NoError(t, hook.OnStop(t.Context()))
-	require.Contains(t, output.String(), "rejected")
+	require.Contains(t, output.String(), "Pyroscope SDK event")
+	require.NotContains(t, output.String(), "rejected")
 	require.NotContains(t, output.String(), token)
 	require.NotContains(t, output.String(), path)
 }

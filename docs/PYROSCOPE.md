@@ -49,12 +49,15 @@ positive sampling rates during graph construction, registers the hook and
 composes the existing trace decorator. TagSpans and TagAllSpans do not tag traces
 when Enabled is false. No other tracing-provider policy changes.
 
-Config formatting/JSON and SDK log callbacks omit or mask configured credentials,
-credential-bearing URLs/headers and sensitive tag values. Native start errors
-are sanitized without retaining unsafe parser causes; stop diagnostics are also
-sanitized. Secrets remain unchanged on SDK requests. Logging the raw embedded
-SDK Config bypasses these protections; do not log it. The logger callback API
-has no request context, so SDK callbacks use the process logger.
+Config formatting and JSON expose only boolean and numeric settings. They omit
+application names, addresses, tags, profile names, headers and credentials.
+SDK log callbacks emit a fixed `Pyroscope SDK event` at the original level,
+without formatting the SDK message or arguments. Start errors and stop logs
+also use fixed messages without SDK error text or causes. These diagnostics
+retain lifecycle and failure signals but omit detailed SDK failure reasons.
+SDK requests receive the configured credentials unchanged. Logging the raw
+embedded SDK Config bypasses these protections. Do not log it. The logger
+callback API has no request context, so SDK callbacks use the process logger.
 
 This is a source capability candidate. A containing published go-libs release
 and application-specific source/operational qualification are required before
@@ -65,12 +68,6 @@ call `pyroscopetraces.AddFlags` on the same flag set. Similarly, select one trac
 provider decorator; do not combine `PyroscopeModule` with another enabled
 Pyroscope correlation decorator in the same Fx scope. The module composes that
 correlation itself.
-
-Configured Authorization/Proxy-Authorization credential components and opaque
-address path segments selected by the URL redactor remain masked when an SDK
-callback echoes only a token or rewrites the address to an upload endpoint.
-These diagnostic transformations never alter SDK request credentials.
-
 
 ## OpenTelemetry Profiles
 
@@ -128,7 +125,6 @@ application owner for them. The native hook must be stopped by its lifecycle
 owner, but its SDK stop cannot be bounded by context cancellation and does not
 promise a final snapshot for every profile type. Profile tags/cardinality,
 network/upload volume, memory and CPU overhead, and retained history costs need
-consumer-specific measurement. Diagnostics masking does not make the raw
-embedded SDK configuration safe to log. Whitespace normalization is used only
-when extracting configured Authorization/Proxy-Authorization components for
-masking; request header values are left untouched.
+consumer-specific measurement. The diagnostic projection does not make the raw
+embedded SDK configuration safe to log. Diagnostic omission leaves SDK request
+headers and credentials unchanged.
