@@ -28,11 +28,12 @@ const (
 // a sensible default, so a caller that does not care about retry, pacing or
 // deadlines can pass the zero RetryConfig.
 type RetryConfig struct {
-	// LogPath includes a shape-redacted path in retry/recovery fields. It is
-	// ignored when PathIsCredential is true; the default logs host only.
+	// LogPath includes a fixed omitted-path marker in retry/recovery fields.
+	// It is ignored when PathIsCredential is true; the default logs host only.
 	LogPath bool
 
-	// PathIsCredential renders only the origin in transport diagnostics and spans.
+	// PathIsCredential suppresses even the omitted-path field in retry diagnostics.
+	// Default transport spans always omit the full URL.
 	PathIsCredential bool
 	// OnAttempt observes a completed wire attempt before policy evaluation and
 	// limiter feedback. It runs synchronously, may restore a bounded response
