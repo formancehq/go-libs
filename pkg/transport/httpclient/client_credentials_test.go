@@ -437,7 +437,6 @@ func TestConcurrentRejectedAPICallsShareOneReplacementMint(t *testing.T) {
 	allRejectedRequestsStarted := make(chan struct{})
 	apiHTTP := NewRetryClient(RetryConfig{
 		LogPath: true,
-		Debug:   &DebugConfig{MaxBodyBytes: -1, MetadataOnly: true},
 
 		Base: credentialsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			switch r.Header.Get("Authorization") {
@@ -512,7 +511,6 @@ func TestShortLivedTokenFailsBeforeBearerPacingCanChurn(t *testing.T) {
 	var apiHits atomic.Int32
 	apiHTTP := NewRetryClient(RetryConfig{
 		LogPath: true,
-		Debug:   &DebugConfig{MaxBodyBytes: -1, MetadataOnly: true},
 
 		Base: credentialsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			apiHits.Add(1)
