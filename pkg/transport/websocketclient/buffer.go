@@ -2,6 +2,7 @@ package websocketclient
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -74,28 +75,40 @@ func NewKeyedBuffer[T any](capacity int, options ...CollectionOption) *KeyedBuff
 }
 
 func (b *KeyedBuffer[T]) Push(key string, value T, links ...trace.SpanContext) {
+	// Encoding can invoke caller code. Only the admission and its accounting
+	// belong under the mutation lock.
+	size, err := encodedSize(value)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	defer b.recordMetrics()
 
 	b.pushed++
-	size, err := encodedSize(value)
 	if err != nil || size+len(key) > b.byteLimit {
 		b.rejected++
 		return
 	}
 	size += len(key)
 	entry, ok := b.entries[key]
-	for b.bytes-entry.bytes+size > b.byteLimit {
-		index := 0
-		if b.order[index] == key {
-			index++
+	evicted := false
+	for _, oldest := range b.order {
+		if b.bytes-entry.bytes+size <= b.byteLimit {
+			break
 		}
-		oldest := b.order[index]
+		if oldest == key {
+			continue
+		}
 		b.bytes -= b.entries[oldest].bytes
-		b.order = append(b.order[:index], b.order[index+1:]...)
 		delete(b.entries, oldest)
 		b.evicted++
+		evicted = true
+	}
+	if evicted {
+		// Compact once after selecting victims, preserving survivor order and
+		// a replacement key's original position rather than shifting per victim.
+		b.order = slices.DeleteFunc(b.order, func(candidate string) bool {
+			_, retained := b.entries[candidate]
+			return !retained
+		})
 	}
 	if !ok {
 		b.inserted++

@@ -289,9 +289,20 @@ framework or second connection interface is introduced.
 
 `websocketclient.EventQueue` owns non-blocking bounded FIFO admission, close/drain,
 reset discard and coherent queue accounting. Callers select drop or coalesce for
-item saturation; encoded-byte rejection is always a drop. `KeyedBuffer` owns
+item saturation; coalescence requires an already retained trigger, so zero or
+negative-normalized-to-zero item capacity drops instead. Encoded-byte rejection
+is always a drop, and shutdown rejection remains separate and takes precedence.
+`KeyedBuffer` owns
 insertion ordering, replacement-in-place, bounded oldest eviction and drains.
 Both retain encoded-payload bounds without claiming total heap measurement.
+Payload sizing can invoke a caller's JSON marshaler and runs outside collection
+mutation locks, allowing read-only Snapshot/Stats inspection during marshaling.
+EventQueue checks shutdown before encoding and again at admission; an already
+closed queue does not serialize the rejected value. Size-based admission,
+accounting and mutations remain atomic under the collection lock. KeyedBuffer
+selects byte-eviction victims in insertion order and compacts survivors once per
+admission; replacements retain original position/age and latest origin. Scaling
+benchmarks measure that path without defining a latency guarantee.
 `Event.Origin` and keyed origins use immutable OpenTelemetry span contexts.
 
 Generic correlation uses `observe/traces.AddLinks` for valid deduplicated origins
