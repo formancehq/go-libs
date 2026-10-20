@@ -15,6 +15,7 @@
 package redact
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/url"
@@ -83,22 +84,14 @@ var (
 // returns a copy and never mutates data. Letters, digits and the token
 // punctuation written as JSON escapes are classified, and shown, decoded.
 func Bytes(data []byte) []byte {
-	return redactBytes(data, configuredValues.Load())
-}
+	out := redactHeaderEchoes(decodeInertEscapes(data))
+	out = danglingSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
+	out = kvSecretRe.ReplaceAll(out, []byte("${1}"+Marker+"${3}"))
+	out = kvBareSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
+	out = bearerRe.ReplaceAll(out, []byte("${1}"+Marker))
+	out = headerSecretRe.ReplaceAll(out, []byte("${1}"+Marker))
 
-func redactBytes(data []byte, configured *valueReplacer) []byte {
-	var variants []configuredVariant
-	if configured != nil {
-		variants = configured.diagnostic
-	}
-	data, rawMatches := normalizeConfiguredDiagnostics(data, configured, false)
-	return redactDiagnosticValues(data, true, variants, rawMatches...)
-}
-
-// redactNamedValues shares the diagnostic vocabulary without normalizing input.
-// Structured capture refuses non-string credentials, so it disables bare masking.
-func redactNamedValues(data []byte, maskBare bool) []byte {
-	return redactDiagnosticValues(data, maskBare, nil)
+	return out
 }
 
 // decodeInertEscapes decodes every JSON escape whose character is inert to
@@ -150,6 +143,28 @@ func inertEscape(escape []byte) (byte, bool) {
 	}
 }
 
+// redactHeaderEchoes masks the whole value of every "Name: value" line whose
+// name is a sensitive header, preserving the line ending.
+func redactHeaderEchoes(data []byte) []byte {
+	lines := bytes.SplitAfter(data, []byte("\n"))
+	for index, line := range lines {
+		content := bytes.TrimSuffix(line, []byte("\n"))
+		ending := line[len(content):]
+		content = bytes.TrimSuffix(content, []byte("\r"))
+		if len(content) < len(line)-len(ending) {
+			ending = append([]byte("\r"), ending...)
+		}
+		name, _, found := bytes.Cut(content, []byte(":"))
+		if !found || !SensitiveHeader(strings.TrimSpace(string(name))) {
+			continue
+		}
+		lines[index] = append(append(append([]byte(nil), name...), ':', ' '), Marker...)
+		lines[index] = append(lines[index], ending...)
+	}
+
+	return bytes.Join(lines, nil)
+}
+
 // Reader reads at most maxBytes from r, redacts the complete read window, then
 // applies the display cut and marks it "...[truncated]". The cut applies to
 // the redacted text too, so a short secret replaced by the longer Marker never
@@ -164,20 +179,11 @@ func Reader(r io.Reader, maxBytes int) string {
 	n, _ := io.ReadFull(r, data)
 	data = data[:n]
 	truncated := len(data) > maxBytes
-	// Use the same supported representation for tail detection and full matches.
-	// Normalize once before either matching pass.
-	configured := configuredValues.Load()
-	data, rawMatches := normalizeConfiguredDiagnostics(data, configured, truncated)
-	var variants []configuredVariant
-	if configured != nil {
-		variants = configured.diagnostic
-	}
-	tail := rawMatches
 	if truncated {
-		tail = append(tail, configuredTailRedactions(data, variants)...)
+		data = danglingSecretRe.ReplaceAll(data, []byte("${1}"+Marker))
 	}
 
-	s := strings.TrimSpace(string(redactDiagnosticValues(data, true, variants, tail...)))
+	s := strings.TrimSpace(string(Bytes(data)))
 	if truncated || len(s) > maxBytes {
 		s = s[:min(len(s), maxBytes)] + "...[truncated]"
 	}
@@ -244,14 +250,7 @@ func HeaderValues(name string, values []string) []string {
 	case urlValuedHeader(name):
 		return headerURLs(values)
 	default:
-		if len(values) == 0 || configuredValues.Load() == nil {
-			return values
-		}
-		out := make([]string, len(values))
-		for i, value := range values {
-			out[i] = MaskValues(value)
-		}
-		return out
+		return values
 	}
 }
 
@@ -293,7 +292,7 @@ func URL(u *url.URL) string {
 		b.WriteString(u.Scheme)
 		b.WriteString("://")
 	}
-	b.WriteString(MaskValues(u.Host))
+	b.WriteString(u.Host)
 	b.WriteString(Path(u.EscapedPath()))
 	if q := query(u.Query()); q != "" {
 		b.WriteString("?")
@@ -338,7 +337,7 @@ func Path(path string) string {
 		return ""
 	}
 
-	segments := strings.Split(redactConfiguredURLString(path), "/")
+	segments := strings.Split(path, "/")
 	for i, segment := range segments {
 		if opaqueSegment(segment) {
 			segments[i] = Marker
@@ -363,11 +362,7 @@ func query(values url.Values) string {
 
 			continue
 		}
-		redacted := make([]string, len(value))
-		for index := range value {
-			redacted[index] = MaskValues(value[index])
-		}
-		out[name] = redacted
+		out[name] = value
 	}
 
 	return out.Encode()

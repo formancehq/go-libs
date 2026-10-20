@@ -241,7 +241,7 @@ can request application shutdown; it must return promptly and must not wait for
 `OnStop`, because shutdown joins the serving goroutine. Normal shutdown does not
 invoke the callback. Listener admission failures still return from `OnStart`.
 
-## Credential and structured capture redaction
+## Payload capture policy
 
-[REDACTION.md](./REDACTION.md) describes configured-value masking on the existing
-redaction primitives and byte-preserving JSON/form capture refusal rules.
+[PAYLOAD-CAPTURE.md](./PAYLOAD-CAPTURE.md) separates bounded capture mechanics
+from application-owned sanitization. Structured capture is omitted without that policy.

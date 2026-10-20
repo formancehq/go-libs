@@ -10,10 +10,9 @@ import (
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 	"github.com/formancehq/go-libs/v5/pkg/observe/payloadlog"
-	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
-func TestCaptureConfiguredValueRenderingRegressions(t *testing.T) {
+func TestCaptureUsesCallerSanitizationBeforeChunking(t *testing.T) {
 	padding := strings.Repeat("x", 64<<10)
 	for _, tc := range []struct {
 		name, contentType, input, want string
@@ -40,12 +39,17 @@ func TestCaptureConfiguredValueRenderingRegressions(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			payloadlog.Configure(true, 0)
-			redact.ConfigureValues(tc.known)
-			t.Cleanup(func() { payloadlog.Configure(false, 0); redact.ConfigureValues(nil) })
+			t.Cleanup(func() { payloadlog.Configure(false, 0) })
 			payload := []byte(tc.input)
 			original := bytes.Clone(payload)
 			var buffer bytes.Buffer
 			payloadlog.Capture(t.Context(), jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{
+				Sanitize: func(b []byte) ([]byte, bool) {
+					if string(b) != tc.input {
+						t.Fatal("sanitizer did not receive original bounded payload")
+					}
+					return []byte(tc.want), true
+				},
 				Transport: "test", Direction: "receive", ContentType: tc.contentType,
 				TrustedPlainText: true, Limit: int64(len(payload)),
 				Produce: func(int64) ([]byte, error) { return payload, nil },

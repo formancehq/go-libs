@@ -6,19 +6,18 @@ import (
 
 	logging "github.com/formancehq/go-libs/v5/pkg/observe/log"
 	"github.com/formancehq/go-libs/v5/pkg/observe/payloadlog"
-	"github.com/formancehq/go-libs/v5/pkg/observe/redact"
 )
 
-func TestCaptureOmitsJSONWhenRedactionCollidesObjectKeys(t *testing.T) {
+func TestCaptureOmitsJSONWhenCallerRejectsSanitization(t *testing.T) {
 	payloadlog.Configure(true, 0)
-	redact.ConfigureValues(nil)
-	t.Cleanup(func() { payloadlog.Configure(false, 0); redact.ConfigureValues(nil) })
+	t.Cleanup(func() { payloadlog.Configure(false, 0) })
 
 	payload := []byte(`{ "Bearer alpha":1, "Bearer beta":2, "safe":"\\u0061", "n":1e+09 }`)
 	original := bytes.Clone(payload)
 	var buffer bytes.Buffer
 	produced := false
 	payloadlog.Capture(t.Context(), jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{
+		Sanitize:  func([]byte) ([]byte, bool) { return nil, false },
 		Transport: "http", Direction: "receive", ContentType: "application/json",
 		Limit: int64(len(payload)), Fields: map[string]any{"caller": "retained"},
 		Produce: func(int64) ([]byte, error) { produced = true; return payload, nil },
