@@ -473,20 +473,11 @@ bidirectional stream and close ownership.
 byte while restoring every byte and pending read error for the response owner.
 The owner still closes the body; the observer owns its time budget.
 
-`RetryConfig.Debug` composes the shared diagnostic transport. `DebugConfig.Logger`
-overrides the context logger, and `MetadataOnly` emits structured request/status
-and header fields without reading application bodies. Error diagnostics use the
-closed bearer diagnostic categories and never arbitrary error text. Body preview
-behavior remains unchanged unless the new mode is selected.
-
-Debug-level `PathIsCredential` protection is combined with retry-level protection
-using OR; either setting keeps credential paths hidden.
-
-`PathIsCredential` renders only the origin in debug diagnostics and default-base
-client spans. Retry/recovery logs remain host-only by default; `LogPath` adds a
-shape-redacted path only when the path is not declared a credential.
-Caller-supplied base transports continue
-to own their own tracing. A pending bearer replay that expires while pacing
+`NewDebugHTTPTransport` emits only fixed events and numeric status, without reading
+bodies or rendering URLs, headers or error messages. Retry path diagnostics use
+an omitted-path marker, and default transport spans omit `url.full`. Applications
+own any richer diagnostic policy through their completed-attempt observer.
+A pending bearer replay that expires while pacing
 records budget exhaustion once while preserving the wait's original error.
 Pacing retains whether a failure came from the API limiter or token source.
 Anticipatory limiter refusal counts toward MaxElapsed exhaustion; an independent
