@@ -8,11 +8,13 @@
 package payloadlog
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"mime"
@@ -66,6 +68,10 @@ type Record struct {
 	// optional configured cap can only lower it.
 	Limit   int64
 	Produce Produce
+	// Sanitize is application-owned admission and rendering policy. Structured
+	// payloads require it; nil omits JSON/form capture. It receives a private copy
+	// and returns safe bytes or false to omit, without affecting transport outcomes.
+	Sanitize func([]byte) ([]byte, bool)
 	// Fields supplies caller context; the payload.* namespace is reserved.
 	Fields map[string]any
 }
@@ -125,10 +131,15 @@ func Capture(ctx context.Context, logger logging.Logger, record Record) {
 
 		return
 	}
-	redacted, ok := safePayload(kind, payload)
+	redacted, ok := safePayload(kind, payload, record.Sanitize)
 	if !ok {
 		omit(ctx, logger, record, "unsupported_content", captureID, len(payload))
 
+		return
+	}
+
+	if int64(len(redacted)) > limit {
+		omit(ctx, logger, record, "limit_exceeded", captureID, len(payload))
 		return
 	}
 
@@ -208,25 +219,27 @@ func classifyContent(record Record) (contentKind, bool) {
 	}
 }
 
-func safePayload(kind contentKind, payload []byte) ([]byte, bool) {
-	if len(payload) == 0 {
+func safePayload(kind contentKind, payload []byte, sanitize func([]byte) ([]byte, bool)) ([]byte, bool) {
+	if len(payload) == 0 && (kind == contentEmpty || kind == contentPlain) {
 		return []byte{}, true
 	}
-	if !utf8.Valid(payload) {
+	if !utf8.Valid(payload) || kind == contentEmpty {
 		return nil, false
 	}
-	switch kind {
-	case contentJSON:
-		return golibsredact.JSON(payload)
-	case contentForm:
-		return golibsredact.Form(payload)
-	case contentPlain:
+	if sanitize != nil {
+		rendered, ok := sanitize(bytes.Clone(payload))
+		if !ok || !utf8.Valid(rendered) {
+			return nil, false
+		}
+		if kind == contentJSON && !json.Valid(rendered) {
+			return nil, false
+		}
+		return rendered, true
+	}
+	if kind == contentPlain {
 		return golibsredact.Bytes(payload), true
-	case contentEmpty:
-		return nil, false
-	default:
-		return nil, false
 	}
+	return nil, false
 }
 
 func newCaptureID() (string, error) {
@@ -265,6 +278,8 @@ func baseFields(record Record) map[string]any {
 	return fields
 }
 
+// Emit only fixed media-type categories. Provider subtypes and parameters may
+// contain credentials; capture metadata never echoes them.
 func safeContentType(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return ""
@@ -273,6 +288,14 @@ func safeContentType(value string) string {
 	if err != nil {
 		return "invalid"
 	}
-
-	return string(golibsredact.Bytes([]byte(mediaType)))
+	switch {
+	case mediaType == "application/json" || strings.HasSuffix(mediaType, "+json"):
+		return "application/json"
+	case mediaType == "application/x-www-form-urlencoded":
+		return mediaType
+	case mediaType == "text/plain":
+		return mediaType
+	default:
+		return "unsupported"
+	}
 }

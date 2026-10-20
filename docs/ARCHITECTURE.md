@@ -385,10 +385,9 @@ Admission, byte accounting, coalesce/drop outcomes, replacement age/order, close
 drain and reset behavior remain independent of telemetry; instrumentation failure
 disables measurements rather than changing transport or collection outcomes.
 
-## Credential and structured capture redaction
+## Payload capture policy
 
-[REDACTION.md](./REDACTION.md) describes configured-value masking on the existing
-redaction primitives and byte-preserving JSON/form capture refusal rules.
+[PAYLOAD-CAPTURE.md](./PAYLOAD-CAPTURE.md) separates capture mechanics from caller-owned sanitization.
 
 ### Webhook receiver consumer policies
 

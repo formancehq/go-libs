@@ -73,7 +73,7 @@ func TestCaptureRedactsBeforeChunkingAndReassembles(t *testing.T) {
 	ctx := trace.ContextWithSpanContext(t.Context(), trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2},
 	}))
-	payloadlog.Capture(ctx, jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{
+	payloadlog.Capture(ctx, jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{Sanitize: func(b []byte) ([]byte, bool) { return bytes.ReplaceAll(b, []byte(secret), []byte(redact.Marker)), true },
 		Transport: "websocket", Direction: "receive", Operation: "frame", Fields: map[string]any{"component.name": "example"},
 		ContentType: "application/json", Limit: int64(len(payload)),
 		Produce: func(int64) ([]byte, error) { return payload, nil },
@@ -211,7 +211,7 @@ func TestCapturePreservesMultibyteJSONAcrossChunks(t *testing.T) {
 
 	payload := []byte(`{"message":"` + strings.Repeat("euro€", 20_000) + `"}`)
 	var buffer bytes.Buffer
-	payloadlog.Capture(t.Context(), jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{
+	payloadlog.Capture(t.Context(), jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{Sanitize: func(b []byte) ([]byte, bool) { return b, true },
 		Transport: "websocket", Direction: "receive", ContentType: "application/json", Limit: int64(len(payload)),
 		Produce: func(int64) ([]byte, error) { return payload, nil },
 	})
@@ -238,7 +238,9 @@ func TestCaptureRedactsFormEncodedPayloadWithoutReordering(t *testing.T) {
 	t.Cleanup(func() { payloadlog.Configure(false, 0) })
 
 	var buffer bytes.Buffer
-	payloadlog.Capture(t.Context(), jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{
+	payloadlog.Capture(t.Context(), jsonLogger(&buffer, logging.DebugLevel), payloadlog.Record{Sanitize: func(b []byte) ([]byte, bool) {
+		return bytes.ReplaceAll(b, []byte("client_secret=secret"), []byte("client_secret=%5BREDACTED%5D")), true
+	},
 		Transport: "http", Direction: "send", ContentType: "application/x-www-form-urlencoded", Limit: 1024,
 		Produce: func(int64) ([]byte, error) {
 			return []byte("grant_type=client_credentials&client_secret=secret&scope=read+write"), nil
@@ -377,16 +379,15 @@ func TestCaptureAdmissionAndFieldIsolation(t *testing.T) {
 	}
 }
 
-func TestCaptureMasksConfiguredContentTypeAndReservesMetadata(t *testing.T) {
+func TestCaptureUsesFixedContentTypesAndReservesMetadata(t *testing.T) {
 	payloadlog.Configure(true, 0)
-	redact.ConfigureValues([]string{"configured-private-credential"})
-	t.Cleanup(func() { payloadlog.Configure(false, 0); redact.ConfigureValues(nil) })
+	t.Cleanup(func() { payloadlog.Configure(false, 0) })
 	for _, contentType := range []string{"application/configured-private-credential", "application/configured-private-credential+json"} {
 		t.Run(contentType, func(t *testing.T) {
 			fields := map[string]any{"payload.chunk": "stale-content", "payload.redacted": true, "payload.omitted_reason": "stale-reason", "payload.sha256": "stale-hash", "payload.chunk_count": 99, "caller": "retained"}
 			var out bytes.Buffer
 			produced := false
-			payloadlog.Capture(t.Context(), jsonLogger(&out, logging.DebugLevel), payloadlog.Record{ContentType: contentType, Limit: 1024, Fields: fields, Produce: func(int64) ([]byte, error) { produced = true; return []byte(`{}`), nil }})
+			payloadlog.Capture(t.Context(), jsonLogger(&out, logging.DebugLevel), payloadlog.Record{Sanitize: func(b []byte) ([]byte, bool) { return b, true }, ContentType: contentType, Limit: 1024, Fields: fields, Produce: func(int64) ([]byte, error) { produced = true; return []byte(`{}`), nil }})
 			records := lines(t, &out)
 			if len(records) != 1 {
 				t.Fatalf("records=%v", records)
@@ -404,6 +405,60 @@ func TestCaptureMasksConfiguredContentTypeAndReservesMetadata(t *testing.T) {
 				}
 			} else if produced || got["payload.chunk"] != nil || got["payload.redacted"] != nil || got["payload.sha256"] != nil || got["payload.chunk_count"] != nil || got["payload.omitted_reason"] != "unsupported_content" {
 				t.Fatalf("omission metadata collision: %v", got)
+			}
+		})
+	}
+}
+
+func TestCaptureNeverEchoesProviderMediaTypes(t *testing.T) {
+	const secret = "MixedCaseConfiguredCredential"
+	payloadlog.Configure(true, 0)
+	t.Cleanup(func() { payloadlog.Configure(false, 0) })
+	for _, tc := range []struct {
+		name, contentType, wantType string
+		admitted                    bool
+	}{
+		{"omitted subtype", "application/" + secret, "unsupported", false},
+		{"captured subtype", "application/" + secret + "+json", "application/json", true},
+		{"parameter", "application/json; boundary=" + secret, "application/json", true},
+		{"unconfigured normalization", "Application/JSON; charset=utf-8", "application/json", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			produced := false
+			fields := map[string]any{"caller": "retained", "payload.chunk": "stale"}
+			payloadlog.Capture(t.Context(), jsonLogger(&out, logging.DebugLevel), payloadlog.Record{Sanitize: func(b []byte) ([]byte, bool) { return b, true },
+				ContentType: tc.contentType, Limit: 1024, Fields: fields,
+				Produce: func(int64) ([]byte, error) { produced = true; return []byte(`{"ok":true}`), nil },
+			})
+			records := lines(t, &out)
+			if len(records) != 1 {
+				t.Fatalf("record count = %d", len(records))
+			}
+			got := records[0]
+			if got["payload.content_type"] != tc.wantType {
+				t.Errorf("media type was not safely rendered")
+			}
+			if strings.Contains(out.String(), secret) || strings.Contains(out.String(), strings.ToLower(secret)) {
+				t.Error("configured media-type value exposed")
+			}
+			if produced != tc.admitted {
+				t.Fatalf("producer admission changed: got %v", produced)
+			}
+			if got["caller"] != "retained" || fields["payload.chunk"] != "stale" {
+				t.Fatal("caller fields changed")
+			}
+			if tc.admitted {
+				chunk, ok := got["payload.chunk"].(string)
+				if !ok {
+					t.Fatal("missing captured chunk")
+				}
+				body, err := base64.StdEncoding.DecodeString(chunk)
+				if err != nil || string(body) != `{"ok":true}` || got["payload.omitted_reason"] != nil {
+					t.Fatal("capture changed")
+				}
+			} else if got["payload.chunk"] != nil || got["payload.omitted_reason"] != "unsupported_content" {
+				t.Fatal("omission changed")
 			}
 		})
 	}
