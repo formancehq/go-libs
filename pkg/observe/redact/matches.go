@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -171,23 +172,29 @@ func normalizeConfiguredDiagnostics(data []byte, configured *valueReplacer, trun
 			raw = append(raw, configuredTailRedactions(data, configured.variants)...)
 		}
 	}
-	escapes := jsonEscapeRe.FindAllIndex(data, -1)
+	// Record cumulative contractions once. Mapping each endpoint with a binary
+	// search avoids rescanning every escape for every configured match.
+	type contraction struct{ start, end, removed int }
+	var contractions []contraction
+	removed := 0
+	for _, span := range jsonEscapeRe.FindAllIndex(data, -1) {
+		if _, ok := inertEscape(data[span[0]:span[1]]); !ok {
+			continue
+		}
+		removed += span[1] - span[0] - 1
+		contractions = append(contractions, contraction{span[0], span[1], removed})
+	}
 	offset := func(index int, end bool) int {
+		next := sort.Search(len(contractions), func(i int) bool { return contractions[i].end > index })
 		removed := 0
-		for _, span := range escapes {
-			if _, ok := inertEscape(data[span[0]:span[1]]); !ok {
-				continue
+		if next > 0 {
+			removed = contractions[next-1].removed
+		}
+		if next < len(contractions) && index > contractions[next].start {
+			if end {
+				return contractions[next].start - removed + 1
 			}
-			if index <= span[0] {
-				break
-			}
-			if index < span[1] {
-				if end {
-					return span[0] - removed + 1
-				}
-				return span[0] - removed
-			}
-			removed += span[1] - span[0] - 1
+			return contractions[next].start - removed
 		}
 		return index - removed
 	}
