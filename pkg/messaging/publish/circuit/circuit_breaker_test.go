@@ -523,7 +523,8 @@ func TestCircuitBreakerCloseDrainsInFlightInsert(t *testing.T) {
 		t.Fatal("expected Close to return after insert completed")
 	}
 	select {
-	case <-publishDone:
+	case err := <-publishDone:
+		require.NoError(t, err)
 	case <-time.After(time.Second):
 		t.Fatal("expected publish to return after close")
 	}

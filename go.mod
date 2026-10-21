@@ -2,6 +2,8 @@ module github.com/formancehq/go-libs/v5
 
 go 1.26.0
 
+toolchain go1.27.3
+
 require (
 	dario.cat/mergo v1.0.2
 	github.com/ClickHouse/ch-go v0.71.0
