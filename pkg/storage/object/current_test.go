@@ -89,3 +89,5 @@ func TestCurrentReadIdentityBoundsCancellationAndRevisionlessMetadata(t *testing
 		})
 	}
 }
+
+func (b *currentBucket) Bounds() Limits { return Limits{} }

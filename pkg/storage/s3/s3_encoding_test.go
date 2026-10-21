@@ -1,4 +1,4 @@
-package object
+package s3
 
 import (
 	"fmt"
@@ -11,6 +11,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/formancehq/go-libs/v5/pkg/storage/object"
 )
 
 func TestS3SDKListingKeysRoundTripLosslessly(t *testing.T) {
@@ -51,11 +53,11 @@ func TestS3SDKListingKeysRoundTripLosslessly(t *testing.T) {
 		_, _ = io.WriteString(w, "abc")
 	})
 	client := s3.New(s3.Options{Region: "us-east-1", Credentials: aws.AnonymousCredentials{}, BaseEndpoint: aws.String("https://example.test"), UsePathStyle: true, HTTPClient: encodingHTTPClient{handler: handler}})
-	bucket, err := NewS3(client, "bucket", Limits{})
+	bucket, err := NewBucket(client, "bucket", object.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	objects, err := ListAll(t.Context(), bucket, "", Limits{})
+	objects, err := object.ListAll(t.Context(), bucket, "", object.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ func TestS3SDKListingKeysRoundTripLosslessly(t *testing.T) {
 		if meta.Key != keys[i] {
 			t.Fatalf("key=%q want=%q", meta.Key, keys[i])
 		}
-		got, err := bucket.Read(t.Context(), ReadRequest{Key: meta.Key})
+		got, err := bucket.Read(t.Context(), object.ReadRequest{Key: meta.Key})
 		if err != nil {
 			t.Fatal(err)
 		}

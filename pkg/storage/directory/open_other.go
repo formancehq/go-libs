@@ -1,6 +1,6 @@
 //go:build !unix
 
-package object
+package directory
 
 import "os"
 

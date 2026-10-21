@@ -1,4 +1,4 @@
-package object
+package azureblob
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 
 	"github.com/formancehq/go-libs/v5/pkg/storage"
+	"github.com/formancehq/go-libs/v5/pkg/storage/internal/objectio"
+	"github.com/formancehq/go-libs/v5/pkg/storage/object"
 )
 
 type testTransport func(*http.Request) (*http.Response, error)
@@ -42,16 +44,16 @@ func TestAzureConditionalRangeAndRevisionFailure(t *testing.T) {
 		}
 		return &http.Response{StatusCode: status, Header: h, Body: io.NopCloser(strings.NewReader("abc")), Request: r}, nil
 	})
-	bucket, err := NewAzure(client, "container", Limits{MaxBytes: 4})
+	bucket, err := NewBucket(client, "container", object.Limits{MaxBytes: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := bucket.Read(t.Context(), ReadRequest{Key: "key", Revision: "\"v1\"", PrefixBytes: 3})
+	result, err := bucket.Read(t.Context(), object.ReadRequest{Key: "key", Revision: "\"v1\"", PrefixBytes: 3})
 	if err != nil || result.Complete || string(result.Data) != "abc" {
 		t.Fatalf("%+v %v", result, err)
 	}
 	status = 412
-	if _, err := bucket.Read(t.Context(), ReadRequest{Key: "key", Revision: "\"v1\"", PrefixBytes: 3}); !errors.Is(err, ErrRevisionChanged) {
+	if _, err := bucket.Read(t.Context(), object.ReadRequest{Key: "key", Revision: "\"v1\"", PrefixBytes: 3}); !errors.Is(err, object.ErrRevisionChanged) {
 		t.Fatal(err)
 	}
 }
@@ -63,15 +65,15 @@ func TestAzureListingMetadataAndClock(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/xml"}, "Date": {"Fri, 16 Oct 2026 10:01:00 GMT"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 	})
-	bucket, err := NewAzure(client, "container", Limits{})
+	bucket, err := NewBucket(client, "container", object.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := bucket.ListPage(t.Context(), ListRequest{Limit: 2})
+	page, err := bucket.ListPage(t.Context(), object.ListRequest{Limit: 2})
 	if err != nil || len(page.Objects) != 1 || page.NextCursor != "next" || page.Objects[0].Revision != "\"v1\"" || page.ServerTime.IsZero() {
 		t.Fatalf("%+v %v", page, err)
 	}
-	if _, err := bucket.ListPage(t.Context(), ListRequest{Limit: 2, Cursor: "next"}); !errors.Is(err, ErrListingLimit) {
+	if _, err := bucket.ListPage(t.Context(), object.ListRequest{Limit: 2, Cursor: "next"}); !errors.Is(err, object.ErrListingLimit) {
 		t.Fatal(err)
 	}
 }
@@ -85,15 +87,15 @@ func TestAzureStatAndCompleteRead(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: headers, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 	})
-	bucket, err := NewAzure(client, "container", Limits{})
+	bucket, err := NewBucket(client, "container", object.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	meta, data, err := ReadCurrent(t.Context(), bucket, "item", 3)
+	meta, data, err := object.ReadCurrent(t.Context(), bucket, "item", 3)
 	if err != nil || meta.Revision != "\"v1\"" || string(data) != "abc" {
 		t.Fatalf("%+v %v", meta, err)
 	}
-	if _, err := bucket.Read(t.Context(), ReadRequest{Key: "item", MaxBytes: 2}); !errors.Is(err, ErrTooLarge) {
+	if _, err := bucket.Read(t.Context(), object.ReadRequest{Key: "item", MaxBytes: 2}); !errors.Is(err, object.ErrTooLarge) {
 		t.Fatal(err)
 	}
 }
@@ -101,21 +103,21 @@ func TestAzureMalformedListingAndCachedClock(t *testing.T) {
 	client := azureClient(t, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/xml"}}, Body: io.NopCloser(strings.NewReader(`<EnumerationResults><Blobs><Blob><Name>item</Name></Blob></Blobs></EnumerationResults>`)), Request: r}, nil
 	})
-	bucket, err := NewAzure(client, "container", Limits{})
+	bucket, err := NewBucket(client, "container", object.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bucket.ListPage(t.Context(), ListRequest{Limit: 1}); !errors.Is(err, ErrInvalid) {
+	if _, err := bucket.ListPage(t.Context(), object.ListRequest{Limit: 1}); !errors.Is(err, object.ErrInvalid) {
 		t.Fatal(err)
 	}
-	if got := serverTime(&http.Response{Header: http.Header{"Date": {"Fri, 16 Oct 2026 10:00:00 GMT"}, "Age": {"0"}}}); !got.IsZero() {
+	if got := objectio.ServerTime(&http.Response{Header: http.Header{"Date": {"Fri, 16 Oct 2026 10:00:00 GMT"}, "Age": {"0"}}}); !got.IsZero() {
 		t.Fatal("cached response treated as current clock")
 	}
 	for _, tc := range []struct {
 		code   string
 		status int
 		want   error
-	}{{"ConditionNotMet", 412, ErrRevisionChanged}} {
+	}{{"ConditionNotMet", 412, object.ErrRevisionChanged}} {
 		cause := &azcore.ResponseError{ErrorCode: tc.code, StatusCode: tc.status}
 		err := azureError(cause)
 		if !errors.Is(err, tc.want) || !errors.Is(err, cause) {
@@ -140,28 +142,28 @@ func TestAzureCancellationAndConstructorBounds(t *testing.T) {
 		t.Fatal("canceled work reached transport")
 		return nil, nil
 	})
-	bucket, err := NewAzure(client, "container", Limits{})
+	bucket, err := NewBucket(client, "container", object.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := bucket.ListPage(ctx, ListRequest{Limit: 1}); !errors.Is(err, context.Canceled) {
+	if _, err := bucket.ListPage(ctx, object.ListRequest{Limit: 1}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	if _, err := bucket.Stat(ctx, "key"); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if _, err := bucket.Read(ctx, ReadRequest{Key: "key"}); !errors.Is(err, context.Canceled) {
+	if _, err := bucket.Read(ctx, object.ReadRequest{Key: "key"}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if _, err := NewAzure(nil, "container", Limits{}); !errors.Is(err, ErrInvalid) {
+	if _, err := NewBucket(nil, "container", object.Limits{}); !errors.Is(err, object.ErrInvalid) {
 		t.Fatal(err)
 	}
-	if _, err := NewAzure(client, "", Limits{}); !errors.Is(err, ErrInvalid) {
+	if _, err := NewBucket(client, "", object.Limits{}); !errors.Is(err, object.ErrInvalid) {
 		t.Fatal(err)
 	}
-	if _, err := NewAzure(client, "container", Limits{MaxPages: -1}); !errors.Is(err, ErrInvalid) {
+	if _, err := NewBucket(client, "container", object.Limits{MaxPages: -1}); !errors.Is(err, object.ErrInvalid) {
 		t.Fatal(err)
 	}
 }
@@ -186,22 +188,22 @@ func TestAzureAggregateBudgetsAndContinuation(t *testing.T) {
 				body := `<EnumerationResults><Blobs>` + items + `</Blobs><NextMarker>` + marker + `</NextMarker></EnumerationResults>`
 				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/xml"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 			})
-			bounds := Limits{MaxPages: 2}
+			bounds := object.Limits{MaxPages: 2}
 			if kind == "objects" {
-				bounds = Limits{MaxObjects: 2}
+				bounds = object.Limits{MaxObjects: 2}
 			}
-			bucket, err := NewAzure(client, "container", bounds)
+			bucket, err := NewBucket(client, "container", bounds)
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := ListAll(t.Context(), bucket, "", Limits{})
+			got, err := object.ListAll(t.Context(), bucket, "", object.Limits{})
 			if kind == "complete" {
 				if err != nil || len(got) != 2 || calls != 2 {
 					t.Fatalf("%+v %v %d", got, err, calls)
 				}
 				return
 			}
-			if !errors.Is(err, ErrListingLimit) || got != nil || calls != 2 {
+			if !errors.Is(err, object.ErrListingLimit) || got != nil || calls != 2 {
 				t.Fatalf("partial inventory: %+v %v %d", got, err, calls)
 			}
 		})

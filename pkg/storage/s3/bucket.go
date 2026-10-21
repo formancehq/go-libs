@@ -1,15 +1,12 @@
-package object
+package s3
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
@@ -19,38 +16,41 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	"github.com/formancehq/go-libs/v5/pkg/storage"
+	"github.com/formancehq/go-libs/v5/pkg/storage/internal/boundedio"
+	"github.com/formancehq/go-libs/v5/pkg/storage/internal/objectio"
+	"github.com/formancehq/go-libs/v5/pkg/storage/object"
 )
 
-// S3Client is implemented directly by the AWS SDK client. Client configuration,
+// BucketClient is implemented directly by the AWS SDK client. Client configuration,
 // credential resolution and endpoint/path-style selection remain at composition.
-type S3Client interface {
+type BucketClient interface {
 	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
-type S3 struct {
-	client S3Client
+type Bucket struct {
+	client BucketClient
 	bucket string
-	limits Limits
+	limits object.Limits
 }
 
-func NewS3(client S3Client, bucket string, bounds Limits) (*S3, error) {
-	l, err := limits(bounds)
+func NewBucket(client BucketClient, bucket string, bounds object.Limits) (*Bucket, error) {
+	l, err := object.NormalizeLimits(bounds)
 	if err != nil {
 		return nil, err
 	}
 	if client == nil || bucket == "" {
-		return nil, ErrInvalid
+		return nil, object.ErrInvalid
 	}
-	return &S3{client: client, bucket: bucket, limits: l}, nil
+	return &Bucket{client: client, bucket: bucket, limits: l}, nil
 }
-func (s *S3) ListPage(ctx context.Context, req ListRequest) (Page, error) {
+func (s *Bucket) ListPage(ctx context.Context, req object.ListRequest) (object.Page, error) {
 	if err := ctx.Err(); err != nil {
-		return Page{}, err
+		return object.Page{}, err
 	}
 	if req.Limit <= 0 || req.Limit > 1000 {
-		return Page{}, ErrInvalid
+		return object.Page{}, object.ErrInvalid
 	}
 	req.Limit = min(req.Limit, s.limits.MaxObjects, 1000)
 	in := &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), Prefix: aws.String(req.Prefix), MaxKeys: aws.Int32(int32(req.Limit)), EncodingType: types.EncodingTypeUrl}
@@ -59,62 +59,62 @@ func (s *S3) ListPage(ctx context.Context, req ListRequest) (Page, error) {
 	}
 	raw, err := s.client.ListObjectsV2(ctx, in)
 	if err != nil {
-		return Page{}, storageError(err)
+		return object.Page{}, storageError(err)
 	}
 	if raw == nil || len(raw.Contents) > req.Limit {
-		return Page{}, ErrInvalid
+		return object.Page{}, object.ErrInvalid
 	}
-	out := Page{}
+	out := object.Page{}
 	if raw.EncodingType != "" && raw.EncodingType != types.EncodingTypeUrl {
-		return Page{}, ErrInvalid
+		return object.Page{}, object.ErrInvalid
 	}
 	for _, item := range raw.Contents {
 		if item.Key == nil || *item.Key == "" || item.Size == nil || *item.Size < 0 || item.LastModified == nil {
-			return Page{}, ErrInvalid
+			return object.Page{}, object.ErrInvalid
 		}
 		key := aws.ToString(item.Key)
 		if raw.EncodingType == types.EncodingTypeUrl {
 			key, err = url.PathUnescape(key)
 			if err != nil || key == "" {
-				return Page{}, ErrInvalid
+				return object.Page{}, object.ErrInvalid
 			}
 		}
-		out.Objects = append(out.Objects, Metadata{Key: key, Size: aws.ToInt64(item.Size), LastModified: aws.ToTime(item.LastModified).UTC(), Revision: aws.ToString(item.ETag)})
+		out.Objects = append(out.Objects, object.Metadata{Key: key, Size: aws.ToInt64(item.Size), LastModified: aws.ToTime(item.LastModified).UTC(), Revision: aws.ToString(item.ETag)})
 	}
 	if aws.ToBool(raw.IsTruncated) {
 		out.NextCursor = aws.ToString(raw.NextContinuationToken)
 		if out.NextCursor == "" || out.NextCursor == req.Cursor {
-			return Page{}, ErrListingLimit
+			return object.Page{}, object.ErrListingLimit
 		}
 	}
 	if rawResponse, ok := awsmiddleware.GetRawResponse(raw.ResultMetadata).(*smithyhttp.Response); ok {
-		out.ServerTime = serverTime(rawResponse.Response)
+		out.ServerTime = objectio.ServerTime(rawResponse.Response)
 	}
 	return out, nil
 }
-func (s *S3) Stat(ctx context.Context, key string) (Metadata, error) {
+func (s *Bucket) Stat(ctx context.Context, key string) (object.Metadata, error) {
 	if err := ctx.Err(); err != nil {
-		return Metadata{}, err
+		return object.Metadata{}, err
 	}
 	if key == "" {
-		return Metadata{}, ErrInvalid
+		return object.Metadata{}, object.ErrInvalid
 	}
 	raw, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
 	if err != nil {
-		return Metadata{}, err
+		return object.Metadata{}, err
 	}
 	if raw == nil || raw.ContentLength == nil || *raw.ContentLength < 0 || raw.LastModified == nil {
-		return Metadata{}, ErrInvalid
+		return object.Metadata{}, object.ErrInvalid
 	}
-	return Metadata{Key: key, Size: *raw.ContentLength, LastModified: raw.LastModified.UTC(), Revision: aws.ToString(raw.ETag)}, nil
+	return object.Metadata{Key: key, Size: *raw.ContentLength, LastModified: raw.LastModified.UTC(), Revision: aws.ToString(raw.ETag)}, nil
 }
-func (s *S3) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
+func (s *Bucket) Read(ctx context.Context, req object.ReadRequest) (object.ReadResult, error) {
 	if err := ctx.Err(); err != nil {
-		return ReadResult{}, err
+		return object.ReadResult{}, err
 	}
-	cap, err := readBound(req, s.limits.MaxBytes)
+	cap, err := boundedio.ReadBound(req, s.limits.MaxBytes)
 	if err != nil {
-		return ReadResult{}, err
+		return object.ReadResult{}, err
 	}
 	in := &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(req.Key)}
 	if req.Revision != "" {
@@ -125,70 +125,26 @@ func (s *S3) Read(ctx context.Context, req ReadRequest) (ReadResult, error) {
 	}
 	raw, err := s.client.GetObject(ctx, in)
 	if err != nil {
-		return ReadResult{}, storageError(err)
+		return object.ReadResult{}, storageError(err)
 	}
 	if raw == nil || raw.Body == nil {
-		return ReadResult{}, ErrInvalid
+		return object.ReadResult{}, object.ErrInvalid
 	}
 	defer func() { _ = raw.Body.Close() }()
 	if req.Revision != "" && aws.ToString(raw.ETag) != req.Revision {
-		return ReadResult{}, ErrRevisionChanged
+		return object.ReadResult{}, object.ErrRevisionChanged
 	}
 	if raw.ContentLength == nil {
-		return ReadResult{}, ErrInvalid
+		return object.ReadResult{}, object.ErrInvalid
 	}
-	return readResponse(ctx, raw.Body, aws.ToInt64(raw.ContentLength), aws.ToString(raw.ContentRange), req, cap)
-}
-
-// readResponse validates a leading range rather than trusting its byte count.
-func readResponse(ctx context.Context, body io.Reader, length int64, contentRange string, req ReadRequest, cap int64) (ReadResult, error) {
-	if length < 0 {
-		return ReadResult{}, ErrInvalid
-	}
-	if length > cap {
-		return ReadResult{}, ErrTooLarge
-	}
-	data, err := readBody(ctx, body, cap)
-	if err != nil {
-		return ReadResult{}, err
-	}
-	if int64(len(data)) != length {
-		return ReadResult{}, io.ErrUnexpectedEOF
-	}
-	complete := true
-	if contentRange != "" {
-		var last, total int64
-		if !strings.HasPrefix(contentRange, "bytes 0-") {
-			return ReadResult{}, ErrInvalid
-		}
-		parts := strings.Split(strings.TrimPrefix(contentRange, "bytes 0-"), "/")
-		if len(parts) != 2 {
-			return ReadResult{}, ErrInvalid
-		}
-		last, err = strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			return ReadResult{}, ErrInvalid
-		}
-		total, err = strconv.ParseInt(parts[1], 10, 64)
-		if err != nil || total < 0 || last < 0 || last >= total || last != int64(len(data))-1 {
-			return ReadResult{}, ErrInvalid
-		}
-		complete = last == total-1
-	} else if req.PrefixBytes > 0 && int64(len(data)) == req.PrefixBytes {
-		// A full-size body without Content-Range could be an unqualified prefix.
-		complete = false
-	}
-	if req.PrefixBytes == 0 && !complete {
-		return ReadResult{}, ErrInvalid
-	}
-	return ReadResult{Data: data, Complete: complete}, nil
+	return objectio.ReadResponse(ctx, raw.Body, aws.ToInt64(raw.ContentLength), aws.ToString(raw.ContentRange), req, cap)
 }
 
 func storageError(err error) error {
 	if api, ok := errors.AsType[smithy.APIError](err); ok {
 		switch api.ErrorCode() {
 		case "PreconditionFailed":
-			return errors.Join(ErrRevisionChanged, err)
+			return errors.Join(object.ErrRevisionChanged, err)
 		case "NoSuchKey", "NotFound":
 			return errors.Join(os.ErrNotExist, err)
 		case "InvalidAccessKeyId", "SignatureDoesNotMatch", "Unauthorized":
@@ -203,10 +159,15 @@ func storageError(err error) error {
 	}](err); ok {
 		switch status.HTTPStatusCode() {
 		case http.StatusPreconditionFailed:
-			return errors.Join(ErrRevisionChanged, err)
+			return errors.Join(object.ErrRevisionChanged, err)
 		case http.StatusNotFound:
 			return errors.Join(os.ErrNotExist, err)
 		}
 	}
 	return err
 }
+
+// Bounds returns the configured normalized ceilings.
+func (b *Bucket) Bounds() object.Limits { return b.limits }
+
+var _ object.Bucket = (*Bucket)(nil)
