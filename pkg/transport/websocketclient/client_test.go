@@ -70,7 +70,9 @@ func TestDialReadWriteAndClose(t *testing.T) {
 		t.Errorf("Ping: %v", err)
 	}
 	pingCancel()
-	<-readErr
+	if err := <-readErr; !errors.Is(err, context.Canceled) {
+		t.Errorf("Read after cancellation = %v, want context.Canceled", err)
+	}
 
 	if err := conn.Close(); err != nil {
 		t.Errorf("Close: %v", err)
