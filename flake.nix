@@ -1,5 +1,5 @@
 {
-  description = "A Nix-flake-based Go 1.26 development environment";
+  description = "A Nix-flake-based Go 1.27.3 development environment";
 
   inputs = {
     nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2511";
@@ -43,8 +43,8 @@
       devShells = forEachSupportedSystem ({ pkgs, pkgs-unstable, system }:
         let
           # Import recipes only: keep the existing package set and Darwin support.
-          go = pkgs.callPackage "${go-tooling}/pkgs/development/compilers/go/1.26.nix" {
-            buildGo126Module = buildGoModule;
+          go = pkgs.callPackage "${go-tooling}/pkgs/development/compilers/go/1.27.nix" {
+            buildGo127Module = buildGoModule;
           };
           buildGoModule = pkgs.buildGoModule.override { inherit go; };
           go27 = pkgs.callPackage "${go-tooling}/pkgs/development/compilers/go/1.27.nix" {
