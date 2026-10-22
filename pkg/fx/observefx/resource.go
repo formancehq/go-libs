@@ -1,10 +1,11 @@
 package observefx
 
 import (
-	"github.com/formancehq/go-libs/v5/pkg/fx/otelfx"
-	"github.com/formancehq/go-libs/v5/pkg/observe"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
+
+	"github.com/formancehq/go-libs/v5/pkg/fx/otelfx"
+	"github.com/formancehq/go-libs/v5/pkg/observe"
 )
 
 // ResourceModule delegates to the SDK-independent otelfx package.

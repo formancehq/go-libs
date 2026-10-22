@@ -20,7 +20,10 @@ import (
 func TestTelemetryDependencyBoundary(t *testing.T) {
 	for _, tags := range []string{"", "pyroscope"} {
 		t.Run("tags="+tags, func(t *testing.T) {
-			cmd := exec.CommandContext(t.Context(), "go", "list", "-mod=readonly", "-deps", "-tags="+tags, "github.com/formancehq/go-libs/v5/pkg/fx/otelfx")
+			cmd := exec.CommandContext(t.Context(), "go", "list", "-mod=readonly", "-deps", "-tags=", "github.com/formancehq/go-libs/v5/pkg/fx/otelfx")
+			if tags == "pyroscope" {
+				cmd = exec.CommandContext(t.Context(), "go", "list", "-mod=readonly", "-deps", "-tags=pyroscope", "github.com/formancehq/go-libs/v5/pkg/fx/otelfx")
+			}
 			output, err := cmd.CombinedOutput()
 			require.NoError(t, err, "%s", output)
 			for _, path := range strings.Fields(string(output)) {
