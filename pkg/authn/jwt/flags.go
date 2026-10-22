@@ -9,7 +9,6 @@ const (
 	AuthIssuerFlag               = "auth-issuer"
 	AuthIssuersFlag              = "auth-issuers"
 	AuthReadKeySetMaxRetriesFlag = "auth-read-key-set-max-retries"
-	AuthCheckScopesFlag          = "auth-check-scopes"
 	AuthServiceFlag              = "auth-service"
 )
 
@@ -18,7 +17,6 @@ func AddFlags(flags *flag.FlagSet) {
 	flags.String(AuthIssuerFlag, "", "Issuer (single issuer, for backward compatibility)")
 	flags.StringSlice(AuthIssuersFlag, nil, "Trusted issuers (comma-separated, e.g. --auth-issuers=https://issuer1,https://issuer2)")
 	flags.Int(AuthReadKeySetMaxRetriesFlag, 10, "ReadKeySetMaxRetries")
-	flags.Bool(AuthCheckScopesFlag, false, "CheckScopes")
 	flags.String(AuthServiceFlag, "", "Service")
 }
 
@@ -27,7 +25,6 @@ func ConfigFromFlags(flags *flag.FlagSet) Config {
 	authIssuer, _ := flags.GetString(AuthIssuerFlag)
 	authIssuers, _ := flags.GetStringSlice(AuthIssuersFlag)
 	authReadKeySetMaxRetries, _ := flags.GetInt(AuthReadKeySetMaxRetriesFlag)
-	authCheckScopes, _ := flags.GetBool(AuthCheckScopesFlag)
 	authService, _ := flags.GetString(AuthServiceFlag)
 
 	// Merge --auth-issuer into --auth-issuers for backward compatibility
@@ -48,7 +45,6 @@ func ConfigFromFlags(flags *flag.FlagSet) Config {
 		Enabled:              authEnabled,
 		Issuers:              authIssuers,
 		ReadKeySetMaxRetries: authReadKeySetMaxRetries,
-		CheckScopes:          authCheckScopes,
 		Service:              authService,
 		AdditionalChecks:     make([]AdditionalCheck, 0),
 	}

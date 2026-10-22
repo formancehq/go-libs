@@ -23,10 +23,10 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", nil)
 
 		// Create access token
-		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
+		token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:read"}, "test-user")
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -48,7 +48,7 @@ func TestMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", nil)
 
 		handler := Middleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -72,10 +72,10 @@ func TestControlPlaneMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, privateKey, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", nil)
 
 		// Create access token
-		token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
+		token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:read"}, "test-user")
 
 		handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -97,7 +97,7 @@ func TestControlPlaneMiddleware(t *testing.T) {
 		t.Parallel()
 		keySet, _, issuer := setupTestKeySet(t)
 
-		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, nil)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", nil)
 
 		handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -122,10 +122,10 @@ func TestControlPlaneMiddleware(t *testing.T) {
 			return expectedOrgID, nil
 		}
 		additionalChecks := []AdditionalCheck{CheckOrganizationIDClaim(provider)}
-		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", false, additionalChecks)
+		authenticator := NewJWTAuth(map[string]oidc.KeySet{issuer: keySet}, "test-service", additionalChecks)
 
 		// Create access token
-		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{}, "test-user", expectedOrgID)
+		token := createAccessTokenWithOrgClaims(t, privateKey, issuer, "", []string{"test-service:read"}, "test-user", expectedOrgID)
 
 		handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, expectedOrgID, r.Context().Value(ContextKeyAuthClaimOrganizationID))
@@ -234,14 +234,13 @@ components:
 		authenticator := NewJWTAuth(
 			map[string]oidc.KeySet{issuer: keySet},
 			"test-service",
-			false,
 			[]AdditionalCheck{CheckEndpointSpecificScopesClaim(router)},
 		)
 
 		t.Run("allowed when token has required scope", func(t *testing.T) {
 			t.Parallel()
 
-			token := createAccessToken(t, privateKey, issuer, "", []string{"someappname:ReadChannel"}, "test-user")
+			token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:read", "someappname:ReadChannel"}, "test-user")
 			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -259,7 +258,7 @@ components:
 		t.Run("forbidden when token is missing required scope", func(t *testing.T) {
 			t.Parallel()
 
-			token := createAccessToken(t, privateKey, issuer, "", []string{}, "test-user")
+			token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:read"}, "test-user")
 			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -277,7 +276,7 @@ components:
 		t.Run("path with parameter matched correctly", func(t *testing.T) {
 			t.Parallel()
 
-			token := createAccessToken(t, privateKey, issuer, "", []string{"someappname:WriteChannel"}, "test-user")
+			token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:write", "someappname:WriteChannel"}, "test-user")
 			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -295,7 +294,7 @@ components:
 		t.Run("unauthorized when route is not defined in spec", func(t *testing.T) {
 			t.Parallel()
 
-			token := createAccessToken(t, privateKey, issuer, "", []string{"someappname:ReadChannel"}, "test-user")
+			token := createAccessToken(t, privateKey, issuer, "", []string{"test-service:read", "someappname:ReadChannel"}, "test-user")
 			handler := ControlPlaneMiddleware(authenticator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
