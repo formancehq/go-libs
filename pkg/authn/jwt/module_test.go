@@ -68,10 +68,9 @@ func TestModule(t *testing.T) {
 
 		options := []fx.Option{
 			authnfx.JWTModule(auth.Config{
-				Enabled:     true,
-				Issuers:     []string{issuer},
-				Service:     "test-service",
-				CheckScopes: false,
+				Enabled: true,
+				Issuers: []string{issuer},
+				Service: "test-service",
 			}),
 			fx.Provide(func() context.Context {
 				return context.Background()
@@ -117,7 +116,6 @@ func TestModule(t *testing.T) {
 				Enabled:          true,
 				Issuer:           issuer,
 				Service:          "test-service-with-orgId-aware-auth",
-				CheckScopes:      false,
 				AdditionalChecks: additionalChecks,
 			}),
 			fx.Provide(func() context.Context {
@@ -173,10 +171,9 @@ func TestModule(t *testing.T) {
 		// provider, so decorating the Authenticator itself is the correct pattern.
 		options := []fx.Option{
 			authnfx.JWTModule(auth.Config{
-				Enabled:     true,
-				Issuers:     []string{issuer},
-				Service:     "test-service",
-				CheckScopes: false,
+				Enabled: true,
+				Issuers: []string{issuer},
+				Service: "test-service",
 			}),
 			fx.Provide(func() context.Context {
 				return context.Background()
@@ -188,7 +185,6 @@ func TestModule(t *testing.T) {
 				return auth.NewJWTAuth(
 					map[string]oidc.KeySet{issuer: customKeySet},
 					"test-service",
-					false,
 					nil,
 				)
 			}),
@@ -220,10 +216,9 @@ func TestModule(t *testing.T) {
 
 		options := []fx.Option{
 			authnfx.JWTModule(auth.Config{
-				Enabled:     false,
-				Issuer:      issuer,
-				Service:     "test-service",
-				CheckScopes: false,
+				Enabled: false,
+				Issuer:  issuer,
+				Service: "test-service",
 			}),
 			fx.Populate(&authenticator),
 		}
@@ -258,16 +253,14 @@ func TestModule(t *testing.T) {
 
 		options := []fx.Option{
 			authnfx.AnnotatedJWTModule(auth.Config{
-				Enabled:     true,
-				Issuer:      issuer1,
-				Service:     "test-service",
-				CheckScopes: false,
+				Enabled: true,
+				Issuer:  issuer1,
+				Service: "test-service",
 			}, "one"),
 			authnfx.AnnotatedJWTModule(auth.Config{
-				Enabled:     true,
-				Issuer:      issuer2,
-				Service:     "test-service",
-				CheckScopes: false,
+				Enabled: true,
+				Issuer:  issuer2,
+				Service: "test-service",
 			}, "two"),
 			fx.Populate(
 				fx.Annotate(&authenticator, fx.ParamTags(`name:"one"`)),

@@ -12,9 +12,6 @@ import (
 type JWTAuth struct {
 	keySets map[string]oidc.KeySet // issuer -> keySet
 
-	// this flag toggles a very basic scope check that assumes 'service:read' or 'service:write' as the only scopes
-	// for scope checks that give the user more control over which endpoints use which scopes see additional_checks.go
-	checkScopes      bool
 	service          string
 	additionalChecks []AdditionalCheck
 }
@@ -22,12 +19,10 @@ type JWTAuth struct {
 func NewJWTAuth(
 	keySets map[string]oidc.KeySet,
 	service string,
-	checkScopes bool,
 	additionalChecks []AdditionalCheck,
 ) *JWTAuth {
 	return &JWTAuth{
 		keySets:          keySets,
-		checkScopes:      checkScopes,
 		service:          service,
 		additionalChecks: additionalChecks,
 	}
@@ -49,9 +44,6 @@ func (ja *JWTAuth) authenticate(r *http.Request) (ControlPlaneAgent, error) {
 		}
 	}
 
-	if !ja.checkScopes {
-		return agt, nil
-	}
 	valid, err := checkScopes(ja.service, r.Method, claims.Scopes)
 	if err != nil || !valid {
 		return agt, fmt.Errorf("scopes not valid: %w", err)

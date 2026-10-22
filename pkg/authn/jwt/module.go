@@ -15,7 +15,6 @@ type Config struct {
 	Enabled              bool
 	Issuers              []string
 	ReadKeySetMaxRetries int
-	CheckScopes          bool
 	Service              string
 
 	// Deprecated: use Issuers instead.
@@ -81,7 +80,6 @@ func NewAuthenticatorFromConfig(cfg Config, keySets map[string]oidc.KeySet) Auth
 	return NewJWTAuth(
 		keySets,
 		cfg.Service,
-		cfg.CheckScopes,
 		cfg.AdditionalChecks,
 	)
 }
