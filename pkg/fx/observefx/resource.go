@@ -1,25 +1,18 @@
 package observefx
 
 import (
-	"github.com/spf13/cobra"
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.uber.org/fx"
-
+	"github.com/formancehq/go-libs/v5/pkg/fx/otelfx"
 	"github.com/formancehq/go-libs/v5/pkg/observe"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 )
 
+// ResourceModule delegates to the SDK-independent otelfx package.
 func ResourceModule(cfg observe.Config) fx.Option {
-	return fx.Provide(func() (*resource.Resource, error) {
-		return observe.BuildResource(cfg.ServiceName, cfg.ResourceAttributes, cfg.ServiceVersion)
-	})
+	return otelfx.ResourceModule(cfg)
 }
 
+// ResourceModuleFromFlags delegates to the SDK-independent otelfx package.
 func ResourceModuleFromFlags(cmd *cobra.Command, opts ...observe.Option) fx.Option {
-	otelServiceName, _ := cmd.Flags().GetString(observe.OtelServiceNameFlag)
-	otelResourceAttributes, _ := cmd.Flags().GetStringSlice(observe.OtelResourceAttributesFlag)
-
-	cfg := observe.NewConfig(opts...)
-	cfg.ServiceName = otelServiceName
-	cfg.ResourceAttributes = otelResourceAttributes
-	return ResourceModule(cfg)
+	return otelfx.ResourceModuleFromFlags(cmd, opts...)
 }

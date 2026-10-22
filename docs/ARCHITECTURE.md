@@ -71,7 +71,8 @@ go-libs/
     │   └── health/                  #   Health check controller
     │
     ├── fx/                          # FX wiring (imports pure packages, wraps in fx.Module)
-    │   ├── observefx/               #   Modules for observe/*
+    │   ├── otelfx/                  #   SDK-independent OTel resource, metric and trace modules
+    │   ├── observefx/               #   Profiling and compatible telemetry entry points
     │   ├── transportfx/             #   Modules for transport/*
     │   ├── authnfx/                 #   Modules for authn/*
     │   ├── storagefx/               #   Modules for storage/*

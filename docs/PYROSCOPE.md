@@ -128,3 +128,22 @@ network/upload volume, memory and CPU overhead, and retained history costs need
 consumer-specific measurement. The diagnostic projection does not make the raw
 embedded SDK configuration safe to log. Diagnostic omission leaves SDK request
 headers and credentials unchanged.
+
+## OpenTelemetry without the native SDK
+
+Use `pkg/fx/otelfx` for `ResourceModule`, `MetricsModule`, `TracesModule` and
+their flag-based constructors and provider-option helpers. These modules do
+not import the native Pyroscope SDK in ordinary or `pyroscope` builds. They
+use the same provider types, option groups, aggregation and lifecycle wiring
+as the existing `observefx` entry points.
+
+`observefx` retains its public telemetry functions as compatibility delegates
+to `otelfx`. Importing `observefx` still includes its native integration when
+built with `pyroscope`, even if `PyroscopeModule` is never called or is disabled.
+Applications that require a dependency graph without the uploader must import
+`otelfx` directly for telemetry composition. This does not remove the SDK from
+the go-libs module manifest.
+
+The existing native profiler, pprof listener and trace-correlation APIs keep
+their behavior. Applications using pprof plus an external collector can compose
+`otelfx` with their existing listener; they do not need to enable native uploads.
