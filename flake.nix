@@ -2,7 +2,7 @@
   description = "A Nix-flake-based Go 1.27.3 development environment";
 
   inputs = {
-    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2511";
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2605";
     nixpkgs-unstable.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1";
 
     go-tooling = {
@@ -42,16 +42,10 @@
 
       devShells = forEachSupportedSystem ({ pkgs, pkgs-unstable, system }:
         let
-          # Import recipes only: keep the existing package set and Darwin support.
-          go = pkgs.callPackage "${go-tooling}/pkgs/development/compilers/go/1.27.nix" {
-            buildGo127Module = buildGoModule;
-          };
-          buildGoModule = pkgs.buildGoModule.override { inherit go; };
-          go27 = pkgs.callPackage "${go-tooling}/pkgs/development/compilers/go/1.27.nix" {
-            buildGo127Module = pkgs.buildGoModule.override { go = go27; };
-          };
+          go = pkgs.go_1_27;
+          buildGoModule = pkgs.buildGo127Module;
           golangci-lint = pkgs.callPackage "${go-tooling}/pkgs/by-name/go/golangci-lint/package.nix" {
-            buildGo127Module = pkgs.buildGoModule.override { go = go27; };
+            buildGo127Module = buildGoModule;
           };
           mockgen = pkgs.mockgen.override { inherit buildGoModule; };
           stablePackages = with pkgs; [
