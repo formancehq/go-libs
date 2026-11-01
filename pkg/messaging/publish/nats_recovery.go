@@ -185,7 +185,17 @@ func IsRetryableNATSPublishError(err error) bool {
 		return true
 	}
 	var api *nats.APIError
-	return errors.As(err, &api) && api.ErrorCode == 10158
+	if !errors.As(err, &api) {
+		return false
+	}
+	// nats-server server/errors.json: system temporarily unavailable,
+	// duplicate ID in process, and expected subject sequence temporarily unavailable.
+	switch api.ErrorCode {
+	case 10008, 10158, 10163:
+		return true
+	default:
+		return false
+	}
 }
 
 // Close interrupts backoff and pending requests and closes the owned connection.

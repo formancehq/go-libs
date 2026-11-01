@@ -277,3 +277,38 @@ func TestRecoveringNATSPublisherExplicitDetachedContextPolicy(t *testing.T) {
 		t.Fatalf("detached budget: %v", err)
 	}
 }
+
+func TestRecoveringNATSPublisherTransientAPIErrors(t *testing.T) {
+	for _, code := range []int{10008, 10163} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			server, _ := startRecoveryNATSServer(t)
+			responder, err := nats.Connect(server.ClientURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer responder.Close()
+			var calls atomic.Int64
+			_, err = responder.Subscribe("transient", func(msg *nats.Msg) {
+				if calls.Add(1) == 1 {
+					_ = msg.Respond(fmt.Appendf(nil, `{"error":{"code":503,"err_code":%d}}`, code))
+				} else {
+					_ = msg.Respond([]byte(`{"stream":"transient","seq":1}`))
+				}
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = responder.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			_, p := connectRecoveryNATSPublisher(t, server.ClientURL())
+			p.recovery.RetryDelay = time.Millisecond
+			if err = p.Publish("transient", message.NewMessage("transient-id", nil)); err != nil {
+				t.Fatal(err)
+			}
+			if calls.Load() != 2 {
+				t.Fatalf("got %d calls, want two", calls.Load())
+			}
+		})
+	}
+}

@@ -12,7 +12,7 @@ import (
 )
 
 func TestRetryableNATSPublishError(t *testing.T) {
-	for _, err := range []error{nats.ErrTimeout, nats.ErrDisconnected, nats.ErrNoResponders, nats.ErrNoStreamResponse, nats.ErrReconnectBufExceeded, context.DeadlineExceeded, net.ErrClosed, &net.OpError{Op: "write", Err: errors.New("broken pipe")}, &nats.APIError{Code: 409, ErrorCode: 10158}} {
+	for _, err := range []error{nats.ErrTimeout, nats.ErrDisconnected, nats.ErrNoResponders, nats.ErrNoStreamResponse, nats.ErrReconnectBufExceeded, context.DeadlineExceeded, net.ErrClosed, &net.OpError{Op: "write", Err: errors.New("broken pipe")}, &nats.APIError{Code: 409, ErrorCode: 10158}, &nats.APIError{Code: 503, ErrorCode: 10008}, &nats.APIError{Code: 503, ErrorCode: 10163}} {
 		if !IsRetryableNATSPublishError(fmt.Errorf("wrapped: %w", err)) {
 			t.Errorf("transient: %v", err)
 		}

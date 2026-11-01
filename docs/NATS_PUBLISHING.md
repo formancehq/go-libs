@@ -111,8 +111,10 @@ Concurrent stream creation is handled by the native server's idempotent creation
 of the same configuration. Conflicting configurations remain errors.
 
 Retries cover timeouts, disconnected transport, missing responders, reconnect
-buffer saturation, raw write failures and exactly JetStream error code `10158`
-(the same ID is awaiting commit). Generic API `503` and other `409` errors remain
+buffer saturation, raw write failures and specific JetStream error codes: `10008`
+(system temporarily unavailable), `10158` (the same ID is awaiting commit), and
+`10163` (expected subject sequence temporarily unavailable). Other API `503` and
+`409` errors remain
 permanent; broad HTTP-like status codes alone do not identify transient errors.
 A closed native client and caller cancellation are permanent. Errors are returned
 to the caller for logging; the shared mechanism installs no process-exit callback.
