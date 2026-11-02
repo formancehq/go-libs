@@ -147,16 +147,40 @@ func TestRecoveryNATSConnTLS(t *testing.T) {
 	}
 }
 
+// Signal entry into the underlying write, rather than merely starting a
+// goroutine. The pipe has no reader, so this write cannot finish before Close.
+type writeStartedNATSConn struct {
+	net.Conn
+	started chan struct{}
+	once    sync.Once
+}
+
+func (c *writeStartedNATSConn) Write(data []byte) (int, error) {
+	c.once.Do(func() { close(c.started) })
+	return c.Conn.Write(data)
+}
+
 func TestRecoveryNATSConnCloseInterruptsBlockedWrite(t *testing.T) {
 	client, server := net.Pipe()
 	t.Cleanup(func() { _ = server.Close() })
-	conn := testBoundedNATSConn(client, time.Minute)
+	raw := &writeStartedNATSConn{Conn: client, started: make(chan struct{})}
+	conn := testBoundedNATSConn(raw, time.Minute)
 	t.Cleanup(func() { _ = conn.Close() })
 	result := make(chan error, 1)
 	go func() {
 		_, err := conn.Write([]byte("blocked"))
 		result <- err
 	}()
+	select {
+	case <-raw.started:
+	case <-time.After(time.Second):
+		t.Fatal("writer did not enter the underlying connection")
+	}
+	select {
+	case err := <-result:
+		t.Fatalf("write finished before close: %v", err)
+	default:
+	}
 	if err := conn.Close(); err != nil {
 		t.Fatal(err)
 	}
