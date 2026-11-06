@@ -55,7 +55,7 @@ func (s *Storage) List(ctx context.Context) ([]*CircuitBreakerModel, error) {
 	err := s.db.NewSelect().
 		Model(&models).
 		Order("created_at ASC").
-		Limit(s.storageLimit).
+		Limit(int64(s.storageLimit)).
 		Scan(ctx)
 
 	return models, err

@@ -16,11 +16,11 @@ func usingOffset[Q any, T any](ctx context.Context, sb *bun.SelectQuery, query O
 	}
 
 	if query.Offset > 0 {
-		sb = sb.Offset(int(query.Offset))
+		sb = sb.Offset(int64(query.Offset))
 	}
 
 	if query.PageSize > 0 {
-		sb = sb.Limit(int(query.PageSize) + 1)
+		sb = sb.Limit(int64(query.PageSize) + 1)
 	}
 
 	if err := sb.Scan(ctx); err != nil {
