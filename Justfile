@@ -16,7 +16,7 @@ generate:
   @go generate ./...
 
 tests:
-  @go test -race -covermode=atomic \
+  @go test -race -tags it -covermode=atomic \
     -coverprofile coverage.txt \
     ./...
 

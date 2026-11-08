@@ -18,6 +18,13 @@ subtraction with a floor of zero, without narrowing to the platform's `int`.
 Zero page sizes retain their existing behavior: offset pagination has no limit;
 column pagination fetches one lookahead row.
 
+## Validation
+
+`just tests` includes the `it` build tag and requires Docker. New PostgreSQL
+regressions use `*_it_test.go` files with `//go:build it`. The pagination bounds
+rejection test stays untagged; the package's existing `TestMain` still starts
+PostgreSQL for legacy tests.
+
 ## Delivery
 
 Consumers need a tagged go-libs version containing this change. Review and merge

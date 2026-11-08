@@ -238,17 +238,3 @@ func TestAddFlags(t *testing.T) {
 	table, _ = flags.GetString(MigratorSchemaFlag)
 	require.Equal(t, table, "test")
 }
-
-func TestGetMigrationsLimitsToRegisteredMigrations(t *testing.T) {
-	t.Parallel()
-	schema := uuid.NewString()[:8]
-	migration := Migration{Up: func(context.Context, bun.IDB) error { return nil }}
-	writer := NewMigrator(bunDB, WithSchema(schema))
-	writer.RegisterMigrations(migration, migration, migration)
-	require.NoError(t, writer.Up(t.Context()))
-	reader := NewMigrator(bunDB, WithSchema(schema))
-	reader.RegisterMigrations(migration, migration)
-	infos, err := reader.GetMigrations(t.Context())
-	require.NoError(t, err)
-	require.Len(t, infos, 2)
-}
