@@ -16,6 +16,9 @@ import (
 func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	sb *bun.SelectQuery,
 	query ColumnPaginatedQuery[FILTERS]) (*Cursor[ENTITY], error) {
+	if err := validatePageSize(query.PageSize); err != nil {
+		return nil, err
+	}
 	ret := make([]ENTITY, 0)
 
 	// The column comes from the client-provided cursor, so it must be validated
@@ -28,7 +31,7 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	}
 
 	sb = sb.Model(&ret)
-	sb = sb.Limit(int(query.PageSize) + 1) // Fetch one additional item to find the next token
+	sb = sb.Limit(int64(query.PageSize) + 1) // Fetch one additional item to find the next token
 	order := query.Order
 	if query.Reverse {
 		order = order.Reverse()

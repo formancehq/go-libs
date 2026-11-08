@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -24,6 +25,15 @@ const (
 var (
 	ErrInvalidPageSize = errors.New("invalid 'pageSize' query param")
 )
+
+func validatePageSize(pageSize uint64) error {
+	// Reserve one item for lookahead and keep Cursor.PageSize and slice lengths
+	// representable as int, including on 32-bit platforms.
+	if pageSize > uint64(min(math.MaxInt-1, math.MaxInt64-1)) {
+		return ErrInvalidPageSize
+	}
+	return nil
+}
 
 type Order int
 

@@ -190,7 +190,7 @@ func (m *Migrator) GetMigrations(ctx context.Context) ([]Info, error) {
 		TableExpr(m.getVersionsTable()).
 		Order("version_id").
 		Where("version_id >= 1").
-		Limit(len(m.migrations)).
+		Limit(int64(len(m.migrations))).
 		Scan(ctx, &versions); err != nil {
 		return nil, postgres.ResolveError(err)
 	}
