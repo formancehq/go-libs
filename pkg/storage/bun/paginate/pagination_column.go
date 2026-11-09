@@ -28,7 +28,7 @@ func UsingColumn[FILTERS any, ENTITY any](ctx context.Context,
 	}
 
 	sb = sb.Model(&ret)
-	sb = sb.Limit(int(query.PageSize) + 1) // Fetch one additional item to find the next token
+	sb = sb.Limit(int64(query.PageSize) + 1) // Fetch one additional item to find the next token
 	order := query.Order
 	if query.Reverse {
 		order = order.Reverse()

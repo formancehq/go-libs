@@ -52,10 +52,10 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
-	github.com/uptrace/bun v1.2.18
-	github.com/uptrace/bun/dialect/pgdialect v1.2.18
-	github.com/uptrace/bun/extra/bundebug v1.2.15
-	github.com/uptrace/bun/extra/bunotel v1.2.18
+	github.com/uptrace/bun v1.3.0
+	github.com/uptrace/bun/dialect/pgdialect v1.3.0
+	github.com/uptrace/bun/extra/bundebug v1.3.0
+	github.com/uptrace/bun/extra/bunotel v1.3.0
 	github.com/xdg-go/scram v1.2.0
 	github.com/xo/dburl v0.24.2
 	github.com/zitadel/oidc/v3 v3.45.3
