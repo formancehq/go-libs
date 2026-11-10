@@ -29,6 +29,9 @@ type Payload struct {
 	TraceID string `json:"trace_id"`
 	Actor   Actor  `json:"actor"`
 	HTTP    HTTP   `json:"http"`
+	// GRPC describes a native gRPC call. It is nil for plain HTTP requests,
+	// so their serialized form does not change.
+	GRPC *GRPC `json:"grpc,omitempty"`
 }
 
 type Actor struct {
@@ -60,4 +63,54 @@ type HTTPResponse struct {
 	Headers       http.Header `json:"headers"`
 	Body          string      `json:"body,omitempty"`
 	BodyTruncated bool        `json:"body_truncated,omitempty"`
+}
+
+// GRPCTermination describes how a native gRPC call ended, as seen by the
+// component that captured it.
+type GRPCTermination string
+
+const (
+	// GRPCTerminationCompleted means the server sent a valid grpc-status.
+	GRPCTerminationCompleted GRPCTermination = "completed"
+	// GRPCTerminationCanceled means the client canceled the call.
+	GRPCTerminationCanceled GRPCTermination = "canceled"
+	// GRPCTerminationDeadlineExceeded means the call deadline expired.
+	GRPCTerminationDeadlineExceeded GRPCTermination = "deadline_exceeded"
+	// GRPCTerminationAborted means the handler aborted the stream.
+	GRPCTerminationAborted GRPCTermination = "aborted"
+	// GRPCTerminationGatewayError means an intermediate component returned an
+	// error instead of forwarding the server response.
+	GRPCTerminationGatewayError GRPCTermination = "gateway_error"
+	// GRPCTerminationIncomplete means the call returned without a valid
+	// grpc-status.
+	GRPCTerminationIncomplete GRPCTermination = "incomplete"
+)
+
+// GRPCBodyEncodingBase64 is the encoding of GRPCBody.Data. The data holds the
+// raw gRPC length-prefixed frames, not decoded protobuf messages.
+const GRPCBodyEncodingBase64 = "base64"
+
+// GRPC is the native gRPC extension of an audit payload.
+type GRPC struct {
+	Service string `json:"service"`
+	Method  string `json:"method"`
+	// StatusCode is the observed grpc-status (0 through 16). It is nil when
+	// no valid status was observed.
+	StatusCode    *int            `json:"status_code,omitempty"`
+	StatusMessage string          `json:"status_message,omitempty"`
+	Termination   GRPCTermination `json:"termination"`
+	// GatewayStatusCode is the HTTP status proposed by an intermediate
+	// component for its own error. It is separate from the observed status.
+	GatewayStatusCode int      `json:"gateway_status_code,omitempty"`
+	Request           GRPCBody `json:"request"`
+	Response          GRPCBody `json:"response"`
+}
+
+// GRPCBody is a bounded capture of one direction of a gRPC stream.
+type GRPCBody struct {
+	Encoding   string `json:"encoding"`
+	Data       []byte `json:"data,omitempty"`
+	BytesTotal int64  `json:"bytes_total"`
+	Truncated  bool   `json:"truncated"`
+	Complete   bool   `json:"complete"`
 }
