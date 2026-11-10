@@ -34,6 +34,50 @@ func TestNewEventMessage(t *testing.T) {
 	assert.Equal(t, payload.ID, decodedPayload.ID)
 }
 
+func TestNewEventMessagePreservesGRPCExtension(t *testing.T) {
+	t.Parallel()
+
+	code := 0
+	payload := Payload{
+		ID: "payload-id",
+		GRPC: &GRPC{
+			Service:     "example.Accounts",
+			Method:      "Read",
+			StatusCode:  &code,
+			Termination: GRPCTerminationCompleted,
+			Request: GRPCBody{
+				Encoding:   GRPCBodyEncodingBase64,
+				Data:       []byte{0, 0, 0, 0, 0},
+				BytesTotal: 5,
+				Complete:   true,
+			},
+		},
+	}
+
+	msg, err := NewEventMessageWithError(context.Background(), "test-app", payload)
+	require.NoError(t, err)
+
+	var event struct {
+		Payload Payload `json:"payload"`
+	}
+	require.NoError(t, json.Unmarshal(msg.Payload, &event))
+	assert.Equal(t, payload, event.Payload)
+}
+
+func TestNewEventMessageOmitsGRPCExtensionForHTTP(t *testing.T) {
+	t.Parallel()
+
+	msg, err := NewEventMessageWithError(context.Background(), "test-app", Payload{ID: "payload-id"})
+	require.NoError(t, err)
+
+	var event struct {
+		Payload map[string]json.RawMessage `json:"payload"`
+	}
+	require.NoError(t, json.Unmarshal(msg.Payload, &event))
+	assert.Contains(t, event.Payload, "http")
+	assert.NotContains(t, event.Payload, "grpc")
+}
+
 func TestPublishEventWithError(t *testing.T) {
 	t.Parallel()
 
